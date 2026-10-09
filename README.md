@@ -12,7 +12,7 @@ The bot runs on a small always-on server in Google Cloud (`cormon-demo`, project
 
 1. Install the Google Cloud CLI: <https://cloud.google.com/sdk/docs/install> (on a Mac: `brew install --cask google-cloud-sdk`).
 2. Sign in with your huma.ai account: `gcloud auth login`.
-3. Get the code: `git clone <repo URL>` and `cd` into it.
+3. Get the code: `git clone https://github.com/humahq/correspondence-monitor.git` and `cd` into it.
 4. Check it works: `./bin/cormon-cloud status`. The first time, gcloud creates an SSH key for you; just press Enter.
 
 Access is granted per person by `./deploy/grant_access.sh name@huma.ai` (Eliot and Peter already have it).
