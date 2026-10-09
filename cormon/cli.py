@@ -97,6 +97,13 @@ def cmd_ingest(args):
         print(f"  done: {res}")
 
 
+def cmd_export_rules(args):
+    from . import export
+
+    for p in export.export(config.study(args.study), Path(args.folder).expanduser()):
+        print(f"  wrote {p}")
+
+
 def cmd_import_model(args):
     counts = ingest.import_model(Path(args.db), args.reason, actor(args))
     print(f"study model replaced from {args.db}: {counts}")
@@ -525,6 +532,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("ingest", help="build the study model from the study documents")
     s.add_argument("--study"); s.add_argument("--force", action="store_true"); s.set_defaults(fn=cmd_ingest)
+
+    s = sub.add_parser("export-rules", help="write the rules (Word and Excel) and the source documents to a folder")
+    s.add_argument("folder"); s.add_argument("--study", default=next(iter(config.studies()), None))
+    s.set_defaults(fn=cmd_export_rules)
 
     s = sub.add_parser("import-model", help="replace the study model with one rebuilt and tested in another copy")
     s.add_argument("db", help="the other copy's database, e.g. practice/data/cormon.db")
