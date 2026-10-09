@@ -1,0 +1,9 @@
+Subject: MAP-0903
+From: crc
+Expect: out_of_scope
+
+Hi Ernest,
+
+MAP-0903 called this morning to say she fainted at home last night and went to the ER. She is home now.
+
+John

@@ -1,0 +1,40 @@
+# Where each tier goes. One classification drives every destination; the
+# difference between audiences is a line here, not a separate run.
+#
+# destination:
+#   teams_study_channel | teams_alert_channel | email | clearing_list | digest
+# to_role / cc_roles: role ids from the study's role list, resolved per site.
+# to: sender   -> the person who wrote the message.
+# The template is chosen by topic (pattern class), recipient, channel and severity.
+# Cases where a person would otherwise have forwarded a notice are sent directly.
+
+tiers:
+  low:
+    - { destination: clearing_list }
+    - { destination: teams_study_channel, recipient: study_team }
+
+  medium:
+    - { destination: teams_study_channel, recipient: study_team }
+    - { destination: email, to_role: cra, cc_roles: [clinops_lead] }
+    - { destination: digest }
+
+  immediate:
+    - { destination: teams_study_channel, recipient: study_team }
+    - { destination: teams_alert_channel, recipient: alert_channel }
+    - { destination: email, to_role: cra }
+    - { destination: email, to_role: clinops_lead }
+    - { destination: email, to: sender, only_if_sender_role: crc }
+    - { destination: digest }
+
+good_news:
+  - { destination: clearing_list }
+  - { destination: teams_study_channel, recipient: study_team }
+
+out_of_scope:
+  - { destination: email, to: sender, topic: safety_out_of_scope }
+
+copy_nudge:
+  - { destination: email, to: first_writer_while_absent, topic: copy_nudge }
+
+digest:
+  to_roles: [clinops_lead]

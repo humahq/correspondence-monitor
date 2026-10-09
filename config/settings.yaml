@@ -1,0 +1,79 @@
+# System settings. Changes are recorded in the audit log (who and when).
+system:
+  data_dir: data
+  studies_dir: studies
+  poll_seconds: 20
+  timezone: America/New_York
+
+matching:
+  # Forwarded or attached content about events older than this is treated as historical (no alert),
+  # so forwarding an old email does not turn an old event into a new one.
+  forwarded_stale_days: 7
+
+llm:
+  temperature: 0
+  seed: 7
+  models:
+    default: gpt-4.1
+    ingest: gpt-4.1
+    extract: gpt-4.1
+    match: gpt-4.1
+    confirm: gpt-4.1
+    draft_edit: gpt-4.1-mini
+
+# Which channel adapters run. "sim" reads data/sim/inbox and writes data/sim/outbox,
+# so the whole flow can be rehearsed without real accounts.
+channels:
+  email: imap       # imap | gmail | sim
+  teams: sim        # graph | sim | off
+
+mailbox:
+  address: bot@huma.ai
+  # Extra alternate addresses (Workspace aliases) mapped to a study id.
+  aliases: {}
+  # Addresses for general (non-study) messages. Bare bot@huma.ai also counts, but the IMAP reader skips it
+  # because the scheduler owns that mail.
+  general_addresses:
+    - bot+clinical@huma.ai
+  # IMAP/SMTP with a Gmail app password, shared with the scheduler on the same inbox.
+  imap:
+    user: bot@huma.ai
+    host: imap.gmail.com
+    smtp_host: smtp.gmail.com
+    smtp_port: 465
+    days: 3
+    # Spam too: Gmail sometimes files new outside senders there. Only study-address mail is taken from it.
+    folders: [INBOX, "[Gmail]/Spam"]
+    # The scheduler also reads bot@huma.ai, so only bot+<study> mail is taken.
+    only_study_aliases: true
+    password_env: CORMON_GMAIL_APP_PASSWORD
+    secret:
+      project: optical-depth-506808-t0
+      name: kol-gmail-bot-app-password
+  gmail:
+    auth: oauth                     # oauth | service_account
+    client_secrets_file: secrets/gmail_client.json
+    token_file: secrets/gmail_token.json
+    service_account_file: secrets/gmail_sa.json
+    query: "in:inbox newer_than:7d"
+    processed_label: cormon-processed
+
+teams:
+  tenant_id: ""
+  client_id: ""
+  token_cache: secrets/teams_token.json
+  # Direct 1:1 chats with the bot user are read as well.
+  read_direct_chats: true
+
+digest:
+  # Local time the daily digest goes out, chosen so it is read at the start of the day.
+  send_at: "07:30"
+  timezone: America/New_York
+  window_hours: 24
+
+web:
+  # Read-only item detail pages linked from drafts ("detail sits behind a link").
+  enabled: true
+  host: 0.0.0.0
+  port: 8091
+  base_url: http://localhost:8091

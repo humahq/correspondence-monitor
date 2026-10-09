@@ -1,0 +1,56 @@
+# Tier thresholds. Evaluated top to bottom; the first matching rule sets the tier.
+# A study can put its own rules in studies/<id>/study.yaml under `triage:`; those
+# are evaluated before these defaults.
+#
+# Conditions (all optional, all must hold):
+#   polarity:          problem | good_news
+#   pattern_class:     a class id or list of ids
+#   temporality:       list of current | planned | historical
+#   hours_until_max:   the event is planned within this many hours of the message
+#   check_type:        numeric | judgment
+#
+# Tiers: low (within a week or a month), medium (inside a day or two), immediate.
+
+rules:
+  - id: imminent-deviation
+    description: A deviation that has not happened yet and is planned within 48 hours.
+    when: {polarity: problem, temporality: [planned], hours_until_max: 48}
+    tier: immediate
+
+  - id: consent-before-procedures
+    description: Procedures done or about to be done without valid current consent.
+    when: {polarity: problem, pattern_class: consent, temporality: [current, planned]}
+    tier: immediate
+
+  - id: ineligible-enrolled
+    description: A participant enrolled or randomized outside the eligibility criteria.
+    when: {polarity: problem, pattern_class: eligibility, temporality: [current]}
+    tier: medium
+
+  - id: sample-handling
+    description: A sample handled outside the lab manual's requirements.
+    when: {polarity: problem, pattern_class: sample_handling, temporality: [current]}
+    tier: medium
+
+  - id: sequence-current
+    description: A procedure performed out of the required order.
+    when: {polarity: problem, pattern_class: procedure_sequence, temporality: [current]}
+    tier: medium
+
+  - id: planned-later
+    description: A deviation that is planned but more than 48 hours away.
+    when: {polarity: problem, temporality: [planned]}
+    tier: medium
+
+  - id: visit-window
+    description: Visit or contact outside its window.
+    when: {polarity: problem, pattern_class: visit_schedule}
+    tier: low
+
+  - id: problem-default
+    when: {polarity: problem}
+    tier: low
+
+  - id: good-news
+    when: {polarity: good_news}
+    tier: low

@@ -1,0 +1,257 @@
+# Message templates, selected along four axes at once:
+#   topic      pattern class id (eligibility, consent, ...), or a system topic
+#              (safety_out_of_scope, copy_nudge, digest), or "*"
+#   recipient  role id (cra, clinops_lead, crc), study_team, alert_channel, sender, or "*"
+#   channel    email | teams | "*"
+#   severity   low | medium | immediate | "*"
+# The most specific match wins (each non-"*" axis counts one point).
+#
+# Templates are deterministic Jinja. Set `ai_edit: true` to let the model
+# tighten the wording; its output is rejected unless every study fact survives.
+# Rendering fails if any variable is missing, so no placeholder can go out.
+
+templates:
+
+  # ---------------- Teams: study channel (running stream) ----------------
+  - id: teams-study-item
+    topic: "*"
+    recipient: study_team
+    channel: teams
+    severity: "*"
+    body: |
+      <p><b>[{{ item.tier_label }}] {{ study.short_name }} · {{ item.site }} · {{ item.participant_id or "participant not named" }}</b><br>
+      {{ item.title }}</p>
+      <p><b>Correspondence</b> ({{ finding.sender_name }}, {{ finding.message_date }}):<br><i>"{{ finding.message_quote }}"</i></p>
+      <p><b>Study requirement</b> ({{ finding.doc_title }}, p. {{ finding.page }}):<br><i>"{{ finding.doc_quote }}"</i></p>
+      {%- for a in also %}
+      <p><b>Also does not meet</b> ({{ a.where }}):<br><i>"{{ a.doc_quote }}"</i>{% if a.message_quote %}<br>Site wrote: <i>"{{ a.message_quote }}"</i>{% endif %}</p>
+      {%- endfor %}
+      <p>Routed to: {{ item.routed_to }} · Item #{{ item.id }} · <a href="{{ item.link }}">details</a></p>
+
+  - id: teams-study-good-news
+    topic: good_news
+    recipient: study_team
+    channel: teams
+    severity: "*"
+    body: |
+      <p><b>[Update] {{ study.short_name }} · {{ item.site }} · {{ item.participant_id or "study" }}</b><br>
+      {{ item.title }}</p>
+      <p><i>"{{ finding.message_quote }}"</i> ({{ finding.sender_name }}, {{ finding.message_date }})</p>
+      <p>Item #{{ item.id }} · added to the clearing list</p>
+
+  # ---------------- Teams: alert channel (immediate only) ----------------
+  - id: teams-alert
+    topic: "*"
+    recipient: alert_channel
+    channel: teams
+    severity: immediate
+    body: |
+      <p><b>IMMEDIATE · {{ study.short_name }} · {{ item.site }} · {{ item.participant_id or "participant not named" }}</b></p>
+      <p>{{ item.title }}</p>
+      <p><b>Requirement:</b> "{{ finding.doc_quote }}" ({{ finding.doc_title }}, p. {{ finding.page }})</p>
+      {%- for a in also %}
+      <p><b>Also:</b> "{{ a.doc_quote }}" ({{ a.where }})</p>
+      {%- endfor %}
+      <p><b>Asked of {{ people.cra.name }}:</b> call the site today.</p>
+      <p>Item #{{ item.id }} · <a href="{{ item.link }}">details</a></p>
+
+  # ---------------- Email: CRA ----------------
+  - id: email-cra-medium-eligibility
+    topic: eligibility
+    recipient: cra
+    channel: email
+    severity: medium
+    subject: "[{{ study.short_name }}] Eligibility check needed: {{ item.participant_id or 'participant' }} at {{ item.site }} (Item #{{ item.id }})"
+    body: |
+      {{ recipient.first_name }},
+
+      {{ item.participant_id or "A participant" }} at {{ item.site }} appears to have been enrolled outside the eligibility criteria.
+
+      Asked of you: confirm with the site within two days whether this is a deviation, and record it if so.
+
+      What the site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
+      "{{ finding.message_quote }}"
+
+      Study requirement ({{ finding.doc_title }}, p. {{ finding.page }}):
+      "{{ finding.doc_quote }}"
+      {%- for a in also %}
+
+      Also does not meet ({{ a.where }}):
+      "{{ a.doc_quote }}"
+      {%- if a.message_quote %}
+      Site wrote: "{{ a.message_quote }}"
+      {%- endif %}
+      {%- endfor %}
+
+      Details: {{ item.link }}
+      To have me disregard this, reply "disregard". To clear it, reply "cleared".
+
+      {{ study.monitor_signature }}
+
+  - id: email-cra-medium
+    topic: "*"
+    recipient: cra
+    channel: email
+    severity: medium
+    subject: "[{{ study.short_name }}] Needs action in 1-2 days: {{ item.title }}{% if also %} (+{{ also | length }} more){% endif %} (Item #{{ item.id }})"
+    body: |
+      {{ recipient.first_name }},
+
+      {{ item.title }} ({{ item.participant_id or "participant not named" }}, {{ item.site }}).
+
+      Asked of you: follow up with the site within two days.
+
+      What the site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
+      "{{ finding.message_quote }}"
+
+      Study requirement ({{ finding.doc_title }}, p. {{ finding.page }}):
+      "{{ finding.doc_quote }}"
+      {%- for a in also %}
+
+      Also does not meet ({{ a.where }}):
+      "{{ a.doc_quote }}"
+      {%- if a.message_quote %}
+      Site wrote: "{{ a.message_quote }}"
+      {%- endif %}
+      {%- endfor %}
+
+      Details: {{ item.link }}
+      Reply "disregard" to have me drop this, or "cleared" once resolved.
+
+      {{ study.monitor_signature }}
+
+  - id: email-cra-immediate
+    topic: "*"
+    recipient: cra
+    channel: email
+    severity: immediate
+    subject: "URGENT [{{ study.short_name }}] Call {{ item.site }} today: {{ item.participant_id or 'participant' }} (Item #{{ item.id }})"
+    body: |
+      {{ recipient.first_name }},
+
+      Please call {{ people.crc.name }} at {{ item.site }} today. {{ item.title }}.
+
+      What the site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
+      "{{ finding.message_quote }}"
+
+      Study requirement ({{ finding.doc_title }}, p. {{ finding.page }}):
+      "{{ finding.doc_quote }}"
+      {%- for a in also %}
+
+      Also does not meet ({{ a.where }}):
+      "{{ a.doc_quote }}"
+      {%- if a.message_quote %}
+      Site wrote: "{{ a.message_quote }}"
+      {%- endif %}
+      {%- endfor %}
+
+      The site has been told only that a possible issue was noted and that you have been informed. {{ people.clinops_lead.name }} (sponsor) has been told you are in touch with the site.
+
+      Details: {{ item.link }}
+      Reply "disregard" to have me drop this, or "cleared" once resolved.
+
+      {{ study.monitor_signature }}
+
+  # ---------------- Email: sponsor ClinOps lead ----------------
+  - id: email-sponsor-immediate
+    topic: "*"
+    recipient: clinops_lead
+    channel: email
+    severity: immediate
+    subject: "Urgent, for your awareness [{{ study.short_name }}]: {{ item.site }}, {{ item.participant_id or 'participant' }} (Item #{{ item.id }})"
+    body: |
+      {{ recipient.first_name }},
+
+      For your awareness, no action needed from you. A possible urgent issue was flagged at {{ item.site }}: {{ item.title }}.
+
+      What was routed:
+      - {{ people.cra.name }} (CRA) has the context and has been asked to call the site today.
+      - {{ people.crc.name }} (site coordinator) was told a possible issue was noted and that their monitor has been informed.
+
+      Requirement at issue ({{ finding.doc_title }}, p. {{ finding.page }}): "{{ finding.doc_quote }}"
+      {%- for a in also %}
+      Also at issue ({{ a.where }}): "{{ a.doc_quote }}"
+      {%- endfor %}
+
+      Details: {{ item.link }}
+
+      {{ study.monitor_signature }}
+
+  # ---------------- Email: site coordinator (hedged notice) ----------------
+  # Reviewed against Section 4.6: says what was flagged, asserts no conclusion,
+  # gives no clinical or stop instruction.
+  - id: email-site-notice
+    topic: "*"
+    recipient: crc
+    channel: email
+    severity: immediate
+    subject: "Re: {{ finding.message_subject }}"
+    body: |
+      {{ recipient.first_name }},
+
+      A possible issue was noted in your message about {{ item.participant_id or "a participant" }}, relating to the study's {{ item.pattern_label | lower }} requirements. This has not been confirmed.
+
+      Your monitor, {{ people.cra.name }}, has been told and will be in touch with you.
+
+      {{ study.monitor_signature }}
+
+  # ---------------- Out of scope: safety ----------------
+  - id: email-safety-redirect
+    topic: safety_out_of_scope
+    recipient: "*"
+    channel: email
+    severity: "*"
+    subject: "Re: {{ finding.message_subject }}"
+    body: |
+      {{ recipient.first_name }},
+
+      This monitor does not review safety information, and nothing in this message has been assessed or passed on for safety.
+
+      Please take it to {{ people.medical_monitor.name or "the study's medical monitor" }} and follow the protocol's safety reporting process.
+
+      {{ study.monitor_signature }}
+
+  # ---------------- Copy nudge after the bot was dropped from a thread ----------------
+  - id: email-copy-nudge
+    topic: copy_nudge
+    recipient: "*"
+    channel: email
+    severity: "*"
+    subject: "Re: {{ finding.message_subject }}"
+    body: |
+      {{ recipient.first_name }},
+
+      I was left off this thread for a while and have now read the messages I missed. Please keep {{ study.alias }} copied on all study correspondence, including replies, so the record stays complete.
+
+      Thank you.
+
+      {{ study.monitor_signature }}
+
+  # ---------------- Digest ----------------
+  - id: email-digest
+    topic: digest
+    recipient: "*"
+    channel: email
+    severity: "*"
+    subject: "Daily correspondence digest, {{ digest.date }}: {{ digest.total }} item(s)"
+    body: |
+      {{ recipient.first_name }},
+
+      Correspondence monitor digest for {{ digest.window }}.
+      {%- for s in digest.studies %}
+
+      == {{ s.short_name }} ({{ s.study_id }}) ==
+      {%- for group in s.groups %}
+
+      {{ group.label }}: {{ group.entries | length }}
+      {%- for i in group.entries %}
+        #{{ i.id }} [{{ i.tier_label }}] {{ i.site }} · {{ i.participant_id or "-" }} · {{ i.title }}
+      {%- endfor %}
+      {%- endfor %}
+      {%- endfor %}
+      {%- if not digest.studies %}
+
+      Nothing was found in this window.
+      {%- endif %}
+
+      {{ digest.footer }}

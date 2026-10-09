@@ -1,0 +1,16 @@
+[Unit]
+Description=Correspondence monitor listener
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=cormon
+WorkingDirectory=/opt/cormon
+Environment=CORMON_HOME=/opt/cormon
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/cormon/.venv/bin/cormon run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

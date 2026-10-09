@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Runs bot commands on the cloud copy from your own laptop. You log in with your own Google account
+# (gcloud auth login); the connection goes through Google's IAP proxy, encrypted, with no VPN.
+#
+#   ./bin/cormon-cloud status                 any `cormon` command, run on the cloud bot
+#   ./bin/cormon-cloud test my-emails/        run a folder of test messages (nothing is sent)
+#   ./bin/cormon-cloud logs                   the bot's recent log
+#   ./bin/cormon-cloud shell                  a terminal on the VM
+set -euo pipefail
+
+PROJECT="${CORMON_PROJECT:-optical-depth-506808-t0}"
+ZONE="${CORMON_ZONE:-us-east1-b}"
+VM="${CORMON_VM:-cormon-demo}"
+SSH=(gcloud compute ssh "$VM" --project "$PROJECT" --zone "$ZONE" --tunnel-through-iap --quiet)
+
+command -v gcloud >/dev/null || { echo "gcloud is not installed: https://cloud.google.com/sdk/docs/install"; exit 1; }
+TTY=()
+[ -t 0 ] && [ -t 1 ] && TTY=(-- -t)
+
+case "${1:-help}" in
+  help|-h|--help)
+    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+  test)
+    folder="${2:?usage: cormon-cloud test <folder>}"
+    [ -d "$folder" ] || { echo "$folder is not a folder"; exit 1; }
+    stamp=$(date +%Y%m%d-%H%M%S)
+    remote="/tmp/cormon-test-$stamp-$RANDOM"
+    echo "uploading $folder ..."
+    COPYFILE_DISABLE=1 tar --exclude '._*' -czf - -C "$folder" . | "${SSH[@]}" --command \
+      "mkdir -p $remote/in $remote/out && tar -xzf - -C $remote/in 2>/dev/null && chmod -R a+rX $remote && chmod 777 $remote/out"
+    "${SSH[@]}" --command "cormon test $remote/in --out $remote/out" "${TTY[@]+"${TTY[@]}"}"
+    out="results/$stamp"
+    mkdir -p "$out"
+    "${SSH[@]}" --command "tar -czf - -C $remote/out . && rm -rf $remote" | tar -xzf - -C "$out"
+    echo "results saved in $out/results.csv"
+    ;;
+  logs)
+    "${SSH[@]}" --command "sudo journalctl -u cormon -n ${2:-100} --no-pager"
+    ;;
+  shell)
+    "${SSH[@]}"
+    ;;
+  *)
+    "${SSH[@]}" --command "cormon $(printf '%q ' "$@")" "${TTY[@]+"${TTY[@]}"}"
+    ;;
+esac
