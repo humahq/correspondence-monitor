@@ -45,6 +45,52 @@ The first time, it asks to create a key. Just press **Enter** when asked. If you
 
 You'll run all the commands below from inside the `correspondence-monitor` folder.
 
+### Before you test: how the bot thinks
+
+**What it does with each email, in 4 steps:**
+
+1. **Reads it.** It works out what happened, to which patient, and when. It also decides whether this is **new** (happening now), **planned** (about to happen), or **old news** (already happened and been dealt with, or forwarded from weeks ago).
+2. **Checks it against the study rules.** The bot turned the protocol, lab manual and consent form into **111 short rules** (see them with `./bin/cormon-cloud rules`). It only looks for 5 kinds of problem: **eligibility, visit schedule, procedure order, sample handling and consent.** Anything else is ignored on purpose.
+   - Rules with a number ("eGFR must be 45 or more") are checked by plain code, so the same email always gets the same answer.
+   - Rules without a number ("consent must be signed before any study procedure") are judged by the AI.
+3. **Double-checks.** Before raising anything, it must find the exact words in the email **and** the exact sentence in the protocol. If it can't find both, it stays quiet. That's why every alert quotes both.
+4. **Decides how urgent it is, and who to tell:**
+   - **Immediate:** the problem is planned within 48 hours (so it can still be stopped), or it's a consent problem. The CRA and the sponsor are emailed, and the site gets a short careful note.
+   - **Medium:** a problem that has already happened. The CRA is emailed (the sponsor lead is copied), and it goes in the daily summary.
+   - **Low:** for example, a visit outside its window. It goes on a to-do list and in the daily summary.
+
+**What it will NOT do, by design:**
+
+- **Safety:** it doesn't judge safety (side effects, hospital visits, falls). It replies "please contact the medical monitor" and does nothing else.
+- **Old news:** it doesn't alert on past events or old forwarded emails.
+- **Vague or missing information:** it doesn't alert on missing information ("we didn't mention the fasting time" isn't a problem by itself).
+- **Repeats:** it doesn't send a second alert for the same problem in the same email thread.
+- **Unknown study:** it doesn't check emails sent to the general address `bot+clinical@huma.ai`, because it never guesses the study.
+
+**Key limits it checks (handy for writing tests):**
+
+| Area | Rule (from the study documents) |
+|---|---|
+| Eligibility | age 55–90 · eGFR 45 or more · BMI 20 or more · HbA1c below 6.5% · blood pressure below 160/95 · MMSE 22 or more (20 with 8 years of school or less) · CDR exactly 0.5 · GDS below 9 · fluent in English or Spanish · no known diabetes |
+| Sample handling | fasting 8 hours or more · spin the tube within 60 minutes · freeze within 2 hours · no more than 24 hours at −20 °C · ship Monday to Wednesday only · hemolyzed samples not acceptable · temperature log in the box · email the lab before shipping |
+| Visit schedule | screening within 28 days · 6-month visit ±30 days · monthly call ±7 days |
+| Procedure order | brain MRI before the study drug starts · screening labs, vitals and ECG before randomization |
+| Consent | consent signed before any study procedure |
+
+The lab manual is a practice version written for this demo, so the sample-handling rules are examples, not a real lab's rules.
+
+**Test ideas** (mix easy and tricky):
+
+- **Clear problem:** "Randomized MAP-0301 today, eGFR 41." It should alert (eligibility).
+- **Within limits:** "eGFR 62, BMI 24, all fine." It should stay quiet.
+- **Planned:** "We'll start study drug tomorrow; the MRI is next week." It should give an Immediate alert.
+- **Old news:** "Back in July, MAP-0201 was screened out for low eGFR." It should stay quiet.
+- **Safety only:** "MAP-0305 fell and broke her wrist." It should refuse and point to the medical monitor.
+- **Messy writing:** typos, short forms ("pt", "rand'd", "GFR 4l"), missing units.
+- **Two patients in one email,** one fine and one not. It should flag only the right patient.
+- **Vague:** "Labs a bit off, enrolled anyway." This is a judgment call, so tell us what you'd expect.
+- **Not about the study at all:** "Office closed Monday." It should stay quiet.
+
 ### Part 2: Test with a real email
 
 **Step 1.** From any email account, send an email and **CC `bot+NCT04098666@huma.ai`**. For example:
@@ -126,7 +172,17 @@ Then run:
 - **Recall:** of the real problems, how many the bot caught (fewer misses means higher).
 - **F1:** both combined into one number. 1.00 is perfect.
 
-The results are also saved as a spreadsheet on your laptop: `results/<date-time>/results.csv`.
+The results are also saved as a spreadsheet on your laptop: `results/<date-time>/results.csv`. It includes the bot's reasoning for every email.
+
+**Step 5. Find out why the bot decided something.** Each line of the result shows a message number (`msg 4`) and item numbers (`#2`). Look inside the test run with `sandbox`:
+
+```
+./bin/cormon-cloud sandbox item 2 --drafts    # what it found, both quotes, its reasoning, what it would send
+./bin/cormon-cloud sandbox message 4          # how it understood the email (useful when it found nothing)
+./bin/cormon-cloud sandbox log --message 4    # every step it took, including ideas it rejected and why
+```
+
+The `sandbox` view shows the most recent test run only. Each new run starts fresh.
 
 Each test email uses the AI, so a run costs a few cents.
 

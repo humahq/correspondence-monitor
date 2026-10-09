@@ -48,7 +48,10 @@ chmod 700 "$APP/secrets"
 # `cormon ...` for anyone who logs in; their actions are logged under their own login name.
 cat > /usr/local/bin/cormon <<'EOF'
 #!/usr/bin/env bash
-export CORMON_HOME=/opt/cormon
+case "${CORMON_COPY:-live}" in
+  sandbox) export CORMON_HOME=/opt/cormon/sandbox ;;   # the copy that `cormon test` runs in
+  *)       export CORMON_HOME=/opt/cormon ;;
+esac
 export CORMON_OPERATOR="${CORMON_OPERATOR:-${SUDO_USER:-$USER}}"
 cd /opt/cormon
 exec sudo -u cormon --preserve-env=CORMON_HOME,CORMON_OPERATOR /opt/cormon/.venv/bin/cormon "$@"

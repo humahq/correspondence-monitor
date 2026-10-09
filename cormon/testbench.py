@@ -123,7 +123,7 @@ def prepare_sandbox(live_root: Path) -> Path:
     path = sb / "config" / "settings.yaml"
     cfg = yaml.safe_load(path.read_text()) or {}
     cfg.setdefault("channels", {}).update({"email": "sim", "teams": "sim"})
-    cfg.setdefault("web", {})["enabled"] = False
+    cfg.setdefault("web", {}).update({"enabled": False, "base_url": "(test run: no web page)"})
     path.write_text(yaml.safe_dump(cfg, sort_keys=False))
     for name in ("studies", ".env", "secrets"):
         link, target = sb / name, live_root / name
@@ -214,7 +214,7 @@ def run_case(study, case: Case) -> None:
     (inbox / f"case-{time.time_ns()}.eml").write_bytes(raw)
     service.tick(log=lambda *_: None)
     m = db.q1("SELECT id, study_id, status, error FROM messages WHERE rfc_message_id=? ORDER BY id DESC", (rfc,))
-    found = [dict(r) for r in db.q("SELECT id, kind, pattern_class, tier, participant_id, title FROM items "
+    found = [dict(r) for r in db.q("SELECT id, kind, pattern_class, tier, participant_id, title, reasoning FROM items "
                                    "WHERE first_message_id=?", (m["id"],))] if m else []
     classes = {i["pattern_class"] for i in found if i["kind"] == "finding" and i["pattern_class"]}
     if any(i["kind"] == "out_of_scope" for i in found):
@@ -282,7 +282,8 @@ def report(cases: list[Case], summary: dict) -> str:
         got = ",".join(sorted(c.result["got"])) or "none"
         exp = "" if c.expect is None else f" expected {','.join(sorted(c.expect)) or 'none'}"
         tiers = ",".join(i["tier"] for i in c.result["items"] if i["kind"] == "finding") or "-"
-        lines.append(f"{mark} {n:3d}. {c.name[:40]:40s} got {got:28s} tier {tiers:12s}{exp}")
+        msg = f"msg {c.result['message_id']}" if c.result.get("message_id") else "msg -"
+        lines.append(f"{mark} {n:3d}. {c.name[:40]:40s} got {got:28s} tier {tiers:12s} {msg:8s}{exp}")
         for i in c.result["items"]:
             lines.append(f"            #{i['id']} {i['kind']} · {i['participant_id'] or '-'} · {i['title']}")
         if not c.result["status"].startswith("processed"):
@@ -310,15 +311,17 @@ def write_out(out: Path, cases: list[Case], summary: dict) -> None:
     out.mkdir(parents=True, exist_ok=True)
     with (out / "results.csv").open("w", newline="") as fh:
         w = csv.writer(fh)
-        w.writerow(["case", "subject", "expected", "got", "verdict", "tiers", "participants", "titles", "sent",
-                    "seconds", "status"])
+        w.writerow(["case", "subject", "expected", "got", "verdict", "tiers", "participants", "titles", "reasoning",
+                    "sent", "message_id", "item_ids", "seconds", "status"])
         for c in cases:
             v = verdict(c)
             w.writerow([c.name, c.subject, "" if c.expect is None else ",".join(sorted(c.expect)) or "none",
                         ",".join(sorted(c.result["got"])) or "none", {True: "right", False: "wrong", None: ""}[v],
                         ",".join(i["tier"] for i in c.result["items"]),
                         ",".join(sorted(p for p in c.result["pids"] if p)),
-                        " | ".join(i["title"] for i in c.result["items"]), " | ".join(c.result["sent"]),
+                        " | ".join(i["title"] for i in c.result["items"]),
+                        " | ".join(i.get("reasoning") or "" for i in c.result["items"]), " | ".join(c.result["sent"]),
+                        c.result.get("message_id") or "", ",".join(str(i["id"]) for i in c.result["items"]),
                         c.result["seconds"], c.result["status"]])
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=list))
 

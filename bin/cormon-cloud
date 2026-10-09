@@ -4,6 +4,7 @@
 #
 #   ./bin/cormon-cloud status                 any `cormon` command, run on the cloud bot
 #   ./bin/cormon-cloud test my-emails/        run a folder of test messages (nothing is sent)
+#   ./bin/cormon-cloud sandbox item 3         look inside the last test run (item, message, log ...)
 #   ./bin/cormon-cloud logs                   the bot's recent log
 #   ./bin/cormon-cloud shell                  a terminal on the VM
 set -euo pipefail
@@ -19,7 +20,7 @@ TTY=()
 
 case "${1:-help}" in
   help|-h|--help)
-    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
     ;;
   test)
     folder="${2:?usage: cormon-cloud test <folder>}"
@@ -34,6 +35,11 @@ case "${1:-help}" in
     mkdir -p "$out"
     "${SSH[@]}" --command "tar -czf - -C $remote/out . && rm -rf $remote" | tar -xzf - -C "$out"
     echo "results saved in $out/results.csv"
+    ;;
+  sandbox)
+    shift
+    [ $# -gt 0 ] || set -- items
+    "${SSH[@]}" --command "CORMON_COPY=sandbox cormon $(printf '%q ' "$@")" "${TTY[@]+"${TTY[@]}"}"
     ;;
   logs)
     "${SSH[@]}" --command "sudo journalctl -u cormon -n ${2:-100} --no-pager"
