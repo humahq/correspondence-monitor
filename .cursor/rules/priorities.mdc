@@ -1,0 +1,34 @@
+---
+description: Project priorities for the correspondence monitor (cormon) and how to talk to John
+alwaysApply: true
+---
+
+# Top priority: make the core pipeline sophisticated
+
+John's standing instruction: **ingestion, rule making and rule matching must become very sophisticated.**
+They decide whether a real problem is caught (Eliot wants 99%+), so treat them as the main product, not plumbing.
+
+## Ingestion and rule making (`cormon/ingest.py`)
+- Every check needs evidence. Measure the rules against the documents, don't eyeball them.
+- Coverage: every protocol inclusion/exclusion criterion, visit window, procedure-order step, lab-manual step
+  and consent requirement has a rule. Report anything missed.
+- Correctness: thresholds, units, operators and conditions (e.g. education-adjusted scores) match the source.
+- No junk: signature lines, admin and IRB boilerplate, and patient-facing text that can't be checked go in no rule.
+- No contradictions, and no silent drops of real rules (check rejected rules).
+- Eliot's direction: preprocess the guides into a simpler, shorter, parsable (even JSON) structured form,
+  alongside the rules version.
+
+## Rule matching (`cormon/matching.py`, `cormon/events.py`, `cormon/pipeline.py`)
+- Atomic rules in order, as include/exclude statements (Eliot and Yun moved from about 80% to 98% this way).
+- Numeric rules are checked in code. Judgment rules are checked by the AI. Every finding is confirmed against
+  the original document.
+- Measure with the folder test harness (`cormon test`, `./bin/cormon-cloud test`). Use AI-written test sets:
+  100, growing to 1,000 realistic, non-obvious emails (easy, hard, easy to miss, irrelevant, adverse events).
+  Score precision, recall and F1, and compare models.
+- Known weak spots:
+  - lab results also triggering the safety reply;
+  - vague emails ("labs a bit off");
+  - judgment rules.
+
+## Talking to John
+- Use simple English: short sentences and plain words. He asks for this often.
