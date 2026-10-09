@@ -51,16 +51,6 @@ people:
     email: john@huma.ai
     roles: [clinops_lead]
     sites: ["*"]
-  - id: eliot-clinops
-    name: Eliot
-    email: eliot@huma.ai
-    roles: [clinops_lead]
-    sites: ["*"]
-  - id: peter-clinops
-    name: Peter
-    email: peter@huma.ai
-    roles: [clinops_lead]
-    sites: ["*"]
   - id: medical-monitor
     name: the MAP medical monitor
     email: null
