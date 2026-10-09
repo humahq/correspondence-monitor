@@ -113,7 +113,7 @@ CASES_2 = [
      "sample_handling", {}),
     ("Eligibility problem plus a safety mention", "MAP-0715",
      "MAP-0715 was randomized today with an eGFR of 40. She also mentioned some chest pain last night.",
-     "eligibility", {}),
+     "eligibility,out_of_scope", {}),
     ("A question, no patient", "eGFR question", "Quick question: is an eGFR of 43 OK for enrollment?", "none", {}),
     ("Hemolyzed, recollection booked (fine)", "MAP-0716",
      "MAP-0716's sample was visibly hemolyzed, so we scheduled a recollection inside the visit window.", "none", {}),
@@ -171,7 +171,7 @@ def main() -> None:
         t0 = time.time()
         found, _ = run_case(study, subject, body)
         got = outcome(found)
-        ok = got == expected or (expected not in ("none", "out_of_scope") and expected in got.split(","))
+        ok = got == expected
         pids = {i["participant_id"] for i in found if i["kind"] == "finding"}
         if extra.get("pid") and extra["pid"] not in pids:
             ok, got = False, f"{got} (not on {extra['pid']})"

@@ -117,6 +117,13 @@ def locate(study_id: str, doc_id: str, quote: str, section: str | None = None) -
 
 # ---------------------------------------------------------------- rules
 
+TEST = llm.obj({
+    "parameter": {"type": "string"},
+    "operator": {"type": "string", "enum": OPERATORS},
+    "value": {"type": "number"},
+    "value2": llm.nullable("number"),
+})
+
 RULE_ITEM = llm.obj({
     "kind": {"type": "string", "enum": [
         "inclusion", "exclusion", "requirement", "prohibition", "window", "sequence"]},
@@ -127,12 +134,8 @@ RULE_ITEM = llm.obj({
     "value": llm.nullable("number"),
     "value2": llm.nullable("number"),
     "unit": llm.nullable("string"),
-    "condition": llm.nullable(llm.obj({
-        "parameter": {"type": "string"},
-        "operator": {"type": "string", "enum": OPERATORS},
-        "value": {"type": "number"},
-        "value2": llm.nullable("number"),
-    })),
+    "condition": llm.nullable(TEST),
+    "unless": {"type": "array", "items": TEST},
     "applies_to": {"type": "array", "items": {"type": "string", "enum": EVENT_TYPES}},
     "source_quote": {"type": "string"},
     "section": {"type": "string"},
@@ -167,6 +170,7 @@ For every rule:
     parameter: a snake_case name with the unit, e.g. egfr_ml_min, hba1c_percent, mmse_score, bmi_kg_m2, age_years, systolic_bp_mmhg, diastolic_bp_mmhg, gds_score, minutes_draw_to_centrifuge, hours_draw_to_freeze, hours_stored_minus20, fasting_hours
     operator/value/value2: the values that VIOLATE the rule (lt, le, gt, ge, eq, ne, outside value..value2 for an allowed range, between value..value2 for a forbidden range).
     condition: the band in which the rule applies (e.g. education_years gt 8, or education_years between 8..15), else null.
+    unless: when the document gives an exception that allows a value the rule would otherwise flag, the tests that together make the exception (all must hold), e.g. "CDR = 0.5 ... the CDR can be 0 if the memory box score is 0.5" is cdr_score ne 0.5 unless [cdr_score eq 0, cdr_memory_box_score ge 0.5]. Read the sentences after each requirement for "can be", "unless", "except", "however". Else an empty list.
   Otherwise check_type "judgment" and the numeric fields are null.
 - applies_to: the event types the rule should be checked against.
 - section: the section number and heading the rule comes from."""
@@ -212,7 +216,23 @@ PROBE_SCHEMA = llm.obj({"probes": {"type": "array", "items": llm.obj({
     "fine_value": {"type": "number"},
 })}})
 
-PROBE_SYSTEM = """For each numbered rule, read its sentence and its quote from the document and give two example values of its parameter: one that clearly BREAKS the rule and one that clearly SATISFIES it. Pick values well away from any limit, inside the realistic range of the parameter. Judge from the words only."""
+PROBE_SYSTEM = """For each numbered rule, read its kind, its sentence and its quote from the document and give two example values of its parameter: breaking_value, one that should be FLAGGED by a monitor, and fine_value, one that is clearly acceptable. For an exclusion criterion, the value that meets the exclusion is the one to flag ("Body mass index < 20" as an exclusion: 17 is flagged, 25 is fine). For an inclusion criterion or a requirement, the value that fails it is the one to flag. Pick values well away from any limit, inside the realistic range of the parameter. Judge from the words only."""
+
+EXCEPTION_SCHEMA = llm.obj({"answers": {"type": "array", "items": llm.obj({
+    "rule_number": {"type": "integer"},
+    "has_exception": {"type": "boolean"},
+    "unless": {"type": "array", "items": TEST},
+    "exception_quote": {"type": "string"},
+})}})
+
+EXCEPTION_SYSTEM = """Each numbered number rule below comes with the document text around it. Decide whether that text gives an EXCEPTION: a case in which a value the rule would flag is still allowed ("the CDR can be 0 if the memory box score is 0.5", "unless approved by the medical monitor in writing", "except for participants on a stable dose for 3 months").
+
+A limit for a different band (another education or age level) is not an exception: each band is already its own rule, and the rule's band is shown. When there is a real exception and it can be tested on numbers, set has_exception, give the tests that together make the exception in unless (all must hold; use the parameter names listed when they fit, else a short snake_case name with the unit), and copy the words that state the exception VERBATIM into exception_quote. When the exception cannot be tested on numbers (an approval, a judgment), set has_exception with an empty unless and quote it. Otherwise has_exception is false, unless is empty and exception_quote is empty. Most rules have no exception."""
+
+_EXCEPT = re.compile(r"(?i)\b(unless|except|however|can be|may be|but|if approved|exception|waiver|allowed if)\b")
+
+# an exception only a reader can apply: no email fact has this name, so a number hit is always judged
+JUDGED_EXCEPTION = {"parameter": "exception_applies", "operator": "eq", "value": 1, "value2": None}
 
 FLIP = {"lt": "ge", "le": "gt", "gt": "le", "ge": "lt", "eq": "ne", "ne": "eq", "outside": "between",
         "between": "outside"}
@@ -222,7 +242,9 @@ _JUNK = re.compile(r"(?i)\b(signature of|print name|date\s*$|we will give you a 
 
 
 def _pattern_key(study: Study, doc_id: str, pattern: dict, sha: str) -> str:
-    blob = json.dumps([sha, pattern, RULE_SYSTEM, REVIEW_SYSTEM, PROBE_SYSTEM, GAP_SYSTEM], sort_keys=True)
+    blob = json.dumps([sha, pattern, RULE_SYSTEM, REVIEW_SYSTEM, PROBE_SYSTEM, GAP_SYSTEM, EXCEPTION_SYSTEM,
+                       CRITERIA_SYSTEM],
+                      sort_keys=True)
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
@@ -256,7 +278,8 @@ def _describe(n: int, r: dict) -> str:
         cond = r.get("condition")
         line += (f"  (violation when {r['parameter']} {r['operator']} {r['value']}"
                  f"{'..' + str(r['value2']) if r.get('value2') is not None else ''}"
-                 f"{'; applies when ' + json.dumps(cond) if cond else ''})")
+                 f"{'; applies when ' + json.dumps(cond) if cond else ''}"
+                 f"{'; not when ' + json.dumps(r['unless']) if r.get('unless') else ''})")
     return line + f"\n   source: \"{r['source_quote'][:200]}\""
 
 
@@ -268,6 +291,16 @@ def review_rules(study: Study, doc_id: str, pattern: dict, pages: list[str], rul
 
 
 GAP_SYSTEM = """No rule has been written yet for any of the numbered passages below, which come from a clinical trial document. For each passage that states a requirement of the given problem class, write the rule or rules, to the standard in the instructions that follow. Skip passages that are background, belong to another problem class, or are not checkable against site correspondence. Most passages will be skipped; that is expected.
+
+""" + RULE_SYSTEM
+
+CRITERIA_SCHEMA = llm.obj({"answers": {"type": "array", "items": llm.obj({
+    "item_number": {"type": "integer"},
+    "rules": {"type": "array", "items": RULE_ITEM},
+    "not_checkable_reason": {"type": "string"},
+})}})
+
+CRITERIA_SYSTEM = """Each numbered passage below is a criterion or required step of the trial that has no rule yet. Answer for EVERY number. Either write its rule or rules, to the standard in the instructions that follow, with not_checkable_reason empty; or, only when a site's correspondence could never show it being broken (a statement of policy, a note about the document itself), leave rules empty and say why in not_checkable_reason.
 
 """ + RULE_SYSTEM
 
@@ -332,6 +365,61 @@ def fill_gaps(study: Study, doc_id: str, pattern: dict, rules: list[dict], text:
     return llm.structured("ingest", GAP_SYSTEM, user, RULE_SCHEMA, "rule_gaps")["rules"]
 
 
+def must_cover(doc_kind: str, pattern: dict) -> bool:
+    return doc_kind == "lab_manual" or (doc_kind == "protocol" and pattern["id"] == "eligibility")
+
+
+def cover_criteria(study: Study, doc_id: str, pattern: dict, rules: list[dict], log=print) -> list[dict]:
+    """Every criterion in the checklist ends with a rule or a stated reason why it has none: no silent gaps."""
+    doc = study.doc(doc_id)
+    others = [dict(r) for r in db.q("SELECT source_quote FROM rules WHERE study_id=? AND doc_id=? AND active=1 "
+                                    "AND pattern_class<>?", (study.study_id, doc_id, pattern["id"]))]
+    have = [r["source_quote"] for r in rules if not (r["review"] or "").startswith("dropped")]
+    have += [r["source_quote"] for r in others]
+    items = [i for i in checklist_items(study.study_id, doc_id, doc["kind"]) if not any(_covers(q, i) for q in have)]
+    if not items:
+        return []
+    log(f"  {doc_id} / {pattern['id']}: {len(items)} criteria still without a rule; asking for each one ...")
+    user = (f"Study: {study.title} ({study.study_id})\nDocument: {doc['title']} (kind: {doc['kind']})\n\n"
+            f"Problem class: {pattern['id']} - {pattern['label']}\nDefinition: {pattern['description']}\n"
+            f"Relevant event types: {', '.join(pattern.get('event_types', []))}\n\nPASSAGES:\n"
+            + "\n".join(f"{i}. {t}" for i, t in enumerate(items, start=1)))
+    answers = {a["item_number"]: a for a in
+               llm.structured("ingest", CRITERIA_SYSTEM, user, CRITERIA_SCHEMA, "rule_criteria")["answers"]}
+    out = []
+    for n, item in enumerate(items, start=1):
+        a = answers.get(n)
+        if a and a["rules"]:
+            out += [dict(r, review="added_for_criterion") for r in a["rules"]]
+            continue
+        reason = (a or {}).get("not_checkable_reason") or "no answer from the model"
+        out.append({"kind": "requirement", "text": item, "check_type": "judgment", "parameter": None,
+                    "operator": None, "value": None, "value2": None, "unit": None, "condition": None,
+                    "unless": [], "applies_to": [], "source_quote": item, "section": "",
+                    "review": f"dropped: not checkable ({reason})"})
+    return out
+
+
+def review_gap_rules(study: Study, doc_id: str, pattern: dict, pages: list[str], rules: list[dict],
+                     gaps: list[dict]) -> dict:
+    """The coverage check's rules get the same second reading as the first reader's. The reader sees the rules
+    already kept, to spot repeats, but only the new ones can be dropped."""
+    settled = [r for r in rules if not (r["review"] or "").startswith("dropped")]
+    rev = review_rules(study, doc_id, pattern, pages, settled + gaps)
+    n = len(settled)
+    own = []
+    for d in rev["drop"]:
+        i, twin = d["rule_number"] - n, d.get("duplicate_of")
+        if not 1 <= i <= len(gaps):
+            continue
+        if d["why"] == "duplicate" and twin and 1 <= twin <= n:
+            gaps[i - 1]["review"] = f"dropped by review (duplicate): repeats a kept rule ({d['reason']})"
+            continue
+        own.append(dict(d, rule_number=i, duplicate_of=twin - n if twin and twin > n else None))
+    apply_drops(gaps, own, rev["add"])
+    return rev
+
+
 def apply_drops(live: list[dict], drops: list[dict], added: list[dict]) -> None:
     """Accept the second reader's drops, except ones that would lose a requirement: a duplicate whose twin is
     dropped too, or a rule with "wrong numbers" or "bundled" that comes back with no replacement."""
@@ -347,7 +435,7 @@ def apply_drops(live: list[dict], drops: list[dict], added: list[dict]) -> None:
         if d["why"] == "wrong_numbers" and r["check_type"] == "numeric" and r["parameter"] not in added_params:
             r["review"] = f"kept: review said the numbers are wrong but gave no correction ({d['reason']})"
             continue
-        if d["why"] == "not_atomic" and not added:
+        if d["why"] == "not_atomic" and not any(_covers(a["source_quote"], r["source_quote"]) for a in added):
             r["review"] = f"kept: review said it bundles conditions but did not split it ({d['reason']})"
             continue
         r["review"] = f"dropped by review ({d['why']}): {d['reason']}"
@@ -376,6 +464,53 @@ def repair_quote(quote: str, text: str) -> tuple[int, int] | None:
     return idx[s], idx[e] + 1
 
 
+def check_exceptions(rules: list[dict], text: str, starts: list[int]) -> int:
+    """Look next to each number rule for an exception the rule-maker may have missed, and attach it as tests that
+    turn the rule off. The exception's words must be in the document."""
+    asked = []
+    for r in rules:
+        if r["check_type"] != "numeric" or r.get("unless"):
+            continue
+        span = best_span(r["source_quote"], text, starts, r.get("section"))
+        if not span:
+            continue
+        window = text[max(0, span[0] - 300):span[1] + 900]
+        if _EXCEPT.search(window):
+            asked.append((r, window))
+    if not asked:
+        return 0
+    params = sorted({r["parameter"] for r in rules if r.get("parameter")})
+    listing = "\n\n".join(
+        f"{i}. RULE: {r['text']}  (violation when {r['parameter']} {r['operator']} {_num(r['value'])}"
+        f"{'..' + _num(r['value2']) if r.get('value2') is not None else ''}"
+        f"{'; only for ' + json.dumps(r['condition']) if r.get('condition') else ''})\nTEXT AROUND IT:\n{w}"
+        for i, (r, w) in enumerate(asked, start=1))
+    out = llm.structured("ingest", EXCEPTION_SYSTEM, f"Parameter names: {', '.join(params)}\n\n{listing}",
+                         EXCEPTION_SCHEMA, "rule_exceptions")["answers"]
+    found = 0
+    for a in out:
+        if not a["has_exception"] or not 1 <= a["rule_number"] <= len(asked):
+            continue
+        r, window = asked[a["rule_number"] - 1]
+        if not textutil.quote_in(a["exception_quote"], window, short_ok=True):
+            continue
+        band = (r.get("condition") or {}).get("parameter")
+        if a["unless"] and band and all(t["parameter"] == band for t in a["unless"]):
+            continue  # another band of the same limit, already its own rule
+
+        note = f"exception: \"{a['exception_quote'][:120]}\""
+        if a["unless"]:
+            r["unless"] = a["unless"]
+            found += 1
+        else:
+            note += " (not testable on numbers: a number hit goes to the judgment step)"
+            r["text"] = f"{r['text']} Exception: {a['exception_quote']}"
+            r["unless"] = [JUDGED_EXCEPTION]
+            found += 1
+        r["review"] = (r["review"] + "; " if r["review"] else "") + note
+    return found
+
+
 def check_directions(rules: list[dict]) -> int:
     """The model writes a rule's limits; a second, independent question asks for a value that breaks the rule
     and one that does not, and code tests both. Limits written the wrong way round are turned back."""
@@ -384,7 +519,7 @@ def check_directions(rules: list[dict]) -> int:
     numeric = [r for r in rules if r["check_type"] == "numeric"]
     if not numeric:
         return 0
-    listing = "\n".join(f"{i}. [{r['parameter']}] {r['text']}  QUOTE: \"{r['source_quote']}\""
+    listing = "\n".join(f"{i}. ({r.get('kind') or 'requirement'}) [{r['parameter']}] {r['text']}  QUOTE: \"{r['source_quote']}\""
                         for i, r in enumerate(numeric, start=1))
     probes = llm.structured("ingest", PROBE_SYSTEM, listing, PROBE_SCHEMA, "rule_probe")["probes"]
     fixed = 0
@@ -441,13 +576,31 @@ def _allowed(r: dict) -> tuple[float, float] | None:
     return None
 
 
+def rescue_replaced(rules: list[dict]) -> int:
+    """A rule dropped as bundled or as having wrong numbers comes back when none of the rules meant to replace it
+    survived the quote check."""
+    back = 0
+    for r in rules:
+        if r["_span"] is None or not r["_origin"].startswith(("dropped by review (not_atomic)",
+                                                               "dropped by review (wrong_numbers)")):
+            continue
+        reps = [a for a in rules if a["_origin"].startswith("added_by") and (
+            _covers(a["source_quote"], r["source_quote"])
+            or (r["check_type"] == "numeric" and a.get("parameter") == r.get("parameter")))]
+        if not any(a["_active"] for a in reps):
+            r["_active"] = True
+            r["review"] = f"kept: the rules meant to replace it did not pass the quote check ({r['_origin'][:80]})"
+            back += 1
+    return back
+
+
 def merge_alternatives(rules: list[dict]) -> int:
     """Two limits on the same value for the same band that cannot both hold ("9-11" and "8 or less") are
     alternatives in a protocol: allow either, as one rule. Nested limits are left alone and reported."""
     merged = 0
     groups: dict[tuple, list[dict]] = {}
     for r in rules:
-        if r["check_type"] == "numeric" and _allowed(r):
+        if r["check_type"] == "numeric" and _allowed(r) and not r.get("unless"):
             groups.setdefault((r["parameter"], json.dumps(r["condition"], sort_keys=True)), []).append(r)
     for rs in groups.values():
         while len(rs) > 1:
@@ -495,7 +648,8 @@ def lint(rules: list[dict]) -> list[tuple[int, str]]:
         if r["check_type"] == "numeric" and (not r["parameter"] or not r["operator"] or r["value"] is None):
             r.update(check_type="judgment", parameter=None, operator=None, value=None, value2=None)
         key = (r["check_type"], r["parameter"], r["operator"], r["value"], r["value2"],
-               json.dumps(r["condition"], sort_keys=True), textutil.normalize(r["text"]) if
+               json.dumps(r["condition"], sort_keys=True), json.dumps(r.get("unless") or [], sort_keys=True),
+               textutil.normalize(r["text"]) if
                r["check_type"] == "judgment" else "")
         if key in seen:
             out.append((i, f"duplicate of rule {seen[key] + 1}"))
@@ -553,14 +707,23 @@ def ingest_study(study: Study, force: bool = False, log=print) -> dict:
             apply_drops(live, rev["drop"], rev["add"])
             rules += [dict(r, review="added_by_review") for r in rev["add"]]
             log(f"  {doc_id} / {pattern['id']}: checking which requirements no rule covers ...")
-            rules += [dict(r, review="added_by_coverage_check")
-                      for r in fill_gaps(study, doc_id, pattern, rules, full_text)]
+            gaps = [dict(r, review="added_by_coverage_check")
+                    for r in fill_gaps(study, doc_id, pattern, rules, full_text)]
+            if gaps:
+                log(f"  {doc_id} / {pattern['id']}: second reader reviewing {len(gaps)} coverage-check rules ...")
+                rev2 = review_gap_rules(study, doc_id, pattern, pages, rules, gaps)
+                rules += gaps + [dict(r, review="added_by_review") for r in rev2["add"]]
+            if must_cover(study.doc(doc_id)["kind"], pattern):
+                rules += cover_criteria(study, doc_id, pattern, rules, log)
             kept = [r for r in rules if not (r["review"] or "").startswith("dropped")]
             for i, reason in lint(kept):
                 kept[i]["review"] = f"dropped: {reason}"
-            turned = check_directions([r for r in kept if not (r["review"] or "").startswith("dropped")])
+            live = [r for r in kept if not (r["review"] or "").startswith("dropped")]
+            exceptions = check_exceptions(live, full_text, starts)
+            turned = check_directions(live)
             counts = store_rules(study, doc_id, pattern, sha, rules, full_text, starts)
             counts["limits_turned_round"] = turned
+            counts["exceptions"] = exceptions
             kept = [r for r in rules if r.get("_active")]
             clash = contradictions(kept)
             for c in clash:
@@ -578,7 +741,8 @@ def ingest_study(study: Study, force: bool = False, log=print) -> dict:
             log(f"    {counts['active']} active ({counts['added_by_review']} added by the second reader, "
                 f"{counts['added_by_coverage_check']} by the coverage check), "
                 f"{counts['dropped']} dropped, {counts['quote_not_found']} rejected (quote not in the document), "
-                f"{counts['repaired_quotes']} quotes repaired, {counts['merged']} either-or merges, {turned} limits turned round" + (f", CONTRADICTIONS: {clash}" if clash else ""))
+                f"{counts['repaired_quotes']} quotes repaired, {counts['merged']} either-or merges, {turned} limits turned round, {exceptions} exceptions, "
+                f"{counts['rescued']} rescued" + (f", CONTRADICTIONS: {clash}" if clash else ""))
     return summary
 
 
@@ -591,6 +755,7 @@ def store_rules(study: Study, doc_id: str, pattern: dict, sha: str, rules: list[
               "repaired_quotes": 0,
               "merged": 0}
     for r in rules:
+        r["_origin"] = r.get("review") or ""
         span = best_span(r["source_quote"], full_text, starts, r["section"])
         if span is None:
             span = repair_quote(r["source_quote"], full_text) or quote_fragment(r, full_text, starts)
@@ -602,7 +767,11 @@ def store_rules(study: Study, doc_id: str, pattern: dict, sha: str, rules: list[
             r["review"] = ((review + "; " if review and not review.startswith("added_by") else "")
                            + "quote not found in the document")
         r["_active"] = span is not None and not (r.get("review") or "").startswith("dropped")
+    counts["rescued"] = rescue_replaced(rules)
     counts["merged"] = merge_alternatives([r for r in rules if r["_active"]])
+    active = [r for r in rules if r["_active"]]
+    for i, reason in lint(active):
+        active[i].update(_active=False, review=f"dropped: {reason} (after merging)")
     for idx, r in enumerate(rules):
         span, review, active = r["_span"], r.get("review"), r["_active"]
         verified = span is not None
@@ -611,7 +780,8 @@ def store_rules(study: Study, doc_id: str, pattern: dict, sha: str, rules: list[
         if active:
             counts["active"] += 1
             counts["added_by_review"] += (review or "").startswith("added_by_review")
-            counts["added_by_coverage_check"] += (review or "").startswith("added_by_coverage_check")
+            counts["added_by_coverage_check"] += (review or "").startswith(("added_by_coverage_check",
+                                                                             "added_for_criterion"))
         elif verified:
             counts["dropped"] += 1
         page = page_of(starts, span[0]) if span else None
@@ -620,12 +790,13 @@ def store_rules(study: Study, doc_id: str, pattern: dict, sha: str, rules: list[
         db.ex(
             "INSERT INTO rules (id, study_id, doc_id, doc_sha256, pattern_class, kind, text, check_type,"
             " parameter, operator, value, value2, unit, condition, applies_to, source_quote, source_page,"
-            " section, verified, order_idx, active, created_at, review) VALUES"
-            " (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " section, verified, order_idx, active, created_at, review, unless) VALUES"
+            " (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (rule_id, study.study_id, doc_id, sha, pattern["id"], r["kind"], r["text"],
              r["check_type"], r["parameter"], r["operator"], r["value"], r["value2"], r["unit"],
              db.js(r["condition"]) if r["condition"] else None, db.js(r["applies_to"]),
-             exact, page, r["section"], int(verified), idx, int(active), db.now(), review),
+             exact, page, r["section"], int(verified), idx, int(active), db.now(), review,
+             db.js(r["unless"]) if r.get("unless") else None),
         )
         if not verified:
             db.audit("rule_defect_unverified_source", entity_type="rule", entity_id=rule_id,
@@ -660,7 +831,11 @@ def report(study: Study) -> str:
             band = (f"  when {cond['parameter']} {cond['operator']} {cond['value']:g}"
                     f"{'..' + format(cond['value2'], 'g') if cond.get('value2') is not None else ''}") if cond else ""
             v2 = f"..{r['value2']:g}" if r["value2"] is not None else ""
-            lines.append(f"    {r['parameter']:34s} alert if {r['operator']} {r['value']:g}{v2}{band}")
+            unless = db.unjs(r.get("unless"), [])
+            exc = ("  unless " + " and ".join(
+                "an exception applies (judged)" if t["parameter"] == "exception_applies" else
+                f"{t['parameter']} {t['operator']} {t['value']:g}" for t in unless)) if unless else ""
+            lines.append(f"    {r['parameter']:34s} alert if {r['operator']} {r['value']:g}{v2}{band}{exc}")
     act = [dict(r, condition=db.unjs(r["condition"])) for r in rows if r["active"]]
     clash = contradictions(act)
     lines.append("\nContradictions between active number rules: " + ("none" if not clash else ""))
@@ -678,6 +853,57 @@ def report(study: Study) -> str:
             continue  # from an earlier build, or a build that did not finish
         lines.append(f"    second reader flagged ({d.get('doc_id')}/{d.get('pattern_class')}): {d.get('detail')}")
     return "\n".join(lines)
+
+
+_CRITERIA = re.compile(r"(?im)^\s*\d+(?:\.\d+)*\s+(?:INCLUSION|EXCLUSION) CRITERIA\b")
+_NEXT_SECTION = re.compile(r"(?m)^\s*\d+\.\d+\s+[A-Z][A-Z ,/&-]{3,}$")
+
+
+def checklist_items(study_id: str, doc_id: str, kind: str) -> list[str]:
+    """The units every one of which needs a rule: each bullet of the protocol's inclusion and exclusion sections,
+    and each requirement sentence of a lab manual."""
+    text, _ = doc_text(study_id, doc_id)
+    if kind != "protocol":
+        return passages(text)
+    items = []
+    for m in _CRITERIA.finditer(text):
+        if "...." in text[m.start():text.find("\n", m.start())]:
+            continue  # the table of contents
+        nxt = _NEXT_SECTION.search(text, m.end())
+        section = text[m.end():nxt.start() if nxt else len(text)]
+        items += [p for p in passages(section) if _BULLET.match(p)]
+    norm = [textutil.normalize(i) for i in items]
+    return [i for i, n in zip(items, norm) if not any(o != n and o.startswith(n) for o in norm)]
+
+
+def checklist(study: Study) -> tuple[str, dict]:
+    """Every criterion and requirement in the documents, with the rule that covers it or why none does."""
+    rules = [dict(r) for r in db.q("SELECT id, active, review, source_quote FROM rules WHERE study_id=?",
+                                   (study.study_id,))]
+    lines, totals = [], {"covered": 0, "dropped": 0, "missing": 0}
+    for doc in study.documents:
+        if doc["kind"] not in ("protocol", "lab_manual"):
+            continue
+        items = checklist_items(study.study_id, doc["id"], doc["kind"])
+        lines.append(f"\n{doc['title']} ({len(items)} items)")
+        for item in items:
+            hits = [r for r in rules if _covers(r["source_quote"], item)]
+            live = [r["id"] for r in hits if r["active"]]
+            if not live and any("duplicate" in (r["review"] or "") for r in hits):
+                live = ["(same as another kept rule)"]
+            if live:
+                totals["covered"] += 1
+                mark, why = "covered", ", ".join(live[:3])
+            elif hits:
+                totals["dropped"] += 1
+                mark, why = "dropped", (hits[0]["review"] or "")[:110]
+            else:
+                totals["missing"] += 1
+                mark, why = "MISSING", ""
+            lines.append(f"  [{mark:7s}] {item[:110]}" + (f"\n             {why}" if why else ""))
+    head = (f"Coverage checklist for {study.study_id}: {totals['covered']} covered, {totals['dropped']} considered "
+            f"and dropped (reason shown), {totals['missing']} missing")
+    return head + "\n" + "\n".join(lines), totals
 
 
 def import_model(src: Path, reason: str, actor: str = "operator") -> dict:
@@ -738,5 +964,6 @@ def active_rules(study_id: str, pattern_classes: list[str] | None = None) -> lis
         d = dict(r)
         d["applies_to"] = db.unjs(d["applies_to"], [])
         d["condition"] = db.unjs(d["condition"])
+        d["unless"] = db.unjs(d.get("unless"), [])
         out.append(d)
     return out

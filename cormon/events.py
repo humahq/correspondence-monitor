@@ -9,6 +9,9 @@ from dateutil import parser as dtparser
 from . import db, ingest, llm, notes, settings
 from .config import Study
 
+HARM = ["none", "symptom_or_adverse_event", "injury_or_hospitalization", "death",
+        "writer_says_result_is_a_risk"]
+
 EVENT_SCHEMA = llm.obj({
     "trial_related": {"type": "boolean"},
     "summary": {"type": "string"},
@@ -38,8 +41,10 @@ EVENT_SCHEMA = llm.obj({
                     "quote": {"type": "string"},
                 }),
             },
+            "harm": {"type": "string", "enum": HARM},
             "safety_signal": {"type": "boolean"},
             "safety_only": {"type": "boolean"},
+            "prevented": {"type": "boolean"},
         }),
     },
     "requests": {"type": "array", "items": {"type": "string"}},
@@ -67,7 +72,15 @@ Rules:
 4. facts: every measurement, score, time interval or status stated about the participant or sample. Map each fact to one of the canonical parameter names given when it fits (convert units only if trivially exact, e.g. "1.5 hours" -> 90 minutes for a minutes parameter); otherwise use a short snake_case name. numeric_value only for numbers.
 5. quote / facts.quote / temporality_evidence: copy text VERBATIM from the correspondence. Never paraphrase in these fields.
 6. polarity: problem if the writer says something went wrong or is about to go wrong; good_news only for a milestone worth recording (a visit completed on schedule, a participant completing the study); routine logistics are neutral. Do not decide eligibility or protocol compliance yourself.
-7. safety_signal: true if the event reports an adverse event, symptom, hospitalization, lab result read as a risk to the participant, or any other potential harm. safety_only: true if that is the only thing the event is about (no eligibility, schedule, sample, sequence or consent aspect).
+7. harm: what harm to the participant the correspondence reports for this event.
+   - symptom_or_adverse_event: a symptom, side effect or adverse event the participant had ("nausea since starting the tablets", "felt dizzy", "headache").
+   - injury_or_hospitalization: a fall, injury, ER visit or hospital stay.
+   - death.
+   - writer_says_result_is_a_risk: the writer or the PI treats a result as a danger to the participant ("concerning", "worrying", "holding the drug because of it", "sent to the ER").
+   - none: anything else. A lab value, vital sign or score reported as data is none, even when it is out of range or breaks a study limit, and even when the site manages it routinely (a supplement for a low vitamin). Eligibility limits are study rules, not harm.
+   safety_signal: true exactly when harm is not none. safety_only: true if the harm is the only thing the event is about (no eligibility, schedule, sample, sequence or consent aspect).
+   Put the harm and the study facts in separate events when one message has both (e.g. "randomized with eGFR 40; she also had chest pain" is an enrollment event with harm none and a symptom event with harm symptom_or_adverse_event).
+   prevented: true only when the writer says the site caught the problem before any rule was broken, so nothing went wrong (a participant with a failing value was screen-failed or not randomized; a bad sample was recollected and not used). False if the action came after the fact (randomized, then withdrawn).
 8. instruction_to_monitor: only if the writer is addressing the monitoring bot itself ("disregard this", "please ignore", "this is cleared/resolved"). Otherwise type none.
 9. trial_related: false for messages that have nothing to do with running the trial.
 10. Apply the operator notes; they are facts or instructions that override your own inference."""
@@ -82,7 +95,8 @@ def _fmt_message(m: dict, label: str, max_chars: int = 6000) -> str:
 def build_prompt(study: Study, msg: dict, history: list[dict], note_list: list[dict]) -> str:
     rules = ingest.active_rules(study.study_id)
     params = sorted({r["parameter"] for r in rules if r["parameter"]}
-                    | {r["condition"]["parameter"] for r in rules if r.get("condition")})
+                    | {r["condition"]["parameter"] for r in rules if r.get("condition")}
+                    | {t["parameter"] for r in rules for t in r.get("unless") or []} - {"exception_applies"})
     sender = study.person_by_email(msg.get("from_addr"))
     sender_desc = (f"{sender.name} ({', '.join(study.role_label(r) for r in sender.roles)}; "
                    f"{', '.join(study.site_name(s) for s in sender.sites)})") if sender else "unknown sender"

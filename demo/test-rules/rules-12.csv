@@ -1,0 +1,13 @@
+id,subject,body,from,expect,participant,note
+c01,MAP-1001 screening,"MAP-1001: global CDR 0 but memory box scored 0.5 based on cognitive complaints and the neuropsych battery. Randomized today.",crc,none,,protocol exception: CDR 0 allowed with memory box 0.5
+c02,MAP-1002 screening,"MAP-1002 CDR came out at 1.0 at screening. We randomized him this morning.",crc,eligibility,MAP-1002,CDR above 0.5
+c03,MAP-1003,"MAP-1003 BMI is 18.2, randomized yesterday.",crc,eligibility,MAP-1003,BMI under 20 is an exclusion
+c04,MAP-1004,"MAP-1004 BMI 26, all other screening fine, randomized.",crc,none,,BMI fine
+c05,MAP-1005 samples,"MAP-1005's plasma aliquots went into the -80 at 3 hours 10 min after the draw, the freezer room was locked.",crc,sample_handling,MAP-1005,frozen late
+c06,MAP-1006 draw,"MAP-1006 hadn't fasted (ate toast at 7am), we drew anyway and wrote the time of the last meal on the requisition.",crc,none,,lab manual allows this when the meal time is recorded
+c07,MAP-1007,"MAP-1007 MMSE 19 with 6 years of school. Randomized today.",crc,eligibility,MAP-1007,below 20 for 8 or fewer years
+c08,MAP-1008,"MAP-1008 MMSE 21, 6 years of education, randomized.",crc,none,,20 or more is fine for 8 or fewer years
+c09,MAP-1009,"MAP-1009 is very hard of hearing and couldn't follow the word list instructions even with the amplifier. We randomized her anyway.",crc,eligibility,MAP-1009,hearing not sufficient for testing
+c10,MAP-1010,"MAP-1010 Logical Memory II was 10 with 18 years of education. Randomized.",crc,none,,9-11 allowed for 16+ years
+c11,MAP-1011,"MAP-1011 LM-II delayed recall 13, 17 yrs education, randomized today.",crc,eligibility,MAP-1011,above 11 for 16+ years
+c12,MAP-1012,"MAP-1012 month 6 visit happened 45 days late because she was in hospital with a broken hip.",crc,out_of_scope,MAP-1012,missed for force majeure is allowed; the hospital stay is a safety report

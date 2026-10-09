@@ -1,0 +1,15 @@
+id,subject,body,from,expect,participant,note
+s01,MAP-0901 screening labs,"MAP-0901 screening labs back: eGFR 38, HbA1c 5.6, everything else normal. Randomized this morning.",crc,eligibility,MAP-0901,lab value breaks a rule; no harm reported
+s02,MAP-0902 labs,"MAP-0902's potassium came back at 5.9 and creatinine 1.8 on the screening panel. We randomized her yesterday.",crc,none,,odd labs but no rule on potassium; no harm reported
+s03,MAP-0903,"FYI MAP-0903's HbA1c is 7.1, we caught it before randomization and screen-failed him.",crc,none,,lab value caught and acted on
+s04,MAP-0904 visit,"MAP-0904 was hospitalized over the weekend with pneumonia. Discharged Monday, doing better.",crc,out_of_scope,MAP-0904,harm only
+s05,MAP-0905,"MAP-0905 randomized today, eGFR 41. Also she has had nausea and diarrhea since starting the tablets.",crc,"eligibility,out_of_scope",MAP-0905,both
+s06,MAP-0906 bloods,"Bloods for MAP-0906 look a bit concerning, ALT is 3x upper limit. Already randomized last week.",crc,out_of_scope,MAP-0906,the writer reads the lab as a risk to the participant: that is a safety signal
+s07,MAP-0907,"MAP-0907 BP today 172/104 at the baseline visit, randomized anyway per PI.",crc,eligibility,MAP-0907,vital sign breaks a rule
+s08,MAP-0908 call,"MAP-0908's daughter called, he fainted in the kitchen and hit his head. ER said no fracture.",crc,out_of_scope,MAP-0908,harm only
+s09,MAP-0909,"MAP-0909 B12 was low (180) so the PI started supplements. Randomization is set for next week.",crc,none,,lab handled clinically; nothing broken
+s10,MAP-0910 samples,"MAP-0910's sample was hemolyzed and we shipped it anyway. Patient felt dizzy during the draw but was fine after juice.",crc,"out_of_scope,sample_handling",MAP-0910,sample problem plus a minor symptom
+s11,MAP-0911,"MAP-0911 has an eGFR of 52 and BMI 31. Randomized today, no issues.",crc,none,,numbers inside limits
+s12,MAP-0912 AE,"Reporting an AE for MAP-0912: mild headache for 2 days after the dose increase, resolved without treatment.",crc,out_of_scope,MAP-0912,adverse event only
+s13,MAP-0913,"MAP-0913 eGFR dropped to 35 at the month 6 visit, PI is aware and holding the drug.",crc,out_of_scope,MAP-0913,on-study lab change read as a clinical risk; eligibility rules apply at screening only
+s14,MAP-0914,"Screening MMSE for MAP-0914 was 19 with 12 years of education. We randomized her today.",crc,eligibility,MAP-0914,score breaks a rule; nothing about harm

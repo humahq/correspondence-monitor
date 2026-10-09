@@ -270,6 +270,7 @@ cormon note add --scope message|person|study|global --target X --kind fact|instr
 cormon log [--item ID] [--message ID] the audit log
 cormon rules [--pattern eligibility]  the study model
 cormon rules --report                 what was kept, dropped or merged and why; number rules; contradictions
+cormon rules --checklist              every inclusion/exclusion criterion and lab-manual step, with its rule or why none
 cormon reset --yes                    archive the database, start fresh (study model kept)
 ```
 

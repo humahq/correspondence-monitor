@@ -40,7 +40,7 @@ r2-10,MAP-0711,"MAP-0711 signed the eICF in VISION first thing, then we did the 
 r2-11,MAP-0712,"MAP-0712: age 67, BMI 24, eGFR 88, HbA1c 5.4, MMSE 28 (14 yrs edu), BP 128/78. Randomized today.",crc,none,,All numbers inside limits
 r2-12,MAP-0713 samples,"Spun MAP-0713's lavender top at 45 min, aliquots in the -80 at 1h50.",crc,none,,"Spun at 45 min, frozen at 1h50 (fine)"
 r2-13,MAP-0714 samples,Spun MAP-0714's lavender top at 65 min after the draw.,crc,sample_handling,,Spun at 65 min
-r2-14,MAP-0715,MAP-0715 was randomized today with an eGFR of 40. She also mentioned some chest pain last night.,crc,eligibility,,Eligibility problem plus a safety mention
+r2-14,MAP-0715,MAP-0715 was randomized today with an eGFR of 40. She also mentioned some chest pain last night.,crc,"eligibility,out_of_scope",,Eligibility problem plus a safety mention
 r2-15,eGFR question,Quick question: is an eGFR of 43 OK for enrollment?,crc,none,,"A question, no patient"
 r2-16,MAP-0716,"MAP-0716's sample was visibly hemolyzed, so we scheduled a recollection inside the visit window.",crc,none,,"Hemolyzed, recollection booked (fine)"
 r2-17,MAP-0717,MAP-0717's sample was visibly hemolyzed but we shipped it for biomarker analysis anyway.,crc,sample_handling,,"Hemolyzed, shipped anyway"

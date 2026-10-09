@@ -178,7 +178,7 @@ def first_writer_while_absent(msg: dict) -> str | None:
 def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: str = "system") -> dict:
     msg = capture.message(msg_id)
     summary: dict = {"message_id": msg_id, "route": msg["route"], "items_created": [], "items_repeat": [],
-                     "historical": 0, "hypothetical": 0, "out_of_scope": 0, "findings": 0}
+                     "historical": 0, "hypothetical": 0, "prevented": 0, "out_of_scope": 0, "findings": 0}
     db.ex("UPDATE messages SET status='processing', error=NULL WHERE id=?", (msg_id,))
     try:
         if msg["route"] != "study" or not msg["study_id"]:
@@ -228,6 +228,8 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
         newest_part_date = max(part_dates, key=_instant) if part_dates else None
 
         for event in data["events"]:
+            if event.get("harm", "none") == "none":
+                event["safety_signal"] = event["safety_only"] = False
             pid = _pid(event.get("participant_id"))
             base = _base_evidence(study, msg, event)
 
@@ -271,6 +273,11 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 db.audit("hypothetical_question_no_alert", entity_type="message", entity_id=msg_id,
                          study_id=study.study_id, participant_id=pid, description=event["description"],
                          evidence=event["temporality_evidence"])
+                continue
+            if event.get("prevented") and not event["safety_signal"]:
+                summary["prevented"] += 1
+                db.audit("prevented_no_alert", entity_type="message", entity_id=msg_id, study_id=study.study_id,
+                         participant_id=pid, description=event["description"], quote=event["quote"])
                 continue
 
             pooled = dict(event, facts=_pooled_facts(event, pid, data["events"]))

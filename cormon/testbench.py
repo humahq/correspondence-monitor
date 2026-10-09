@@ -229,7 +229,7 @@ def run_case(study, case: Case) -> None:
         "got": classes,
         "items": found,
         "sent": [f"{o['purpose']} -> {', '.join(db.unjs(o['to_addrs']) or []) or o['destination']}" for o in sent],
-        "pids": {i["participant_id"] for i in found if i["kind"] == "finding"},
+        "pids": {i["participant_id"] for i in found if i["kind"] in ("finding", "out_of_scope")},
         "seconds": round(time.time() - t0, 1),
     }
 
@@ -240,8 +240,7 @@ def verdict(case: Case) -> bool | None:
     if case.expect is None:
         return None
     got = case.result["got"]
-    if case.expect != got and not (case.expect and case.expect <= got and "out_of_scope" not in case.expect
-                                   and got - case.expect <= {"out_of_scope"}):
+    if case.expect != got:
         return False
     return not (case.participant and case.expect and case.participant.upper() not in
                 {p.upper() for p in case.result["pids"] if p})

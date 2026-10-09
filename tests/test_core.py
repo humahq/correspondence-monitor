@@ -162,3 +162,20 @@ def test_review_cannot_drop_both_twins_or_drop_without_a_fix():
         {"rule_number": 3, "why": "wrong_numbers", "duplicate_of": None, "reason": "x"}], [])
     assert live[0]["review"].startswith("dropped")
     assert live[1]["review"].startswith("kept") and live[2]["review"].startswith("kept")
+
+
+def test_exception_turns_a_number_rule_off():
+    rule = {"id": "r", "check_type": "numeric", "parameter": "cdr_score", "operator": "ne", "value": 0.5,
+            "value2": None, "condition": None,
+            "unless": [{"parameter": "cdr_score", "operator": "eq", "value": 0, "value2": None},
+                       {"parameter": "cdr_memory_box_score", "operator": "ge", "value": 0.5, "value2": None}]}
+
+    def event(**vals):
+        return {"facts": [{"parameter": k, "numeric_value": v, "value": str(v), "quote": k} for k, v in vals.items()]}
+
+    found, undecided = matching.numeric_checks([rule], event(cdr_score=0, cdr_memory_box_score=0.5))
+    assert not found and not undecided
+    found, _ = matching.numeric_checks([rule], event(cdr_score=1, cdr_memory_box_score=0.5))
+    assert found
+    found, undecided = matching.numeric_checks([rule], event(cdr_score=0))
+    assert not found and undecided == [rule]

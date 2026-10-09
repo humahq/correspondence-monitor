@@ -106,6 +106,9 @@ def cmd_rules(args):
     if args.report:
         print(ingest.report(config.study(args.study)))
         return
+    if args.checklist:
+        print(ingest.checklist(config.study(args.study))[0])
+        return
     rows = ingest.active_rules(args.study, [args.pattern] if args.pattern else None) if not args.all else \
         [dict(r) for r in db.q("SELECT * FROM rules WHERE study_id=? ORDER BY pattern_class, order_idx", (args.study,))]
     if args.show:
@@ -532,6 +535,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--pattern"); s.add_argument("--all", action="store_true", help="include rejected rules")
     s.add_argument("--show", help="show one rule in full")
     s.add_argument("--report", action="store_true", help="what was kept, dropped and why, and contradictions")
+    s.add_argument("--checklist", action="store_true",
+                   help="every inclusion/exclusion criterion and lab-manual step, with its rule or why none")
     s.set_defaults(fn=cmd_rules)
 
     s = sub.add_parser("run", help="run the listener"); s.add_argument("--once", action="store_true")

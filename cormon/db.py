@@ -258,6 +258,8 @@ def conn() -> sqlite3.Connection:
 MIGRATIONS = {
     # why a rule is inactive, or that the review pass added it ("added_by_review", "dropped: signature line")
     ("rules", "review"): "ALTER TABLE rules ADD COLUMN review TEXT",
+    # tests that, when all hold, turn the rule off: an exception the document allows
+    ("rules", "unless"): "ALTER TABLE rules ADD COLUMN unless TEXT",
 }
 
 

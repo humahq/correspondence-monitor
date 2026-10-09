@@ -91,6 +91,16 @@ def numeric_checks(rules: list[dict], event: dict) -> tuple[list[Finding], list[
                 continue
             if not violates(cf["numeric_value"], cond["operator"], cond["value"], cond.get("value2")):
                 continue
+        unless = r.get("unless") or []
+        if unless:
+            known = [facts.get(t["parameter"]) for t in unless]
+            if all(k is not None for k in known):
+                if all(violates(k["numeric_value"], t["operator"], t["value"], t.get("value2"))
+                       for k, t in zip(known, unless)):
+                    continue  # the document's exception applies
+            elif violates(facts[r["parameter"]]["numeric_value"], r["operator"], r["value"], r["value2"]):
+                undecided.append(r)  # the exception might apply: let the judgment step read the whole rule
+                continue
         f = facts[r["parameter"]]
         if violates(f["numeric_value"], r["operator"], r["value"], r["value2"]):
             bound = (f"{r['value']:g}-{r['value2']:g}" if r["operator"] == "outside"
@@ -112,7 +122,7 @@ For each conflict:
 - message_quote: the exact words from the correspondence that show the conflict, copied VERBATIM.
 - reasoning: one or two sentences linking the quote to the rule.
 - certainty: clear if the facts stated plainly conflict; possible if the conflict depends on an assumption you had to make.
-- basis: stated_fact_breaks_rule when the correspondence says something that breaks the rule ("randomized before the MRI", "spun at 75 minutes", "forgot the log"); required_step_not_mentioned when the correspondence is only silent about a step the rule requires.
+- basis: stated_fact_breaks_rule when the correspondence says something that breaks the rule ("randomized before the MRI", "spun at 75 minutes", "forgot the log"); inferred_from_wording when you are reading it between the lines (guessing from how a result is described, or assuming an order the writer did not state); required_step_not_mentioned when the correspondence is only silent about a step the rule requires.
 Apply the operator notes; they override your own inference."""
 
 
@@ -127,10 +137,17 @@ def judgment_checks(study: Study, event: dict, rules: list[dict], msg_text: str,
             "message_quote": {"type": "string"},
             "reasoning": {"type": "string"},
             "certainty": {"type": "string", "enum": ["clear", "possible"]},
-            "basis": {"type": "string", "enum": ["stated_fact_breaks_rule", "required_step_not_mentioned"]},
+            "basis": {"type": "string", "enum": ["stated_fact_breaks_rule", "inferred_from_wording",
+                                                 "required_step_not_mentioned"]},
         })},
     })
-    rule_lines = "\n".join(f"{r['id']}: {r['text']}" for r in rules)
+    def line(r: dict) -> str:
+        unless = [t for t in r.get("unless") or [] if t["parameter"] != "exception_applies"]
+        exc = (" Does not apply when " + " and ".join(
+            f"{t['parameter']} {t['operator']} {t['value']:g}" for t in unless) + ".") if unless else ""
+        return f"{r['id']}: {r['text']}{exc}"
+
+    rule_lines = "\n".join(line(r) for r in rules)
     user = (
         f"Study: {study.title}\n\nOperator notes:\n{notes.render(note_list)}\n\n"
         f"EVENT:\n{db.js({k: v for k, v in event.items() if not k.startswith('_')})}\n\n"
@@ -140,7 +157,8 @@ def judgment_checks(study: Study, event: dict, rules: list[dict], msg_text: str,
     by_id = {r["id"]: r for r in rules}
     return [Finding(rule=by_id[c["rule_id"]], event=event, method="judgment", message_quote=c["message_quote"],
                     reasoning=c["reasoning"], certainty=c["certainty"])
-            for c in out["conflicts"] if c["rule_id"] in by_id and c["basis"] == "stated_fact_breaks_rule"]
+            for c in out["conflicts"] if c["rule_id"] in by_id and c["basis"] == "stated_fact_breaks_rule"
+            and c["certainty"] == "clear"]
 
 
 CONFIRM_SYSTEM = """You confirm or reject a suspected protocol conflict using the ORIGINAL study document text, not a summary.
