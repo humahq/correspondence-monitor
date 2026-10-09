@@ -45,6 +45,34 @@ The first time, it asks to create a key. Just press **Enter** when asked. If you
 
 You'll run all the commands below from inside the `correspondence-monitor` folder.
 
+### Who's who (and which email is which)
+
+The bot sends alerts to people by their **role** in the study. Right now the roles use John's test addresses:
+
+| Role | What they do | Test email now |
+|---|---|---|
+| **Coordinator (CRC)** | Works at the hospital site. Writes the day-to-day emails about patients. | `johnrohit94@gmail.com` |
+| **CRA** | The sponsor's monitor for the site. Gets the bot's alerts and decides what to do. | `johnernest978@gmail.com` |
+| **Sponsor lead (ClinOps)** | Runs the study for the sponsor. Copied on alerts and gets the daily summary. | `john@huma.ai` |
+| **Medical monitor** | The doctor who handles safety. The bot never alerts them; it tells people to contact them. | none |
+| **The bot** | Reads every email it is copied on. | `bot+NCT04098666@huma.ai` |
+
+**The normal flow:** the coordinator emails the CRA as usual and puts the bot in **CC**. The bot reads the email, checks it against the study rules, and if something is wrong it emails an alert. The coordinator doesn't have to do anything different.
+
+**Who gets what:**
+
+| What the bot finds | Who is emailed |
+|---|---|
+| **Medium** (a problem that already happened) | The CRA, with the sponsor lead in CC. It also goes in the sponsor lead's daily summary. |
+| **Immediate** (a problem planned within 48 hours, or a consent problem) | The CRA and the sponsor lead, each in a separate email. If a coordinator wrote the email, they get a short careful note too. |
+| **Low** (for example, a visit a little out of its window) | No email. It goes on a to-do list and in the daily summary. |
+| **Safety** (side effects, falls, hospital visits) | Only the person who wrote the email gets a reply: "please contact the medical monitor". |
+| **Nothing wrong, or not about the study** | Nobody. The bot stays quiet. |
+
+Teams messages are shown in the bot's records only (simulated); they are not posted to a real Teams channel yet.
+
+**To get the alerts yourself:** tell John which email to use for each role (coordinator, CRA, sponsor lead). He changes the `people:` list in `studies/NCT04098666/study.yaml` and updates the cloud copy. One person can test as several roles.
+
 ### Before you test: how the bot thinks
 
 **What it does with each email, in 4 steps:**
@@ -93,24 +121,30 @@ The lab manual is a practice version written for this demo, so the sample-handli
 
 ### Part 2: Test with a real email
 
-**Step 1.** From any email account, send an email and **CC `bot+NCT04098666@huma.ai`**. For example:
+**Step 1.** Send an email like a coordinator would: **To** the CRA, with the bot in **CC**. (Any email account works as the sender.) For example:
 
+> **To:** `johnernest978@gmail.com` (the CRA)
+> **CC:** `bot+NCT04098666@huma.ai`
 > **Subject:** MAP-0142 randomized today
 > **Body:** We randomized MAP-0142 this morning. Her eGFR at screening was 41.
 
-**Step 2.** Wait about one minute. The bot should notice that an eGFR of 41 is too low (the study needs 45 or more) and send an alert email to the study team.
+Use a new patient number (MAP-0142, MAP-0143 …) for each test. The bot doesn't alert twice on the same problem in the same thread.
 
-**Step 3.** See what the bot found:
+**Step 2.** Wait about one minute. The bot should notice that an eGFR of 41 is too low (the study needs 45 or more). It is a Medium problem, so it emails an alert to the CRA (`johnernest978@gmail.com`) with the sponsor lead (`john@huma.ai`) in CC. The alert quotes the email and the protocol page.
+
+**Step 3.** See what the bot found. Each problem gets an item number:
 
 ```
 ./bin/cormon-cloud items
 ```
 
-**Step 4.** See the full details of item 1: what it quoted from the email and the protocol, its reasoning, and every email it sent:
+**Step 4.** See the full details of one item (use the number from Step 3): what it quoted from the email and the protocol, its reasoning, and every email it sent:
 
 ```
-./bin/cormon-cloud item 1 --drafts
+./bin/cormon-cloud item 3 --drafts
 ```
+
+Each item also has a web page link (shown as "Detail page") that you can open in a browser.
 
 **Step 5 (optional).** Reply to the bot's alert email with the word **disregard**. The bot marks the alert as dropped.
 
