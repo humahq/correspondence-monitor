@@ -6,82 +6,149 @@ Demo study: **MAP, Metformin in Alzheimer's Dementia Prevention (NCT04098666)**.
 
 ## Testing guide (for Eliot and Peter)
 
-The bot runs on a small always-on server in Google Cloud (`cormon-demo`, project `optical-depth-506808-t0`). Only one copy reads the inbox, so **don't run `cormon run` on your laptop**. Use the cloud copy instead. You control it from your laptop with `./bin/cormon-cloud`, using your own Google account. The connection is encrypted through Google's IAP proxy, so no VPN or password is needed.
+**How it's set up:** the bot runs on a small Google Cloud server that is always on. You don't install the bot. You install a small Google tool, and then you type short commands in Terminal on your laptop to talk to the bot. You sign in with your own huma.ai Google account. The connection is secure, and there's no VPN or extra password.
 
-### One-time setup (5 minutes)
+Only one copy of the bot should read the email, so **don't start the bot on your own laptop.** Always use `./bin/cormon-cloud`.
 
-1. Install the Google Cloud CLI: <https://cloud.google.com/sdk/docs/install> (on a Mac: `brew install --cask google-cloud-sdk`).
-2. Sign in with your huma.ai account: `gcloud auth login`.
-3. Get the code: `git clone https://github.com/humahq/correspondence-monitor.git` and `cd` into it.
-4. Check it works: `./bin/cormon-cloud status`. The first time, gcloud creates an SSH key for you; just press Enter.
+### Part 1: One-time setup (about 5 minutes)
 
-Access is granted per person by `./deploy/grant_access.sh name@huma.ai` (Eliot and Peter already have it).
+**Step 1. Install the Google Cloud tool.** Open the Terminal app and type:
 
-### Test 1: real email
-
-Send an email and **CC `bot+NCT04098666@huma.ai`**, for example:
-
-> Subject: MAP-0142 randomized today
-> We randomized MAP-0142 this morning. Her eGFR at screening was 41.
-
-Within about a minute the bot finds the problem (the protocol excludes eGFR below 45) and emails the people set in `studies/NCT04098666/study.yaml`. Then look at what it did:
-
-```bash
-./bin/cormon-cloud items              # what it found
-./bin/cormon-cloud item 1 --drafts    # quotes, reasoning, every message it sent, full history
-./bin/cormon-cloud status             # recent activity
+```
+brew install --cask google-cloud-sdk
 ```
 
-To tell the bot to drop an alert, reply to its email with "disregard". The bot reads replies too.
+No Homebrew? Download it from <https://cloud.google.com/sdk/docs/install> instead.
 
-### Test 2: many emails at once, from a folder (nothing is sent)
+**Step 2. Sign in with your huma.ai Google account:**
 
-```bash
-./bin/cormon-cloud test demo/test-quick       # 3 small examples
-./bin/cormon-cloud test demo/test-emails      # the 41 practice emails (about 4 minutes)
-./bin/cormon-cloud test my-emails/            # your own folder
+```
+gcloud auth login
 ```
 
-Each run uses a separate sandbox copy: no email is sent and the live data isn't touched. It prints what the bot found for each message and a score, and saves `results/<time>/results.csv` on your laptop.
+A browser window opens. Choose your huma.ai account and click **Allow**.
 
-A test folder can hold any mix of:
+**Step 3. Download the code:**
 
-- **`.txt`**: one email per file. The header lines are optional:
-  ```
-  Subject: MAP-0301 randomized
-  From: crc
-  Expect: eligibility
-  Participant: MAP-0301
-
-  We randomized MAP-0301 today. eGFR was 41.
-  ```
-  - `From`: `crc` (site, the default), `cra` (monitor), or an email address.
-  - `Expect`: what the bot should find, used for the score. Use `eligibility`, `visit_schedule`, `procedure_sequence`, `sample_handling` or `consent` (several separated by commas), `none` for nothing to flag, or `out_of_scope` for safety-only messages. Leave it out to just see what the bot does.
-- **`.csv`**: many emails, one per row, with columns `id, subject, body, from, expect, participant`. Only `body` is required. See `demo/test-emails/practice-41.csv`.
-- **`.eml`**: real saved emails. The study address is added automatically.
-
-How to read the score:
-
-- **Precision:** of the alerts the bot raised, how many were real problems.
-- **Recall:** of the real problems, how many the bot caught.
-- **F1:** both combined into one number.
-
-### Other useful commands
-
-```bash
-./bin/cormon-cloud rules                  # the 111 rules the bot built from the study documents
-./bin/cormon-cloud log --item 1           # the audit trail for one item
-./bin/cormon-cloud digest --hours 24      # preview the sponsor's daily summary (add --send to send it)
-./bin/cormon-cloud pause / resume         # stop or restart processing (email is still captured)
-./bin/cormon-cloud logs                   # the server's own log
-./bin/cormon-cloud shell                  # a terminal on the server
+```
+git clone https://github.com/humahq/correspondence-monitor.git
+cd correspondence-monitor
 ```
 
-Every command in "Operator commands" below works the same way through `./bin/cormon-cloud`. Your actions are recorded under your own login name.
+**Step 4. Check that it works:**
 
-### Updating the cloud copy (John)
+```
+./bin/cormon-cloud status
+```
 
-`./deploy/create_vm.sh` copies the current code to the server and restarts it. The live data on the server is kept. Settings changed on the server with `cormon config set` are replaced by the laptop's `config/` on the next update, so make permanent changes in the repo.
+The first time, it asks to create a key. Just press **Enter** when asked. If you see the bot's status, you're ready.
+
+You'll run all the commands below from inside the `correspondence-monitor` folder.
+
+### Part 2: Test with a real email
+
+**Step 1.** From any email account, send an email and **CC `bot+NCT04098666@huma.ai`**. For example:
+
+> **Subject:** MAP-0142 randomized today
+> **Body:** We randomized MAP-0142 this morning. Her eGFR at screening was 41.
+
+**Step 2.** Wait about one minute. The bot should notice that an eGFR of 41 is too low (the study needs 45 or more) and send an alert email to the study team.
+
+**Step 3.** See what the bot found:
+
+```
+./bin/cormon-cloud items
+```
+
+**Step 4.** See the full details of item 1: what it quoted from the email and the protocol, its reasoning, and every email it sent:
+
+```
+./bin/cormon-cloud item 1 --drafts
+```
+
+**Step 5 (optional).** Reply to the bot's alert email with the word **disregard**. The bot marks the alert as dropped.
+
+### Part 3: Test many emails at once (no emails are sent)
+
+This runs test emails through a separate practice copy of the bot. Nothing is emailed to anyone, and the real data isn't touched.
+
+**Step 1. Try 3 ready-made examples:**
+
+```
+./bin/cormon-cloud test demo/test-quick
+```
+
+**Step 2. Try 41 practice emails** (about 4 minutes):
+
+```
+./bin/cormon-cloud test demo/test-emails
+```
+
+**Step 3. Write your own test emails.** Make a folder, for example `my-emails`, and put one text file per email in it. Example file `my-emails/test1.txt`:
+
+```
+Subject: MAP-0301 randomized
+From: crc
+Expect: eligibility
+
+We randomized MAP-0301 today. eGFR was 41.
+```
+
+What the top lines mean (all of them are optional):
+
+- **Subject:** the email's subject line.
+- **From:** who sent it: `crc` (the site coordinator) or `cra` (the monitor).
+- **Expect:** what the bot *should* find, so it can be scored right or wrong:
+
+| Write | When the email is about |
+|---|---|
+| `eligibility` | a patient who doesn't meet the entry criteria |
+| `visit_schedule` | a visit outside its allowed window |
+| `procedure_sequence` | steps done in the wrong order |
+| `sample_handling` | a lab sample handled wrongly |
+| `consent` | a consent problem |
+| `none` | nothing wrong; the bot should stay quiet |
+| `out_of_scope` | safety only; the bot should refuse and point to the medical monitor |
+
+Leave out **Expect** if you just want to see what the bot does.
+
+Then run:
+
+```
+./bin/cormon-cloud test my-emails
+```
+
+**Many emails?** Instead of one file each, use a single spreadsheet saved as `.csv` with the columns `subject`, `body`, `from` and `expect`. See `demo/test-emails/practice-41.csv` for an example.
+
+**Step 4. Read the result.** For each email you'll see **RIGHT** or **WRONG**, and what the bot found. At the end there's a score:
+
+- **Precision:** of the alerts the bot raised, how many were real problems (fewer false alarms means higher).
+- **Recall:** of the real problems, how many the bot caught (fewer misses means higher).
+- **F1:** both combined into one number. 1.00 is perfect.
+
+The results are also saved as a spreadsheet on your laptop: `results/<date-time>/results.csv`.
+
+Each test email uses the AI, so a run costs a few cents.
+
+### Part 4: Other useful commands
+
+| Command | What it does |
+|---|---|
+| `./bin/cormon-cloud rules` | The 111 rules the bot made from the study documents |
+| `./bin/cormon-cloud status` | What the bot did recently |
+| `./bin/cormon-cloud log --item 1` | The full history of item 1 |
+| `./bin/cormon-cloud digest --hours 24` | Preview the sponsor's daily summary |
+| `./bin/cormon-cloud pause` | Stop the bot from acting (it still collects email) |
+| `./bin/cormon-cloud resume` | Start it again |
+| `./bin/cormon-cloud logs` | The server's technical log |
+
+Anything you do is recorded under your own name.
+
+### For John: updating the cloud copy
+
+- **Updating the code:** `./deploy/create_vm.sh` copies the current code to the server and restarts the bot. The live data on the server is kept.
+- **Settings:** changes made on the server with `cormon config set` are overwritten by the repo's `config/` on the next update, so make permanent changes in the repo.
+- **Giving someone access:** `./deploy/grant_access.sh name@huma.ai` (Eliot and Peter already have access).
 
 ## How it works
 
