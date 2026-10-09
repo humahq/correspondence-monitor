@@ -103,3 +103,62 @@ def test_capture_is_idempotent_and_keeps_forward_dates():
     assert mid and capture.capture(capture.parse_email(raw)) is None
     att = capture.message(mid)["attachments"]
     assert att[0]["component"] == "inline-forward" and att[0]["source_date"].startswith("2026-09-14")
+
+
+def _lm(op, v, v2=None, band=16):
+    return {"check_type": "numeric", "parameter": "logical_memory_ii_score", "operator": op, "value": v,
+            "value2": v2, "condition": {"parameter": "education_years", "operator": "ge", "value": band},
+            "text": f"{op} {v}", "source_quote": f"{op} {v}", "review": None, "_active": True}
+
+
+def test_either_or_ranges_merge_into_one_rule():
+    from cormon import ingest
+
+    early, late = _lm("outside", 9, 11), _lm("gt", 8)
+    assert ingest.merge_alternatives([early, late]) == 1
+    assert (early["operator"], early["value"]) == ("gt", 11) and not late["_active"]
+
+
+def test_nested_limits_are_not_merged():
+    from cormon import ingest
+
+    assert ingest.merge_alternatives([_lm("gt", 8), _lm("gt", 11)]) == 0
+
+
+def test_quote_fragment_drops_glued_heading():
+    from cormon import ingest
+
+    text = "For early MCI:\n9-11 for 16 or more years of education\n5-9 for 8-15 years of education\n"
+    rule = {"source_quote": "For early MCI: 5-9 for 8-15 years of education", "value": 5.0, "value2": 9.0,
+            "section": None}
+    s, e = ingest.quote_fragment(rule, text, [0])
+    assert text[s:e].strip() == "5-9 for 8-15 years of education"
+
+
+def test_opposite_limits_are_not_merged_into_anything_goes():
+    from cormon import ingest
+
+    assert ingest.merge_alternatives([_lm("lt", 0.5), _lm("ge", 0.5)]) == 0
+
+
+def test_limits_written_the_wrong_way_are_turned_round(monkeypatch):
+    from cormon import ingest
+
+    rule = dict(_lm("le", 28), parameter="screening_window_days", condition=None)
+    monkeypatch.setattr(ingest.llm, "structured", lambda *a, **k: {
+        "probes": [{"rule_number": 1, "breaking_value": 40, "fine_value": 10}]})
+    assert ingest.check_directions([rule]) == 1
+    assert rule["operator"] == "gt"
+
+
+def test_review_cannot_drop_both_twins_or_drop_without_a_fix():
+    from cormon import ingest
+
+    live = [dict(_lm("ne", 0.5), parameter="cdr"), dict(_lm("lt", 0.5), parameter="cdr_memory_box"),
+            _lm("gt", 8)]
+    ingest.apply_drops(live, [
+        {"rule_number": 1, "why": "not_stated", "duplicate_of": None, "reason": "x"},
+        {"rule_number": 2, "why": "duplicate", "duplicate_of": 1, "reason": "x"},
+        {"rule_number": 3, "why": "wrong_numbers", "duplicate_of": None, "reason": "x"}], [])
+    assert live[0]["review"].startswith("dropped")
+    assert live[1]["review"].startswith("kept") and live[2]["review"].startswith("kept")

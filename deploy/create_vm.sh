@@ -3,6 +3,8 @@
 # Run it from the project folder, the first time and after every change:
 #     ./deploy/create_vm.sh
 # The live data on the VM (database, messages) is kept across updates.
+# To also replace the VM's study model (rules) with the laptop's, after rebuilding and testing it:
+#     SYNC_MODEL=1 ./deploy/create_vm.sh
 set -euo pipefail
 
 PROJECT="${PROJECT:-optical-depth-506808-t0}"
@@ -61,7 +63,7 @@ SSH=("${G[@]}" compute ssh "$NAME" --zone "$ZONE" --tunnel-through-iap)
 "${G[@]}" compute scp --zone "$ZONE" --tunnel-through-iap /tmp/cormon.tgz "$SEED" "$NAME":/tmp/
 "${SSH[@]}" --command "sudo mkdir -p /opt/cormon && sudo tar -xzf /tmp/cormon.tgz -C /opt/cormon 2>/dev/null \
   && sudo find /opt/cormon -name '._*' -not -path '*/.venv/*' -delete \
-  && sudo HOST=$HOST bash /opt/cormon/deploy/setup_vm.sh"
+  && sudo HOST=$HOST SYNC_MODEL=${SYNC_MODEL:-0} bash /opt/cormon/deploy/setup_vm.sh"
 rm -f /tmp/cormon.tgz "$SEED"
 
 echo

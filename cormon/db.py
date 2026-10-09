@@ -250,8 +250,21 @@ def conn() -> sqlite3.Connection:
         c.execute("PRAGMA foreign_keys=ON")
         c.execute("PRAGMA busy_timeout=30000")
         c.executescript(SCHEMA)
+        _migrate(c)
         _local.conn = c
     return c
+
+
+MIGRATIONS = {
+    # why a rule is inactive, or that the review pass added it ("added_by_review", "dropped: signature line")
+    ("rules", "review"): "ALTER TABLE rules ADD COLUMN review TEXT",
+}
+
+
+def _migrate(c: sqlite3.Connection) -> None:
+    for (table, column), sql in MIGRATIONS.items():
+        if column not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
+            c.execute(sql)
 
 
 def q(sql: str, params: Iterable[Any] = ()) -> list[sqlite3.Row]:

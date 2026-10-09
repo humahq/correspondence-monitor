@@ -41,6 +41,8 @@ class Finding:
 def violates(value: float, operator: str, v1: float | None, v2: float | None) -> bool:
     if operator == "outside":
         return v1 is not None and v2 is not None and (value < v1 or value > v2)
+    if operator == "between":
+        return v1 is not None and v2 is not None and v1 <= value <= v2
     fn = _OPS.get(operator or "")
     return bool(fn and v1 is not None and fn(value, v1))
 
@@ -87,7 +89,7 @@ def numeric_checks(rules: list[dict], event: dict) -> tuple[list[Finding], list[
             if cf is None:
                 undecided.append(r)
                 continue
-            if not violates(cf["numeric_value"], cond["operator"], cond["value"], None):
+            if not violates(cf["numeric_value"], cond["operator"], cond["value"], cond.get("value2")):
                 continue
         f = facts[r["parameter"]]
         if violates(f["numeric_value"], r["operator"], r["value"], r["value2"]):
@@ -110,6 +112,7 @@ For each conflict:
 - message_quote: the exact words from the correspondence that show the conflict, copied VERBATIM.
 - reasoning: one or two sentences linking the quote to the rule.
 - certainty: clear if the facts stated plainly conflict; possible if the conflict depends on an assumption you had to make.
+- basis: stated_fact_breaks_rule when the correspondence says something that breaks the rule ("randomized before the MRI", "spun at 75 minutes", "forgot the log"); required_step_not_mentioned when the correspondence is only silent about a step the rule requires.
 Apply the operator notes; they override your own inference."""
 
 
@@ -124,6 +127,7 @@ def judgment_checks(study: Study, event: dict, rules: list[dict], msg_text: str,
             "message_quote": {"type": "string"},
             "reasoning": {"type": "string"},
             "certainty": {"type": "string", "enum": ["clear", "possible"]},
+            "basis": {"type": "string", "enum": ["stated_fact_breaks_rule", "required_step_not_mentioned"]},
         })},
     })
     rule_lines = "\n".join(f"{r['id']}: {r['text']}" for r in rules)
@@ -136,12 +140,12 @@ def judgment_checks(study: Study, event: dict, rules: list[dict], msg_text: str,
     by_id = {r["id"]: r for r in rules}
     return [Finding(rule=by_id[c["rule_id"]], event=event, method="judgment", message_quote=c["message_quote"],
                     reasoning=c["reasoning"], certainty=c["certainty"])
-            for c in out["conflicts"] if c["rule_id"] in by_id]
+            for c in out["conflicts"] if c["rule_id"] in by_id and c["basis"] == "stated_fact_breaks_rule"]
 
 
 CONFIRM_SYSTEM = """You confirm or reject a suspected protocol conflict using the ORIGINAL study document text, not a summary.
 
-Given the original passage, the event and the correspondence quote, decide whether the original document really sets a requirement that the correspondence conflicts with. Reject if the passage does not say what the rule claims, if the rule does not apply to this kind of event, if the conflict concerns participant safety rather than the study's procedures, or if confirming it would need a threshold, fact or assumption that is not stated in the passage or the correspondence.
+Given the original passage, the event and the correspondence quote, decide whether the original document really sets a requirement that the correspondence conflicts with. Reject if the passage does not say what the rule claims, if the rule does not apply to this kind of event, if the conflict concerns participant safety rather than the study's procedures, or if confirming it would need a threshold, fact or assumption that is not stated in the passage or the correspondence. Reject if the correspondence is only silent about a required step: not mentioning something is not a conflict.
 doc_quote: the single sentence (or shortest clause) from the ORIGINAL passage that states the requirement, copied VERBATIM, characters exactly as given.
 headline: at most 16 words, neutral and factual, naming what was reported and the requirement it appears to conflict with, e.g. "Participant randomized with eGFR 41; protocol excludes eGFR below 45". Keep the event's tense: for a planned event say what is planned ("Study drug to start tomorrow before baseline MRI; ..."). No diagnosis, no instruction, no blame."""
 

@@ -97,7 +97,15 @@ def cmd_ingest(args):
         print(f"  done: {res}")
 
 
+def cmd_import_model(args):
+    counts = ingest.import_model(Path(args.db), args.reason, actor(args))
+    print(f"study model replaced from {args.db}: {counts}")
+
+
 def cmd_rules(args):
+    if args.report:
+        print(ingest.report(config.study(args.study)))
+        return
     rows = ingest.active_rules(args.study, [args.pattern] if args.pattern else None) if not args.all else \
         [dict(r) for r in db.q("SELECT * FROM rules WHERE study_id=? ORDER BY pattern_class, order_idx", (args.study,))]
     if args.show:
@@ -515,10 +523,16 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("ingest", help="build the study model from the study documents")
     s.add_argument("--study"); s.add_argument("--force", action="store_true"); s.set_defaults(fn=cmd_ingest)
 
+    s = sub.add_parser("import-model", help="replace the study model with one rebuilt and tested in another copy")
+    s.add_argument("db", help="the other copy's database, e.g. practice/data/cormon.db")
+    s.add_argument("--reason", required=True); s.set_defaults(fn=cmd_import_model)
+
     s = sub.add_parser("rules", help="list the study model's rules")
     s.add_argument("--study", default=next(iter(config.studies()), None))
     s.add_argument("--pattern"); s.add_argument("--all", action="store_true", help="include rejected rules")
-    s.add_argument("--show", help="show one rule in full"); s.set_defaults(fn=cmd_rules)
+    s.add_argument("--show", help="show one rule in full")
+    s.add_argument("--report", action="store_true", help="what was kept, dropped and why, and contradictions")
+    s.set_defaults(fn=cmd_rules)
 
     s = sub.add_parser("run", help="run the listener"); s.add_argument("--once", action="store_true")
     s.set_defaults(fn=cmd_run)

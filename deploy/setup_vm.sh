@@ -5,6 +5,7 @@ set -euo pipefail
 
 APP=/opt/cormon
 HOST="${HOST:?HOST not set}"
+trap 'rm -f /tmp/cormon-seed.db /tmp/cormon.tgz; systemctl start cormon 2>/dev/null || true' EXIT
 
 if ! command -v caddy >/dev/null; then
   apt-get update -qq
@@ -38,6 +39,13 @@ if [ ! -f "$APP/data/cormon.db" ] && [ -f /tmp/cormon-seed.db ]; then
   chown -R cormon:cormon "$APP"
   sudo -u cormon CORMON_HOME="$APP" "$APP/.venv/bin/python" -c \
     "from pathlib import Path; from cormon import testbench; testbench._fresh_db(Path('/tmp/cormon-seed.db'))"
+elif [ "${SYNC_MODEL:-0}" = 1 ] && [ -f /tmp/cormon-seed.db ]; then
+  # Update with a rebuilt study model: messages, items and the log stay; the change is in the log.
+  systemctl stop cormon || true
+  chown -R cormon:cormon "$APP"
+  chown cormon:cormon /tmp/cormon-seed.db
+  sudo -u cormon CORMON_HOME="$APP" "$APP/.venv/bin/cormon" --as deploy import-model /tmp/cormon-seed.db \
+    --reason "study model rebuilt on the laptop and tested before deploy"
 fi
 rm -f /tmp/cormon-seed.db /tmp/cormon.tgz
 

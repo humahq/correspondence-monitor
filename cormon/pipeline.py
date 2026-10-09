@@ -63,7 +63,7 @@ def _pooled_facts(event: dict, pid: str | None, all_events: list[dict]) -> list[
     facts = list(event["facts"])
     if pid:
         for other in all_events:
-            if other is event or other["temporality"] == "historical" or other["safety_only"]:
+            if other is event or other["temporality"] in ("historical", "hypothetical") or other["safety_only"]:
                 continue
             if _pid(other.get("participant_id")) == pid:
                 facts += other["facts"]
@@ -178,7 +178,7 @@ def first_writer_while_absent(msg: dict) -> str | None:
 def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: str = "system") -> dict:
     msg = capture.message(msg_id)
     summary: dict = {"message_id": msg_id, "route": msg["route"], "items_created": [], "items_repeat": [],
-                     "historical": 0, "out_of_scope": 0, "findings": 0}
+                     "historical": 0, "hypothetical": 0, "out_of_scope": 0, "findings": 0}
     db.ex("UPDATE messages SET status='processing', error=NULL WHERE id=?", (msg_id,))
     try:
         if msg["route"] != "study" or not msg["study_id"]:
@@ -263,6 +263,12 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
             if event["temporality"] == "historical":
                 summary["historical"] += 1
                 db.audit("historical_reference_no_alert", entity_type="message", entity_id=msg_id,
+                         study_id=study.study_id, participant_id=pid, description=event["description"],
+                         evidence=event["temporality_evidence"])
+                continue
+            if event["temporality"] == "hypothetical":
+                summary["hypothetical"] += 1
+                db.audit("hypothetical_question_no_alert", entity_type="message", entity_id=msg_id,
                          study_id=study.study_id, participant_id=pid, description=event["description"],
                          evidence=event["temporality_evidence"])
                 continue

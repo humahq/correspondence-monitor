@@ -150,7 +150,10 @@ def _fresh_db(seed_from: Path) -> None:
             continue
         c.execute("ATTACH DATABASE ? AS seed", (str(src),))
         for tbl in tables:
-            c.execute(f"INSERT OR IGNORE INTO {tbl} SELECT * FROM seed.{tbl}")
+            cols = [r[1] for r in c.execute(f"PRAGMA main.table_info({tbl})")]
+            have = {r[1] for r in c.execute(f"PRAGMA seed.table_info({tbl})")}
+            names = ", ".join(col for col in cols if col in have)
+            c.execute(f"INSERT OR IGNORE INTO {tbl} ({names}) SELECT {names} FROM seed.{tbl}")
         c.execute("DETACH DATABASE seed")
         src.unlink(missing_ok=True)
 

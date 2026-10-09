@@ -22,7 +22,7 @@ EVENT_SCHEMA = llm.obj({
             "description": {"type": "string"},
             "participant_id": llm.nullable("string"),
             "event_type": {"type": "string", "enum": ingest.EVENT_TYPES},
-            "temporality": {"type": "string", "enum": ["current", "planned", "historical"]},
+            "temporality": {"type": "string", "enum": ["current", "planned", "historical", "hypothetical"]},
             "temporality_evidence": {"type": "string"},
             "event_datetime": llm.nullable("string"),
             "source": {"type": "string", "enum": ["message_body", "quoted_history", "attachment", "forwarded_message"]},
@@ -61,6 +61,7 @@ Rules:
    - current: being reported now, for the first time. This includes results or facts that happened days or weeks ago but are reported here as new (e.g. "screening labs came back last week: ..."), and supporting details given alongside a new event.
    - planned: has not happened yet and is scheduled.
    - historical: something already known, previously reported, or already dealt with, mentioned only as recap or reference (e.g. "as we discussed three weeks ago", "that deviation was already reported and closed"). Quote the words that show this in temporality_evidence.
+   - hypothetical: a general question or what-if that reports nothing about a real participant or sample ("is an eGFR of 43 OK for enrollment?", "what if a sample sits for 70 minutes?"). If the question names a participant who is being screened, enrolled or treated, or says something was or will be done, it is current or planned, not hypothetical.
    For events in a forwarded message or attachment, judge from that item's own date and context, not from when it reached us: a forwarded message from weeks ago that was already acted on is historical.
 3. event_datetime: ISO 8601 date or datetime of the event if stated or clearly inferable from the message date ("today", "this afternoon", "tomorrow"); otherwise null.
 4. facts: every measurement, score, time interval or status stated about the participant or sample. Map each fact to one of the canonical parameter names given when it fits (convert units only if trivially exact, e.g. "1.5 hours" -> 90 minutes for a minutes parameter); otherwise use a short snake_case name. numeric_value only for numbers.
