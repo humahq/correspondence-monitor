@@ -34,8 +34,12 @@ def normalize(text: str) -> str:
 def _long_enough(nq: str, short_ok: bool) -> bool:
     if len(nq) >= 8:
         return True
-    # site shorthand such as "GFR 41" or "bmi 18": a word and a number together are specific enough
-    return short_ok and len(nq) >= 4 and any(c.isalpha() for c in nq) and any(c.isdigit() for c in nq)
+    # site shorthand such as "GFR 41" or "bmi 18": a word and a number together are specific enough,
+    # and so is a reading with several digits such as "162/96"
+    if not short_ok or len(nq) < 4:
+        return False
+    digits = sum(c.isdigit() for c in nq)
+    return (any(c.isalpha() for c in nq) and digits > 0) or (len(nq) >= 5 and digits >= 4)
 
 
 def find_all_quotes(quote: str, text: str, short_ok: bool = False) -> list[tuple[int, int]]:
@@ -80,6 +84,20 @@ def expand_to_sentence(quote: str, text: str, min_len: int = 40) -> str:
 
 def quote_in(quote: str, text: str, short_ok: bool = False) -> bool:
     return find_quote(quote, text, short_ok) is not None
+
+
+def quote_pieces(quote: str, text: str) -> list[str]:
+    """The quote, or the sentences it was stitched from, each found verbatim; in text order. Empty if any is missing."""
+    if quote_in(quote, text, short_ok=True):
+        return [quote]
+    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+|\s*(?:\.\.\.|…)\s*|\n+", quote)]
+    parts = [p for p in parts if len(normalize(p)) >= 4]
+    if len(parts) < 2:
+        return []
+    spans = [(find_quote(p, text, short_ok=True), p) for p in parts]
+    if any(s is None for s, _ in spans):
+        return []
+    return [p for _, p in sorted(spans, key=lambda sp: sp[0][0])]
 
 
 def passage_around(text: str, start: int, end: int, pad: int = 500) -> str:

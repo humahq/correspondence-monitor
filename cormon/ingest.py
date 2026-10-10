@@ -242,6 +242,7 @@ _JUNK = re.compile(r"(?i)\b(signature of|print name|date\s*$|we will give you a 
 
 
 def _pattern_key(study: Study, doc_id: str, pattern: dict, sha: str) -> str:
+    pattern = {k: v for k, v in pattern.items() if k != "match_event_types"}  # matching-only, not rule making
     blob = json.dumps([sha, pattern, RULE_SYSTEM, REVIEW_SYSTEM, PROBE_SYSTEM, GAP_SYSTEM, EXCEPTION_SYSTEM,
                        CRITERIA_SYSTEM],
                       sort_keys=True)
@@ -420,6 +421,20 @@ def review_gap_rules(study: Study, doc_id: str, pattern: dict, pages: list[str],
     return rev
 
 
+_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+
+def lost_numbers(rule: dict, replacements: list[dict]) -> set[str]:
+    """Numbers in a bundled rule that none of the rules split from it carry ("28 days" lost when three windows
+    are split into two rules)."""
+    def nums(r: dict) -> set[str]:
+        found = set(_NUMBER.findall(r.get("text") or ""))
+        found |= {f"{v:g}" for v in (r.get("value"), r.get("value2")) if v is not None}
+        return {n.rstrip("0").rstrip(".") if "." in n else n for n in found}
+    have = set().union(*(nums(a) for a in replacements)) if replacements else set()
+    return nums(rule) - have
+
+
 def apply_drops(live: list[dict], drops: list[dict], added: list[dict]) -> None:
     """Accept the second reader's drops, except ones that would lose a requirement: a duplicate whose twin is
     dropped too, or a rule with "wrong numbers" or "bundled" that comes back with no replacement."""
@@ -435,9 +450,15 @@ def apply_drops(live: list[dict], drops: list[dict], added: list[dict]) -> None:
         if d["why"] == "wrong_numbers" and r["check_type"] == "numeric" and r["parameter"] not in added_params:
             r["review"] = f"kept: review said the numbers are wrong but gave no correction ({d['reason']})"
             continue
-        if d["why"] == "not_atomic" and not any(_covers(a["source_quote"], r["source_quote"]) for a in added):
-            r["review"] = f"kept: review said it bundles conditions but did not split it ({d['reason']})"
-            continue
+        if d["why"] == "not_atomic":
+            parts = [a for a in added if _covers(a["source_quote"], r["source_quote"])]
+            if not parts:
+                r["review"] = f"kept: review said it bundles conditions but did not split it ({d['reason']})"
+                continue
+            lost = lost_numbers(r, parts)
+            if lost:
+                r["review"] = (f"kept: splitting it would lose {', '.join(sorted(lost))} ({d['reason']})")
+                continue
         r["review"] = f"dropped by review ({d['why']}): {d['reason']}"
 
 
@@ -587,9 +608,12 @@ def rescue_replaced(rules: list[dict]) -> int:
         reps = [a for a in rules if a["_origin"].startswith("added_by") and (
             _covers(a["source_quote"], r["source_quote"])
             or (r["check_type"] == "numeric" and a.get("parameter") == r.get("parameter")))]
-        if not any(a["_active"] for a in reps):
+        alive = [a for a in reps if a["_active"]]
+        lost = lost_numbers(r, alive) if r["_origin"].startswith("dropped by review (not_atomic)") else set()
+        if not alive or lost:
             r["_active"] = True
-            r["review"] = f"kept: the rules meant to replace it did not pass the quote check ({r['_origin'][:80]})"
+            r["review"] = ("kept: the rules meant to replace it did not pass the quote check" if not alive else
+                           f"kept: the rules split from it lose {', '.join(sorted(lost))}") + f" ({r['_origin'][:80]})"
             back += 1
     return back
 
@@ -606,7 +630,18 @@ def merge_alternatives(rules: list[dict]) -> int:
         while len(rs) > 1:
             pair = next(((a, b) for i, a in enumerate(rs) for b in rs[i + 1:] if _joinable(a, b)), None)
             if not pair:
-                break
+                nested = next(((a, b) for i, a in enumerate(rs) for b in rs[i + 1:] if _same_list(a, b)), None)
+                if not nested:
+                    break
+                # two limits for the same group in the same passage are a list of allowed options
+                # ("early MCI 9-11, late MCI 8 or less"): keep the looser one
+                a, b = sorted(nested, key=lambda r: _allowed(r)[1] - _allowed(r)[0], reverse=True)
+                a["review"] = f"kept the wider of two allowed limits from the same passage ({b['text'][:60]})"
+                b["review"] = "dropped: a narrower allowed option listed with a wider one in the same passage"
+                b["_active"] = False
+                rs.remove(b)
+                merged += 1
+                continue
             a, b = pair
             (lo1, hi1), (lo2, hi2) = _allowed(a), _allowed(b)
             lo, hi = min(lo1, lo2), max(hi1, hi2)
@@ -623,6 +658,14 @@ def merge_alternatives(rules: list[dict]) -> int:
             rs.remove(b)
             merged += 1
     return merged
+
+
+def _same_list(a: dict, b: dict) -> bool:
+    """One allowed range inside the other, both taken from the same passage."""
+    (lo1, hi1), (lo2, hi2) = _allowed(a), _allowed(b)
+    nested = (lo1 <= lo2 and hi2 <= hi1) or (lo2 <= lo1 and hi1 <= hi2)
+    qa, qb = textutil.normalize(a["source_quote"]), textutil.normalize(b["source_quote"])
+    return nested and (lo1, hi1) != (lo2, hi2) and len(min(qa, qb, key=len)) >= 20 and (qa in qb or qb in qa)
 
 
 def _joinable(a: dict, b: dict) -> bool:

@@ -191,3 +191,60 @@ def test_compare_scores_safety_and_problems_together():
     assert testbench.verdict(case) is True
     case.result = compare._result([], safety=True)
     assert testbench.verdict(case) is False
+
+
+def test_stitched_quote_is_accepted_only_when_every_piece_is_in_the_message():
+    text = "Plan for MAP-2073: we'll randomize him tomorrow morning. His screening ECG is booked for Friday."
+    stitched = "His screening ECG is booked for Friday. Plan for MAP-2073: we'll randomize him tomorrow morning."
+    assert textutil.quote_pieces(stitched, text) == [
+        "Plan for MAP-2073: we'll randomize him tomorrow morning.", "His screening ECG is booked for Friday."]
+    assert textutil.quote_pieces("His ECG was done. We randomized him on Monday.", text) == []
+
+
+def test_value_mentioned_without_a_number_goes_to_the_judgment_step():
+    rule = {"id": "r1", "check_type": "numeric", "parameter": "fasting_hours", "operator": "lt", "value": 8,
+            "value2": None, "condition": None, "unless": None}
+    event = {"facts": [{"parameter": "fasting_hours", "value": "had not fasted", "numeric_value": None,
+                        "quote": "hadn't fasted"}]}
+    found, undecided = matching.numeric_checks([rule], event)
+    assert found == [] and undecided == [rule]
+
+
+def test_split_that_loses_a_number_keeps_the_original():
+    from cormon import ingest
+
+    bundled = {"text": "Screening within 28 days; 6-month visits ±30 days; monthly contacts ±7 days.",
+               "value": None, "value2": None}
+    parts = [{"text": "The 6-month visit window is ±30 days.", "value": -30.0, "value2": 30.0},
+             {"text": "The monthly contact window is ±7 days.", "value": -7.0, "value2": 7.0}]
+    assert ingest.lost_numbers(bundled, parts) == {"28"}
+    assert ingest.lost_numbers(bundled, parts + [{"text": "Screening within 28 days.", "value": 28.0,
+                                                  "value2": None}]) == set()
+
+
+def test_bmi_is_worked_out_from_weight_and_height():
+    rule = {"id": "bmi", "check_type": "numeric", "parameter": "bmi_kg_m2", "operator": "lt", "value": 20,
+            "value2": None, "condition": None, "unless": None}
+    event = {"facts": [{"parameter": "weight_kg", "value": "52", "numeric_value": 52.0, "quote": "weight 52.0 kg"},
+                       {"parameter": "height_cm", "value": "163", "numeric_value": 163, "quote": "height 163 cm"}]}
+    found, _ = matching.numeric_checks([rule], event)
+    assert len(found) == 1 and "19.6" in found[0].observed
+
+
+def test_short_reading_counts_as_a_quote():
+    assert textutil.quote_in("162/96", "BP readings 162/96, 158/95", short_ok=True)
+    assert not textutil.quote_in("5.9", "potassium 5.9", short_ok=True)
+
+
+def test_narrower_option_listed_with_a_wider_one_is_not_a_second_limit():
+    from cormon import ingest
+
+    quote = "For early MCI: 9-11 for 16 or more years of education. For late MCI: 8 or less for 16 or more years"
+    cond = {"parameter": "education_years", "operator": "ge", "value": 16, "value2": None}
+    early = {"check_type": "numeric", "parameter": "lm2", "operator": "gt", "value": 11.0, "value2": None,
+             "condition": cond, "unless": None, "text": "early", "source_quote": quote, "review": "", "_active": True}
+    late = dict(early, value=8.0, text="late")
+    assert ingest.merge_alternatives([early, late]) == 1
+    assert early["_active"] and not late["_active"]
+    other = dict(late, source_quote="A completely different sentence about the same score.")
+    assert ingest.merge_alternatives([dict(early, _active=True), other]) == 0

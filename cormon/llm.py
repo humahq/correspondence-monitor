@@ -24,7 +24,8 @@ def client():
 
         if not os.environ.get("OPENAI_API_KEY"):
             raise RuntimeError("OPENAI_API_KEY is not set (put it in .env)")
-        _client = OpenAI()
+        # one slow call must not stall the listener: give up after a while and let structured() retry
+        _client = OpenAI(timeout=settings.get("llm.timeout_seconds", 90), max_retries=0)
     return _client
 
 

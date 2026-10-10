@@ -63,7 +63,8 @@ def _pooled_facts(event: dict, pid: str | None, all_events: list[dict]) -> list[
     facts = list(event["facts"])
     if pid:
         for other in all_events:
-            if other is event or other["temporality"] in ("historical", "hypothetical") or other["safety_only"]:
+            if (other is event or other["temporality"] in ("historical", "hypothetical") or other["safety_only"]
+                    or other.get("prevented")):
                 continue
             if _pid(other.get("participant_id")) == pid:
                 facts += other["facts"]
@@ -276,9 +277,9 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 continue
             if event.get("prevented") and not event["safety_signal"]:
                 summary["prevented"] += 1
-                db.audit("prevented_no_alert", entity_type="message", entity_id=msg_id, study_id=study.study_id,
-                         participant_id=pid, description=event["description"], quote=event["quote"])
-                continue
+                db.audit("prevented_checked_for_the_stopping_only", entity_type="message", entity_id=msg_id,
+                         study_id=study.study_id, participant_id=pid, description=event["description"],
+                         quote=event["quote"])
 
             pooled = dict(event, facts=_pooled_facts(event, pid, data["events"]))
             findings = matching.match_event(study, pooled, msg, corpus, use_cache=use_cache)

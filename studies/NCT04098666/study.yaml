@@ -58,13 +58,17 @@ people:
     sites: ["*"]
 
 # Classes of problem agreed at onboarding. Matching only looks for these.
-# event_types decide which messages a class is checked against.
+# event_types decide which messages a class is checked against; match_event_types (optional) narrows that at
+# matching time without changing the rules.
 pattern_classes:
   - id: eligibility
     label: Eligibility
     description: A participant screened, enrolled or randomized who meets an exclusion criterion or fails an inclusion criterion.
     documents: [protocol]
     event_types: [screening, enrollment, randomization]
+    # failing a criterion at screening is a screen fail, not a problem; it becomes one when the participant is
+    # enrolled or randomized (or that is planned)
+    match_event_types: [enrollment, randomization]
   - id: visit_schedule
     label: Visit schedule
     description: A visit, contact or screening procedure outside its allowed window or missing a required assessment.

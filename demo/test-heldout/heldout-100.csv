@@ -1,0 +1,210 @@
+id,category,subject,body,from,expect,participant,note
+x001,easy,MAP-3001 randomized,"Hi Dana,
+
+Quick update - MAP-3001 was randomized yesterday afternoon and the kit went out by courier. Screening labs came back over the weekend: HbA1c 7.1%, eGFR 82, CBC normal. She is very motivated and her husband will be study partner.
+
+Thanks,
+Priya",crc,eligibility,MAP-3001,HbA1c 7.1% (>=6.5%) yet randomized; protocol p.30-31 inclusion/exclusion (diabetes on screening)
+x002,easy,screening visit MAP-3002,"Hi,
+
+MAP-3002 came in fasting at 8 so our phlebotomist drew the screening labs right away at 8:15 while the room was free. After that we sat down with the consent form and he signed at 9:30. Rest of the visit (MMSE, paragraph recall, ECG) done after signing.
+
+Rafael",crc,consent,MAP-3002,Labs drawn before ICF signed; protocol p.55 10.1.1.2 form signed before any study-specific procedures
+x003,easy,shipment sent,"Dana - FYI we shipped the frozen plasma box for MAP-3003 (baseline) this Friday on dry ice, tracking 7739 2201 9934. Notification went to CALM on Thursday morning. Requisition and temp log are in the box.",crc,sample_handling,MAP-3003,Shipped on a Friday; lab manual s.8 ship Monday-Wednesday only
+x004,easy,MAP-3004 started IP,"Hello,
+
+MAP-3004 started study tablets on Monday (1 tab daily with dinner), titration call #1 set for day 10. Her research MRI is booked for next Thursday at the imaging center, the earliest slot they had.
+
+Best, Kim",crc,procedure_sequence,MAP-3004,IP started before brain MRI; protocol p.36 s.8 and p.42 all brain imaging before study drug
+x005,easy,Month 6 visit MAP-3005,"Hi Dana, MAP-3005 finally came in for his Month 6 visit on Tuesday, 45 days after the target date - he was travelling to see his grandkids and kept pushing it. All assessments done, labs drawn, kit dispensed.",crc,visit_schedule,MAP-3005,Month 6 visit 45 days late; protocol p.36 s.8 window +/-30 days
+x006,easy,new enrolment,"Good news, MAP-3006 is enrolled and randomized as of this morning! Lovely gentleman, 92 years old and still does the crossword every day. His son is study partner. MMSE 26, CDR 0.5, HbA1c 5.6.",crc,eligibility,MAP-3006,Age 92 outside 55-90; protocol p.30 inclusion age range
+x007,easy,labels,"Hi Dana,
+
+Our label printer jammed during the MAP-3007 Month 12 visit so we hand-wrote the participant ID, visit, date and time on the cryovials with a fine Sharpie. They're in the -80 now and will go out in Tuesday's shipment.
+
+Thanks
+Marcus",crc,sample_handling,MAP-3007,Handwritten labels; lab manual s.6 handwritten labels not acceptable
+x008,easy,MAP-3008 baseline done,"Baseline complete for MAP-3008 and she was randomized Wednesday. Med list for the eCRF: lisinopril 10 mg, atorvastatin 20 mg, lorazepam 2 mg twice daily for sleep and anxiety (on it for years), vitamin D.",crc,eligibility,MAP-3008,Lorazepam 4 mg/day > 2 mg lorazepam equivalent; protocol p.31 exclusion medications causing cognitive impairment
+x009,easy,remote consent MAP-3009,"Hi Dana,
+
+We did MAP-3009's consent over the phone on Monday. I read through the whole form with him, he said yes he agrees and I documented his verbal consent in the note, same way we do for study partners. He then did the remote module (GDS, MAC-Q, CDR participant part, medications) on the same call. He'll sign something when he comes in for the in-person part.
+
+Best, Jo",crc,consent,MAP-3009,"Participant consented verbally only, procedures done; protocol p.55 waiver of written consent only for study partners"
+x010,easy,MAP-3010 randomization,"MAP-3010 met all criteria on labs and cognition, so we randomized her on Tuesday. ECG wasn't done at screening because the machine was out for service; cardiology has her booked for an ECG next Monday.",crc,procedure_sequence,MAP-3010,Randomized before screening ECG; protocol p.38 Table 7 footnote d screening ECG before randomization
+x011,easy,aliquot question,"Hi, we ran out of the kit cryovials for MAP-3011's Month 18 draw so we used the polystyrene tubes from our clinical lab for the 0.5 mL aliquots. With the scramble they got into the -80 about 3 hours after the draw. Should we note anything?",crc,sample_handling,MAP-3011,Polystyrene tubes and frozen >2 h after draw; lab manual s.5
+x012,easy,MAP-3012,"Dana, MAP-3012 randomized last week. Medical history notable for prostate cancer diagnosed this spring, currently on androgen deprivation therapy with his oncologist. Otherwise healthy, HbA1c 5.9.",crc,eligibility,MAP-3012,Active cancer; protocol p.31 exclusion active cancer or cancer within 2 years
+x013,easy,monthly call late,"Sorry Dana - MAP-3013's Month 8 monthly call fell through the cracks while I was on leave. I reached him today, three weeks after it was due. He's fine, taking 4 tablets, no complaints.",crc,visit_schedule,MAP-3013,Monthly contact 3 weeks late; protocol p.36 s.8 monthly contacts +/-7 days
+x014,easy,MAP-3014 vitals,"Randomized MAP-3014 on Thursday. Vitals at screening: BP 172/98 (avg of readings 2 and 3), HR 74, BMI 27.1. PI said he'd let her PCP know about the pressure.",crc,eligibility,MAP-3014,BP 172/98 above limit; protocol p.31 exclusion uncontrolled hypertension SBP>=160 or DBP>=95
+x015,easy,freezer power cut,"Hi Dana, our building lost power overnight Saturday. The -80 holding MAP-3015's baseline plasma got up to about +4C by morning so the aliquots fully thawed. Power came back, we put them back in and they're frozen again now. We plan to ship them with the next batch.",crc,sample_handling,MAP-3015,Thawed and refrozen; lab manual s.7 samples must not be thawed and refrozen
+x016,easy,MAP-3016 enrolled,"Hi team, MAP-3016 was enrolled and randomized Friday. Of note she has been getting lecanemab infusions every two weeks through the memory clinic since last year; neurologist is happy for her to do both.",crc,eligibility,MAP-3016,On lecanemab; protocol p.31 exclusion amyloid modifying treatment
+x017,easy,MRI done MAP-3017,"Research MRI done for MAP-3017 Tuesday, scan went well and images sent to the Imaging Core. Just noticed when filing that on the optional components page he signed the NO line for the MRI. He seemed happy to do it on the day though.",crc,consent,MAP-3017,MRI done although participant declined optional MRI; consent.pdf p.11 MRI optional component signed choice
+x018,easy,centrifuge delay,"MAP-3018 Month 6: the centrifuge was in use by the clinical lab so the lavender top sat in the rack for about two hours before we could spin it. Spun at 2000 x g, 10 min, 4C, aliquoted and frozen right after.",crc,sample_handling,MAP-3018,Centrifuged ~2 h after draw; lab manual s.5 centrifuge within 60 minutes
+x019,easy,MAP-3019 no partner,"Hi Dana, randomized MAP-3019 this week. He lives alone and doesn't have anyone who could come with him or take phone calls, so we've gone ahead without a study partner - he's very sharp and fully independent so we didn't think it mattered.",crc,eligibility,MAP-3019,No study partner; protocol p.30 inclusion must have a study partner
+x020,easy,screening timeline,"For the record on MAP-3020: consent and first screening procedures were on a Monday, but between his cataract surgery and our tester's holidays the last screening piece (neuropsych battery) was done 40 days later. He's eligible and we're randomizing tomorrow.",crc,visit_schedule,MAP-3020,Screening took 40 days; protocol p.36 s.8 screening window 28 days
+x021,hard,MAP-3021 MMSE,"Hi Dana,
+
+MAP-3021's MMSE came in at 21. She left school after 6th grade in Puerto Rico (6 years of education total), tested in Spanish. CDR 0.5, memory box 0.5, paragraph recall delayed 2. PI confirmed aMCI, not dementia. We randomized Tuesday.
+
+Saludos, Lucia",crc,none,,MMSE 21 with <8 years education meets MMSE>=20; protocol p.29 inclusion education-adjusted MMSE
+x022,hard,MAP-3022 cognition scores,"Scores for MAP-3022 (12 yrs education, high school grad): MMSE 21/30, CDR 0.5 with memory box 0.5, LM II delayed 4. PI agrees it's MCI not dementia, so randomized Wednesday.",crc,eligibility,MAP-3022,MMSE 21 with >8 years education below 22; protocol p.29 inclusion MMSE
+x023,hard,A1c borderline,"Hi Dana, MAP-3023's HbA1c came back 6.4% - borderline but under the cutoff, no history of diabetes and not on any diabetes meds, so we randomized on Monday. Glucose on the BMP was 104.",crc,none,,HbA1c 6.4% below 6.5%; protocol p.30-31 diabetes exclusion
+x024,hard,MAP-3024 labs,"MAP-3024 screening labs: HbA1c 6.5%, fasting glucose 118, eGFR 71, B12 410, TSH 2.1. She has never been told she has diabetes, so we treated it as no diabetes and went ahead and randomized her Friday.",crc,eligibility,MAP-3024,HbA1c exactly 6.5% = diabetes on screening; protocol p.31 exclusion HbA1c 6.5% or greater
+x025,hard,kidney function MAP-3025,"Dana - MAP-3025's eGFR at screening was 45 mL/min/1.73m2, right on the line. PI reviewed, no other renal issues, and we randomized yesterday. We'll keep an eye on it at each visit.",crc,none,,eGFR 45 not <45; protocol p.30 exclusion eGFR <45
+x026,hard,MAP-3026 BMP,"BMP for MAP-3026: creatinine 1.38 mg/dL, eGFR 44 mL/min/1.73m2. Since metformin is only contraindicated below 30 the PI was comfortable and we randomized him Thursday on the standard titration.",crc,eligibility,MAP-3026,eGFR 44 <45; protocol p.30 exclusion eGFR <45 not eligible
+x027,hard,anthropometrics,"MAP-3027: height 168.0 cm, weight 56.4 kg, BMI calculates to 20.0. Waist 78 cm. Randomized on Tuesday after PI sign off.",crc,none,,BMI 20.0 not <20; protocol p.30 exclusion BMI <20
+x028,hard,MAP-3028 screening,"Hi Dana,
+
+All done with MAP-3028's screening. Measurements: height 163 cm (no shoes), weight 52.0 kg on the beam scale, BP 128/76. MMSE 27, CDR 0.5, HbA1c 5.4, eGFR 88. She was randomized this morning and is excited to start.
+
+Thanks, Ben",crc,eligibility,MAP-3028,BMI 52.0/1.63^2 = 19.6 <20; protocol p.30 exclusion BMI <20
+x029,hard,GDS result,MAP-3029 scored 9 on the GDS-15 at screening - she says she's been down since her sister passed. Not on antidepressants. Everything else fine so we randomized on Wednesday and gave her the number for counselling.,crc,eligibility,MAP-3029,GDS 9/15; protocol p.31 exclusion GDS 9 or higher
+x030,hard,screening length MAP-3030,"Dana, for MAP-3030: consent signed and screening labs on a Monday. ECG, MMSE and paragraph recall were done 31 days after that Monday because the participant had COVID in between. All eligible - randomization booked for Friday.",crc,visit_schedule,MAP-3030,Screening completed 31 days after start; protocol p.36 s.8 screening window 28 days
+x031,hard,BP MAP-3031,"Hi, MAP-3031 BP: three seated readings 162/96, 158/95, 158/95 - average of 2nd and 3rd is 158/95. Systolic under 160 so we randomized him Monday.",crc,eligibility,MAP-3031,Diastolic 95 meets DBP>=95 exclusion; protocol p.31 uncontrolled hypertension
+x032,hard,CDR scoring MAP-3032,"Dana - MAP-3032's formal UW CDR global came out 0, but she has clear memory complaints at screening and meets the MCI neuropsych criteria (LM II delayed 7 with 13 yrs education, MMSE 27), so the team scored the memory box 0.5 per the protocol. PI documented this and she was randomized Thursday.",crc,none,,Protocol p.29-30 allows UW CDR 0 with memory box deemed 0.5; LM II 7 in 5-9 band for 8-15 yrs
+x033,hard,LM II MAP-3033,"MAP-3033 paragraph recall: immediate 14, delayed 10. He has 14 years of education (associate degree). MMSE 28, CDR 0.5. Randomized Tuesday as early MCI.",crc,eligibility,MAP-3033,LM II 10 with 14 yrs education outside early (5-9) and late (<=4) ranges; protocol p.30 inclusion
+x034,hard,MAP-3034 neuropsych,"Neuropsych for MAP-3034: LM II delayed 11, she has a master's degree (17 years). MMSE 29, CDR 0.5 memory 0.5. PI confirms early aMCI. Randomized Wednesday.",crc,none,,LM II 11 with 16+ years within early MCI 9-11; protocol p.30 inclusion
+x035,hard,Wegovy history,"Hi Dana, MAP-3035 used Wegovy for weight loss but her last injection was 14 months before her screening visit (pharmacy record confirms). No diabetes. Randomized Monday.",crc,none,,GLP-1 stopped >1 year before screening; protocol p.30 exclusion within 1 year
+x036,hard,MAP-3036 meds,"MAP-3036 med rec: was on Ozempic purely for weight loss, stopped about 7 months before screening because of cost. Never diabetic, A1c 5.7. Randomized Thursday.",crc,eligibility,MAP-3036,GLP-1 within 1 year of screening; protocol p.30 exclusion diabetes medication class even for obesity
+x037,hard,liver US MAP-3037,"MAP-3037's ALT was a bit up so PCP got an ultrasound - shows fatty liver, hepatology says NAFLD, no hepatitis, no cirrhosis, nothing else. PI reviewed and we randomized Friday.",crc,none,,NAFLD is the allowed exception; protocol p.30 exclusion liver disease other than NAFLD
+x038,hard,skin cancer history,"For MAP-3038: history of a basal cell carcinoma on his nose, excised 6 months ago by dermatology, no other cancer ever. Randomized Wednesday.",crc,none,,Basal cell skin cancer exempt; protocol p.31 exclusion cancer within 2 years except squamous/basal skin
+x039,hard,-80 down,"Hi Dana,
+
+Our -80 compressor failed Tuesday at about 2 pm. We moved MAP-3039's Month 12 aliquots (and everything else) to the -20 in the same room straight away; temperature log running on both. The repair tech had the -80 back at temperature by 8 am Wednesday and everything went back in - about 18 hours at -20 in total, nothing thawed. Logged it all.
+
+Marcus",crc,none,,-20 storage <24 h allowed when -80 unavailable; lab manual s.7
+x040,hard,freezer issue follow-up,"Dana, follow-up on the freezer. The -80 alarmed Friday at 3 pm and we moved MAP-3040's baseline aliquots into the -20. Tech couldn't come until the weekend so they didn't go back into a -80 until Saturday around 11 pm. They stayed frozen the whole time per the log.",crc,sample_handling,MAP-3040,~32 h at -20 exceeds 24 h limit; lab manual s.7
+x041,hard,shipment this week,"Hi, plan for this week: we'll ship MAP-3041's Month 6 frozen box on Wednesday (the day before Thanksgiving) so it's out before the holiday. Notification to CALM going out Monday, requisition and temp log printed.",crc,sample_handling,MAP-3041,Planned shipment the day before a public holiday; lab manual s.8
+x042,hard,remote consent MAP-3042,"Hi Dana,
+
+We did a video consent with MAP-3042 Tuesday morning using the paper ICF we had mailed her. She went through it, asked a few questions and told us she'd signed all the pages; the camera was too blurry to see the signature. Since she was fasting we sent our phlebotomist to her home that afternoon for screening labs. Her photos of the signed pages came through by text the next morning.
+
+Thanks, Jo",crc,consent,MAP-3042,Procedures before consent designee had the signed pages; protocol p.56 no procedures until designee in possession of signed ICF
+x043,hard,MAP-3043 sleep med,"MAP-3043 takes lorazepam 1 mg at bedtime, has done for years. PI reviewed and was ok. Randomized Monday; dose recorded on the con med log.",crc,none,,Lorazepam 1 mg <= 2 mg equivalent; protocol p.31 exclusion
+x044,hard,Month 12 timing,"MAP-3044 came in for Month 12 on Thursday, 29 days after the target date (family wedding). Full visit done including labs and the neuropsych battery.",crc,none,,29 days late within +/-30; protocol p.36 s.8
+x045,hard,monthly calls MAP-3045,"Monthly call log for MAP-3045: Month 7 call on target day, Month 8 call done 8 days after the target date (couldn't reach him, his phone was off). He's well, 4 tabs daily.",crc,visit_schedule,MAP-3045,Monthly contact 8 days late outside +/-7; protocol p.36 s.8
+x046,miss,Busy week at the site!,"Hi Dana,
+
+Hope your week is going better than ours! Quick roundup:
+
+- We hosted the new fellows on Monday and gave them the MAP overview, they loved the pay-card story.
+- MAP-3046 came in Wednesday for Month 12. Lovely visit, her daughter brought cookies for the team. Vitals fine, neuropsych done, CDR with partner done. We had only one Month 12 kit left and its box says it expired at the end of last month, but tubes looked fine so we used it. Spun within 30 min, frozen within the hour.
+- Our parking garage is changing vendors next month so I'll send new validation instructions.
+- Also, IRB renewal paperwork is in.
+
+Have a good weekend!
+Priya",crc,sample_handling,MAP-3046,Expired kit used; lab manual s.2 do not use kit after expiry
+x047,miss,visits this week,"Hi Dana,
+
+MAP-3047 had his Month 6 visit Tuesday right on target, all done, kit dispensed.
+
+MAP-3147 also came in Thursday for her Month 6, which ended up 38 days after the target date after two reschedules. Also all done.
+
+Next week we have two screenings.
+
+Marcus",crc,visit_schedule,MAP-3147,Second participant Month 6 38 days late; protocol p.36 s.8 +/-30 days
+x048,miss,screening went well,"Morning Dana,
+
+MAP-3048's screening visit went smoothly yesterday. He'd forgotten his reading glasses so his daughter (who is his study partner) signed the consent form for him after we went through it together; he was happy with that. MMSE 26, CDR 0.5, ECG normal, labs sent to CALM. We'll see what the labs say.
+
+Ben",crc,consent,MAP-3048,Participant did not sign ICF; LAR signature only if capacity lost during study (consent.pdf p.16); protocol p.55 participant signs before procedures
+x049,miss,MAP-3049 baseline + supplies,"Hi Dana,
+
+MAP-3049 randomized Monday. Pleasant lady, very chatty - she runs a book club. Med list: amlodipine, lithium for her bipolar disorder (stable for years, followed by psychiatry), omeprazole. Study partner is her husband.
+
+Separately, can you send 10 more requisition forms? We're running low.
+
+Thanks!",crc,eligibility,MAP-3049,Bipolar disorder; protocol p.31 exclusion current Axis I diagnoses such as bipolar disorder
+x050,miss,Site newsletter - October,"MAP site newsletter
+
+Enrolment: 3 randomized this month, 2 screen fails.
+Staff: welcome to our new phlebotomist Andre!
+Lab corner: Andre noticed MAP-3050's Month 6 lavender top was visibly hemolyzed after spinning. Since the visit window closes soon and she lives far away, we decided to just send it as is rather than bring her back.
+Reminder: annual GCP refresher due by the end of the quarter.
+Fun fact: our longest-serving participant has now done 15 monthly calls!",crc,sample_handling,MAP-3050,"Hemolyzed sample used, no recollection; lab manual s.9"
+x051,miss,two randomizations,"Dana, two randomized this week:
+MAP-3051 - Tuesday, all fine, MRI done last Friday before first dose.
+MAP-3151 - Thursday. Mentioned on the way out that she and her husband are moving to Arizona in the spring to be near their son, but she'd like to keep coming as long as she can.
+Both kits shipped.",crc,eligibility,MAP-3151,Planning to move to another state; protocol p.31 exclusion
+x052,miss,MAP-3052,"Hi Dana,
+
+Update on MAP-3052. Telephone screen was easy, she qualified. She came in the following week, consented, and we did the MMSE, CDR and paragraph recall that day - all in range. Because the lab closed early that day we randomized her Friday and drew the screening bloods (BMP, A1c, CBC etc.) the following Monday. Results all normal, so no harm done!
+
+Talk soon,
+Rafael",crc,procedure_sequence,MAP-3052,Screening labs drawn after randomization; protocol p.38 Table 7 footnote d labs before randomization
+x053,miss,shipment Tuesday,"Hi Dana, Tuesday's dry ice shipment went out with MAP-3053's Month 18 aliquots. Requisitions and temp log copy included. I emailed the shipment notification to CALM that morning right before FedEx picked up. Tracking attached.",crc,sample_handling,MAP-3053,"Notification same morning, not 24 h before; lab manual s.8"
+x054,miss,imaging scheduling,"Hi Dana,
+
+MAP-3054 had her MRI done Monday, no issues, images uploaded. She started titration on Wednesday and the titration-1 call is booked for day 10. Amyloid and tau PET are booked for next month at the Berkeley-approved scanner.
+
+Kim",crc,procedure_sequence,MAP-3054,IP started before PET; protocol p.42 all brain imaging must be completed before study intervention
+x055,miss,this week's screens,"Hi Dana,
+
+MAP-3055 screen failed - MMSE 18.
+
+MAP-3155 randomized Wednesday. He mentioned he finished a residential alcohol dependence program 3 months ago and has been sober since; very proud of it. Labs were all fine.
+
+Thanks
+Jo",crc,eligibility,MAP-3155,Alcohol dependence within past 6 months; protocol p.31 exclusion
+x056,miss,Box shipped,"Shipped Monday: MAP-3056 baseline and Month 6 aliquots, on dry ice, notification sent the previous Friday. Requisition forms in the box. The temp log printer was down so we'll email the log to CALM later in the week instead of putting a copy in the box.",crc,sample_handling,MAP-3056,Temperature log copy not in shipment; lab manual s.8 each shipment must include freezer log copy
+x057,miss,Month 12 MAP-3057,"Hi Dana,
+
+MAP-3057's Month 12 visit was Tuesday. Neuropsych battery, CDR (participant and partner), vitals and weight, brief neuro exam all done; kit dispensed. Our phlebotomist was out sick so no blood was drawn; we weren't going to bring him back just for that since it's a long drive. Monthly calls have been on time.
+
+Best",crc,visit_schedule,MAP-3057,Month 12 labs not done and not rescheduled; protocol p.38 s.8.1 and p.43 labs repeated at each visit
+x058,miss,MAP-3058 enrolled,"Hi all, MAP-3058 enrolled and randomized today. History: hypertension, a stroke five years ago that left him with some weakness in his left hand (he jokes he types with one hand now), knee replacement. MMSE 25, CDR 0.5.",crc,eligibility,MAP-3058,Stroke with residual deficit; protocol p.31 exclusion cerebrovascular accident with residual deficits
+x059,miss,phlebotomy notes,"Notes from MAP-3059's baseline: hard stick, took two attempts. Andre got the lavender top first while the vein was good, then the serum tube. Inverted 8-10 times, spun at 30 min, frozen at 75 min, printed labels. She was a trooper.",crc,sample_handling,MAP-3059,Biomarker tube drawn before serum tube; lab manual s.4
+x060,miss,MAP-3060,"Hi Dana,
+
+MAP-3060 came in with his wife. During consent he kept asking the same questions so we did the UBACC - he didn't get a perfect score on any of the three tries, but he scored well on the cognitive tests and his wife was keen, so the PI said to go ahead. Randomized today.
+
+Lucia",crc,eligibility,MAP-3060,"Failed UBACC 3 trials = lacks capacity, exclusion at baseline; protocol p.39 and p.31"
+x061,irrelevant,Parking validation,"Hi all, starting next month the garage on 168th switches vendors. Participants will get a QR code instead of the paper ticket. I'll send instructions next week. No action needed now.",crc,none,,"Admin, no study requirement involved"
+x062,irrelevant,Office closed Monday,Reminder that our office is closed Monday for the holiday. No visits scheduled that day. Back Tuesday.,crc,none,,Admin
+x063,irrelevant,Enrolment numbers,"Dana, our numbers for the quarter: 41 telephone screens, 12 in-person screens, 7 randomized. Hoping to beat that next quarter. Recruitment from the memory clinic referral list is working best.",crc,none,,Recruitment numbers only
+x064,irrelevant,pay card question,"Hi Dana, one of our participants asked if the $200 visit payment can go on the same pay card as the screening payment. I said yes but wanted to double check with you.",crc,none,,Payment question; consent site-specific p.13
+x065,irrelevant,CDR certification,FYI Kim passed her ADAS-PAC CDR certification yesterday so she can now do CDRs on her own. Certificate attached for the regulatory binder.,crc,none,,Staff training
+x066,irrelevant,IP received,"Pharmacy confirmed receipt of 4 six-month kits from Rochester today, all intact, logged in the EDC inventory form. We're above par level again.",crc,none,,IP inventory handled per protocol p.34
+x067,irrelevant,Monitoring visit agenda,"Hi Priya, for my visit on the 14th I'd like to review regulatory binder, 5 participant charts for SDV, and the freezer logs. Please book a room from 9 to 4. Thanks, Dana",cra,none,,Agenda only
+x068,irrelevant,VISION password,"Dana, I'm locked out of VISION again after the password expiry. Can you ask the DCC to reset it? Thanks.",crc,none,,IT
+x069,irrelevant,thank you!,"Thanks so much for the lunch at the investigator meeting, the team really enjoyed it. Looking forward to the next one!",crc,none,,Social
+x070,irrelevant,flyer reprint,"We're reprinting the IRB-approved recruitment flyer (same version, no changes) for the senior center fair next month. 200 copies. Just letting you know.",crc,none,,Approved recruitment material reused; protocol p.32
+x071,irrelevant,Amazon Prime perk,"A study partner asked whether she can get the Amazon gift card instead of the Prime membership. I told her yes, that's one of the options. Ok?",crc,none,,Perk question; protocol p.33
+x072,irrelevant,call moved,The coordinators' call is moving from Thursday 2 pm to Friday 11 am this week only. Same dial-in.,cra,none,,Admin
+x073,irrelevant,Spanish reminder cards,"Hi Dana, do you have the Spanish version of the visit reminder cards? Several of our participants prefer Spanish. Happy to print them ourselves.",crc,none,,Materials question
+x074,irrelevant,vacation coverage,I'm out the week after next. Rafael will cover monthly calls and Jo will cover any visits. Both are trained and on the delegation log.,crc,none,,Staffing
+x075,irrelevant,MRI calibration volunteer,The MRI calibration volunteer (not a participant) was scanned Tuesday under the volunteer consent for site qualification. Imaging Core has the sequences.,crc,none,,Site qualification scan; protocol p.42 and p.56 volunteer consent
+x076,safety,MAP-3076 GI symptoms,"Hi Dana, MAP-3076 called on day 4 after going up to 2 tablets - nausea and loose stools 3-4 times a day. Drinking fine. PI advised dropping back to 1 tablet and we'll reassess at the next call.",crc,out_of_scope,MAP-3076,Adverse event (GI symptoms); protocol p.43-44 AEs
+x077,safety,hospitalization,"Just heard from MAP-3077's wife - he was admitted Sunday with pneumonia, still inpatient. IP on hold per the protocol. We'll file the SAE form today.",crc,out_of_scope,MAP-3077,Hospitalization SAE; protocol p.44
+x078,safety,fall at visit,"MAP-3078 tripped in the hallway on the way to the testing room at her Month 6 visit and hit her head on the door frame. PI saw her and we took her to the ER to be checked; CT negative and she went home that evening. We finished the visit on Thursday, still within the window.",crc,out_of_scope,MAP-3078,Fall/injury; protocol p.25 medical contingencies; visit within window
+x079,safety,B12 result,"MAP-3079's Month 12 B12 came back at 160 pg/mL, down from 390 at baseline. PI is worried about B12 deficiency and anemia risk for her and called her PCP to start supplements.",crc,out_of_scope,MAP-3079,Writer says lab result is a risk to participant; consent p.6 B12 risk
+x080,safety,MAP-3080 shortness of breath,"Dana, MAP-3080 went to the ER last night short of breath and with swollen ankles. The ER notes say he's had class III heart failure for two years with his cardiologist - we didn't have those records at screening, he was randomized 3 months ago. He's been admitted.",crc,"eligibility,out_of_scope",MAP-3080,Hospitalization plus enrolled with class III CHF; protocol p.30 exclusion
+x081,safety,MAP-3081 fainted,"Hi Dana,
+
+MAP-3081 fainted right after her Month 6 blood draw. She was out for a few seconds; vitals stable, juice and rest, PI saw her and she went home with her son. With all the commotion the lavender top sat on the bench and wasn't spun until about 90 minutes after the draw.
+
+Ben",crc,"out_of_scope,sample_handling",MAP-3081,Fainting AE plus centrifuged >60 min; lab manual s.5
+x082,safety,MAP-3082 update,"MAP-3082 was in hospital for 3 weeks with a hip fracture and then rehab, so he missed his Month 6 visit entirely. He's home now and doing well. Per the protocol he'll continue with the Month 12 visit. SAE was reported at the time.",crc,out_of_scope,MAP-3082,"Hip fracture/hospitalization; missed visit due to force majeure allowed to continue with next visit, protocol p.36 s.8"
+x083,safety,sad news,"Dana, I'm sorry to tell you MAP-3083 died on Saturday in a car accident. His wife called us this morning. We'll complete the SAE and final status forms.",crc,out_of_scope,MAP-3083,Death; protocol p.44 SAE
+x084,safety,MAP-3084 Month 12,"Hi Dana,
+
+MAP-3084 is having daily headaches and dizziness since the Month 10 call. PI looked at her and asked her to see her PCP.
+
+Also for your records: her CDR at Month 6 was 1, so at the Month 12 visit we did the UBACC - she didn't get a perfect score on three tries. Her daughter was there but we didn't do any LAR paperwork; she said she wants to continue so we just did the full Month 12 visit.
+
+Jo",crc,"consent,out_of_scope",MAP-3084,AE plus lacks capacity in follow-up without LAR consent; protocol p.39 UBACC
+x085,safety,rash,MAP-3085 reports an itchy red rash on his arms and chest since about a week after reaching 4 tablets. No breathing problems. PI told him to hold IP and sent a photo to dermatology.,crc,out_of_scope,MAP-3085,Skin reaction AE; consent p.6
+x086,safety,MRI safety read,"The radiologist's safety read on MAP-3086's baseline MRI (done before IP start, as required) flagged a possible acute stroke - level 4. PI called him and sent him to the ER immediately. IP not started.",crc,out_of_scope,MAP-3086,"Level 4 incidental finding, risk to participant; protocol p.23"
+x087,safety,MAP-3087,"Dana - MAP-3087 started IP last week and called Tuesday with stomach cramps and vomiting, couldn't keep anything down for a day. PI said hold the tablets until it settles. Also, his MRI is now booked for next Monday since the scanner was down when we first tried.",crc,"out_of_scope,procedure_sequence",MAP-3087,GI AE plus IP started before MRI; protocol p.42
+x088,old,MAP-3088 file note,"Cleaning up the screening log: MAP-3088 screen-failed back in May with BP 168/100 at the in-person screen. Referred to PCP, no further study procedures. Closing the file.",crc,none,,"Correct screen fail, old news; protocol p.31 BP exclusion, p.32 s.5.4"
+x089,old,question re eGFR,"Hi Dana, MAP-3089's creatinine looked a bit high at her PCP's office. If her screening eGFR comes back under 45 we won't randomize her, right? Results due Thursday.",crc,none,,Question/hypothetical; protocol p.30 eGFR exclusion
+x090,old,shipment moved,We nearly shipped MAP-3090's box this Thursday but caught it during the pre-ship check - it's now going out Monday with notification sent Friday. Samples stay in the -80 until then.,crc,none,,Prevented; lab manual s.8
+x091,old,non-fasting draw,"MAP-3091 forgot and had breakfast at 7 am before her Month 6 visit. We went ahead with the draw at 9:30 and wrote the time of her last meal on the requisition form, as the lab manual says.",crc,none,,Correct handling of non-fasting; lab manual s.3
+x092,old,hemolysis recollection,"MAP-3092's Month 12 lavender top was hemolyzed. We've booked a recollection for next Tuesday, which is well inside the visit window, with a fresh kit.",crc,none,,Correct handling; lab manual s.9
+x093,old,study partner consent,For MAP-3093: study partner (her niece) consented by phone Tuesday. I read the partner consent script and documented her verbal consent in the source note. Participant signed the paper ICF in person before any procedures.,crc,none,,Correct partner verbal consent; protocol p.55 and Table 7 footnote e
+x094,old,eConsent done,"MAP-3094 completed eConsent in VISION Wednesday with me on video. She created her account, read the eICF in Spanish, asked questions, signed and saved it. She got her link to the signed copy. Screening procedures started after that.",crc,none,,Correct eConsent; protocol p.55
+x095,old,baseline labs,"MAP-3095's screening labs, vitals and ECG were done 10 days before his baseline visit, so we didn't repeat them at baseline. The neuropsych from screening serves as baseline too.",crc,none,,Allowed within 14 days; protocol p.38 Table 7 footnote d
+x096,old,GDS question,"Hypothetical for you: MAP-3096 seems quite low in mood on the phone. If her GDS at screening comes back 9 or more, we'd screen fail her - correct?",crc,none,,Question; protocol p.31 GDS exclusion
+x097,old,Re: label deviation,"Hi Marcus, thanks - I see the handwritten label deviation for MAP-3097 from the spring was filed, the lab accepted the relabeled aliquots, and staff retraining is documented. Nothing more needed. Dana",cra,none,,Old news already handled
+x098,old,Month 6 labs,"For MAP-3098's Month 6 we drew BMP, A1c, CBC, hepatic, lipids and B12. We did not repeat TSH or RPR since they're screening-only.",crc,none,,Correct; protocol p.43 TSH and RPR not repeated at follow-up
+x099,old,prior trial,MAP-3099 was in a solanezumab trial about six years ago (that drug failed). No other amyloid therapy since. Randomized Thursday.,crc,none,,Previous non-efficacious amyloid therapy not exclusionary; protocol p.31
+x100,old,randomization held,"We were about to randomize MAP-3100 on Friday before her A1c result came back, but the PI caught it and we're holding until results are in. Nothing done yet.",crc,none,,Prevented; protocol p.8 randomized only if blood tests show no exclusion
