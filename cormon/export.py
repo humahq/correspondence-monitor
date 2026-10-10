@@ -7,7 +7,7 @@ import datetime as dt
 import shutil
 from pathlib import Path
 
-from . import db, ingest
+from . import db, ingest, prune
 from .config import Study
 
 WORDS = {"lt": "below", "le": "at or below", "gt": "above", "ge": "at or above", "eq": "equal to",
@@ -201,27 +201,32 @@ def sheet(study: Study, rows: list[dict], checklist: list[tuple], path: Path) ->
 
     labels = {p["id"]: p["label"] for p in study.pattern_classes}
     titles = {d["id"]: d["title"] for d in study.documents}
+    made = prune.decisions(study.study_id)
     wb = Workbook()
     ws = wb.active
     ws.title = "Rules in use"
     ws.append(["Rule", "Document", "Problem type", "Rule text", "Check", "Alert when", "Only for", "Not when",
-               "Page", "Exact words in the document"])
+               "Page", "Exact words in the document", "AI suggests", "Why", "Team decision", "Team note"])
     for r in rows:
-        if r["active"]:
+        removed = (r["review"] or "").startswith(prune.REMOVED)
+        if r["active"] or removed:
             how, alert, band, exc = describe_check(r)
+            d = made.get(prune.rule_key(r), {})
             ws.append([r["id"], titles.get(r["doc_id"], r["doc_id"]), labels.get(r["pattern_class"], r["pattern_class"]),
-                       r["text"], how, alert, band, exc, r["source_page"], r["source_quote"]])
+                       r["text"], how, alert, band, exc, r["source_page"], r["source_quote"],
+                       d.get("suggest") or "", d.get("why") or "", d.get("decision") or "", d.get("note") or ""])
     nu = wb.create_sheet("Not used")
     nu.append(["Rule", "Document", "Problem type", "Rule text", "Why not used", "Exact words in the document"])
     for r in rows:
-        if not r["active"]:
+        if not r["active"] and not (r["review"] or "").startswith(prune.REMOVED):
             nu.append([r["id"], titles.get(r["doc_id"], r["doc_id"]), labels.get(r["pattern_class"], r["pattern_class"]),
                        r["text"], _why_not_used(r["review"]), r["source_quote"]])
     cl = wb.create_sheet("Coverage checklist")
     cl.append(["Document", "Criterion or step", "Status", "Rule(s) or reason"])
     for d, item, status, detail in checklist:
         cl.append([d, item, status, detail if status == "Has a rule" else _why_not_used(detail)])
-    widths = {"A": 28, "B": 30, "C": 22, "D": 60, "E": 30, "F": 26, "G": 22, "H": 26, "I": 6, "J": 70}
+    widths = {"A": 28, "B": 30, "C": 22, "D": 60, "E": 30, "F": 26, "G": 22, "H": 26, "I": 6, "J": 70,
+              "K": 12, "L": 50, "M": 14, "N": 40}
     for w in (ws, nu, cl):
         for cell in w[1]:
             cell.font = Font(bold=True)

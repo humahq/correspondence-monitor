@@ -305,6 +305,10 @@ cormon log [--item ID] [--message ID] the audit log
 cormon rules [--pattern eligibility]  the study model
 cormon rules --report                 what was kept, dropped or merged and why; number rules; contradictions
 cormon rules --checklist              every inclusion/exclusion criterion and lab-manual step, with its rule or why none
+cormon rules-suggest                  AI suggests keep or remove for each rule, with a reason (turns nothing off)
+cormon export-rules FOLDER            Word + Excel of the rules; the Excel has "AI suggests", "Why", "Team decision"
+cormon rules-decide SHEET.xlsx        apply the "Team decision" column (keep / remove); decisions survive a rebuild
+cormon rules-decide --rule ID --decision keep|remove [--note "..."]   decide one rule
 cormon reset --yes                    archive the database, start fresh (study model kept)
 ```
 

@@ -847,6 +847,9 @@ def store_rules(study: Study, doc_id: str, pattern: dict, sha: str, rules: list[
         elif not active:
             db.audit("rule_dropped", entity_type="rule", entity_id=rule_id, study_id=study.study_id,
                      reason=review, text=r["text"])
+    from . import prune
+    counts["removed_by_team"] = prune.reapply(study.study_id, doc_id, pattern["id"])
+    counts["active"] -= counts["removed_by_team"]
     return counts
 
 
@@ -971,10 +974,12 @@ def import_model(src: Path, reason: str, actor: str = "operator") -> dict:
         before = {sid: c.execute("SELECT COUNT(*) FROM main.rules WHERE study_id=? AND active=1",
                                  (sid,)).fetchone()[0] for sid in studies}
         with c:
-            for tbl in ("documents", "doc_pages", "rules", "llm_cache"):
+            for tbl in ("documents", "doc_pages", "rules", "rule_decisions", "llm_cache"):
                 cols = [r[1] for r in c.execute(f"PRAGMA main.table_info({tbl})")]
                 have = {r[1] for r in c.execute(f"PRAGMA model.table_info({tbl})")}
                 names = ", ".join(col for col in cols if col in have)
+                if not names:
+                    continue
                 if tbl != "llm_cache":
                     marks = ",".join("?" * len(studies))
                     c.execute(f"DELETE FROM main.{tbl} WHERE study_id IN ({marks})", studies)

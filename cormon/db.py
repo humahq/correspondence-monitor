@@ -179,6 +179,23 @@ CREATE TABLE IF NOT EXISTS rules (
 );
 CREATE INDEX IF NOT EXISTS ix_rules_study ON rules(study_id, pattern_class);
 
+-- rule pruning: the AI suggests keep or remove, people decide. Keyed on the rule's words and its check, not its
+-- id, so a decision survives a rebuild that renumbers the rules; a changed rule comes back undecided (kept).
+CREATE TABLE IF NOT EXISTS rule_decisions (
+    study_id TEXT NOT NULL,
+    rule_key TEXT NOT NULL,
+    source_quote TEXT NOT NULL,
+    text TEXT NOT NULL,
+    suggest TEXT CHECK (suggest IN ('keep','remove')),
+    reason_type TEXT,
+    why TEXT,
+    decision TEXT CHECK (decision IN ('keep','remove')),
+    decided_by TEXT,
+    decided_at TEXT,
+    note TEXT,
+    PRIMARY KEY (study_id, rule_key)
+);
+
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY,
     scope TEXT NOT NULL CHECK (scope IN ('message','person','study','global')),

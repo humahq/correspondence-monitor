@@ -72,7 +72,9 @@ def cmd_reset(args):
     db.conn()
     old = sqlite3.connect(dest)
     old.row_factory = sqlite3.Row
-    for tbl in ("documents", "doc_pages", "rules", "llm_cache"):
+    for tbl in ("documents", "doc_pages", "rules", "rule_decisions", "llm_cache"):
+        if not old.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tbl,)).fetchone():
+            continue
         rows = old.execute(f"SELECT * FROM {tbl}").fetchall()
         if rows:
             cols = rows[0].keys()
@@ -102,6 +104,34 @@ def cmd_export_rules(args):
 
     for p in export.export(config.study(args.study), Path(args.folder).expanduser()):
         print(f"  wrote {p}")
+
+
+def cmd_rules_suggest(args):
+    from . import prune
+
+    counts = prune.suggest(config.study(args.study), use_cache=not args.fresh)
+    print(f"AI suggestions stored: keep {counts['keep']}, remove {counts['remove']}. Nothing was turned off.\n"
+          f"Next: cormon export-rules <folder>, fill in 'Team decision', then cormon rules-decide <sheet.xlsx>")
+
+
+def cmd_rules_decide(args):
+    from . import prune
+
+    study = config.study(args.study)
+    if args.rule:
+        if args.decision not in ("keep", "remove"):
+            sys.exit("give --decision keep or --decision remove with --rule")
+        changed = prune.decide(study, args.rule, args.decision, actor(args), args.note or "")
+        print(f"{args.rule}: {args.decision}" + ("" if changed else " (already so)"))
+        return
+    if not args.sheet:
+        sys.exit("give the filled-in rules spreadsheet, or --rule ID --decision keep|remove")
+    counts = prune.read_sheet(study, Path(args.sheet).expanduser(), actor(args))
+    print(f"turned off {counts['remove']}, kept or turned back on {counts['keep']}, unchanged {counts['unchanged']}, "
+          f"no decision {counts['blank']}")
+    for bad in counts["not understood"]:
+        print(f"  not understood (use keep or remove): {bad}")
+    print(f"rules in use now: {len(ingest.active_rules(study.study_id))}")
 
 
 def cmd_import_model(args):
@@ -546,6 +576,17 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("export-rules", help="write the rules (Word and Excel) and the source documents to a folder")
     s.add_argument("folder"); s.add_argument("--study", default=next(iter(config.studies()), None))
     s.set_defaults(fn=cmd_export_rules)
+
+    s = sub.add_parser("rules-suggest", help="AI suggests keep or remove for each rule (turns nothing off)")
+    s.add_argument("--study", default=next(iter(config.studies()), None))
+    s.add_argument("--fresh", action="store_true", help="ask again instead of using stored answers")
+    s.set_defaults(fn=cmd_rules_suggest)
+
+    s = sub.add_parser("rules-decide", help="apply the team's keep/remove decisions from the rules spreadsheet")
+    s.add_argument("sheet", nargs="?", help="the exported rules .xlsx with the 'Team decision' column filled in")
+    s.add_argument("--rule", help="decide one rule by id instead"); s.add_argument("--decision")
+    s.add_argument("--note"); s.add_argument("--study", default=next(iter(config.studies()), None))
+    s.set_defaults(fn=cmd_rules_decide)
 
     s = sub.add_parser("import-model", help="replace the study model with one rebuilt and tested in another copy")
     s.add_argument("db", help="the other copy's database, e.g. practice/data/cormon.db")

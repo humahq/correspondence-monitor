@@ -40,7 +40,7 @@ from pathlib import Path
 
 import yaml
 
-SEED_TABLES = ("documents", "doc_pages", "rules", "llm_cache")
+SEED_TABLES = ("documents", "doc_pages", "rules", "rule_decisions", "llm_cache")
 
 
 @dataclass
@@ -153,7 +153,8 @@ def _fresh_db(seed_from: Path) -> None:
             cols = [r[1] for r in c.execute(f"PRAGMA main.table_info({tbl})")]
             have = {r[1] for r in c.execute(f"PRAGMA seed.table_info({tbl})")}
             names = ", ".join(col for col in cols if col in have)
-            c.execute(f"INSERT OR IGNORE INTO {tbl} ({names}) SELECT {names} FROM seed.{tbl}")
+            if names:
+                c.execute(f"INSERT OR IGNORE INTO {tbl} ({names}) SELECT {names} FROM seed.{tbl}")
         c.execute("DETACH DATABASE seed")
         src.unlink(missing_ok=True)
 

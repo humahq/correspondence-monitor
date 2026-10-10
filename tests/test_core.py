@@ -262,3 +262,68 @@ def test_narrower_option_listed_with_a_wider_one_is_not_a_second_limit():
     assert early["_active"] and not late["_active"]
     other = dict(late, source_quote="A completely different sentence about the same score.")
     assert ingest.merge_alternatives([dict(early, _active=True), other]) == 0
+
+
+def test_team_decisions_turn_rules_off_and_survive_a_rebuild(tmp_path):
+    from types import SimpleNamespace
+
+    from openpyxl import Workbook
+
+    from cormon import prune
+
+    def add(rid, text):
+        db.ex("INSERT INTO rules (id, study_id, doc_id, doc_sha256, pattern_class, kind, text, check_type,"
+              " source_quote, verified, order_idx, active, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              (rid, "S", "protocol", "x", "consent", "requirement", text, "judgment", f"quote for {text}", 1, 0, 1,
+               db.now()))
+
+    add("R1", "Verbal consent is given at intake")
+    add("R2", "Consent is signed before any procedure")
+    study = SimpleNamespace(study_id="S")
+    wb = Workbook()
+    wb.active.title = "Rules in use"
+    wb.active.append(["Rule", "Rule text", "Team decision", "Team note"])
+    wb.active.append(["R1", "Verbal consent is given at intake", "Remove", "on the intake checklist"])
+    wb.active.append(["R2", "Consent is signed before any procedure", ""])
+    sheet = tmp_path / "rules.xlsx"
+    wb.save(sheet)
+
+    counts = prune.read_sheet(study, sheet, "eliot")
+    assert counts["remove"] == 1 and counts["blank"] == 1
+    assert [r["id"] for r in db.q("SELECT id FROM rules WHERE active=1")] == ["R2"]
+
+    db.ex("DELETE FROM rules")              # a rebuild renumbers the rules
+    add("R7", "Verbal consent is given at intake")
+    assert prune.reapply("S") == 1
+    assert db.q1("SELECT active FROM rules WHERE id='R7'")["active"] == 0
+
+    assert prune.decide(study, "R7", "keep", "eliot")
+    assert db.q1("SELECT active FROM rules WHERE id='R7'")["active"] == 1
+
+    # one sentence, two checks: removing the systolic rule must not remove the diastolic one
+    for rid, param in (("BP1", "systolic_bp"), ("BP2", "diastolic_bp")):
+        db.ex("INSERT INTO rules (id, study_id, doc_id, doc_sha256, pattern_class, kind, text, check_type, parameter,"
+              " source_quote, verified, order_idx, active, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              (rid, "S", "protocol", "x", "eligibility", "exclusion", "Uncontrolled hypertension", "numeric", param,
+               "BP 160/95", 1, 0, 1, db.now()))
+    prune.decide(study, "BP1", "remove", "eliot")
+    prune.reapply("S")
+    assert db.q1("SELECT active FROM rules WHERE id='BP2'")["active"] == 1
+
+
+def test_duplicate_suggestions_never_lose_a_check():
+    from cormon import prune
+
+    def rule(rid, cls="eligibility", value=None):
+        return {"id": rid, "pattern_class": cls, "check_type": "numeric" if value else "judgment",
+                "parameter": "mmse_score" if value else None, "operator": "lt" if value else None,
+                "value": value, "value2": None, "condition": None}
+
+    rules = [rule("A"), rule("B"), rule("C", value=22), rule("D", value=20), rule("E", cls="visit_schedule"),
+             rule("F")]
+    dup = lambda of: {"suggest": "remove", "reason_type": "duplicate", "duplicate_of": of, "why": "same"}
+    answers = {"A": dup("B"), "B": dup("A"), "C": dup("D"), "F": dup("E")}
+    got = {r["id"]: s for r, s in zip(rules, prune._settle(rules, answers))}
+    assert got["A"][0] == "keep" and got["B"][0] == "remove"   # of two naming each other, one stays
+    assert got["C"][0] == "keep"                                # 22 and 20 are different checks
+    assert got["F"][0] == "keep"                                # twin is another problem type
