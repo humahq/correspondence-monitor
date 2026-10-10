@@ -230,6 +230,8 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
             facts = {"polarity": "problem", "pattern_class": f.rule["pattern_class"],
                      "temporality": event["temporality"], "hours_until": hours, "check_type": f.method}
             tier, reason = triage.assign(study.study_id, facts)
+            if f.certainty == "unsure" and tier == "immediate":
+                tier, reason = "medium", f"{reason}; held at medium because the document check was not sure"
             candidates.append({"f": f, "pid": pid, "event": event, "base": base, "hours": hours,
                                "facts": facts, "tier": tier, "reason": reason})
 
@@ -304,8 +306,10 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 good_news.append((event, pid, base))
 
         if settings.get("matching.sweep", True):
+            enrolled = {_pid(e.get("participant_id")) for e in data["events"]
+                        if e["event_type"] in ("enrollment", "randomization") and e.get("participant_id")}
             for f in matching.sweep_findings(study, msg, corpus, anchors, [c["f"] for c in candidates],
-                                             use_cache=use_cache):
+                                             enrolled=enrolled, use_cache=use_cache):
                 pid = _pid(f.event.get("participant_id"))
                 add_candidate(f, f.event, pid, _base_evidence(study, msg, f.event))
                 db.audit("sweep_finding_added", entity_type="message", entity_id=msg_id, study_id=study.study_id,
@@ -320,7 +324,7 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 problem_pids.add(c["pid"])
 
         for (pclass, pid), group in groups.items():
-            group.sort(key=lambda c: (-TIER_RANK[c["tier"]], c["f"].method != "numeric"))
+            group.sort(key=lambda c: (c["f"].certainty == "unsure", -TIER_RANK[c["tier"]], c["f"].method != "numeric"))
             lead = group[0]
             f = lead["f"]
             shown = {textutil.normalize(f.doc_quote or "")}
@@ -335,7 +339,8 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 doc_id=f.rule["doc_id"], doc_title=study.doc(f.rule["doc_id"])["title"],
                 doc_quote=f.doc_quote, doc_page=f.doc_page, doc_passage=f.doc_passage,
                 method=f.method, observed=f.observed, certainty=f.certainty,
-                confirmation=f.confirmation, hours_until=lead["hours"], triage_facts=lead["facts"],
+                confirmation=f.confirmation, unsure_reason=f.extra.get("unsure_reason"),
+                hours_until=lead["hours"], triage_facts=lead["facts"],
                 additional=[{"rule_id": c["f"].rule["id"], "rule_text": c["f"].rule["text"],
                              "doc_id": c["f"].rule["doc_id"], "doc_title": study.doc(c["f"].rule["doc_id"])["title"],
                              "doc_quote": c["f"].doc_quote, "doc_page": c["f"].doc_page,
@@ -343,6 +348,8 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                              "confirmation": c["f"].confirmation} for c in others])
             pattern = study.pattern(pclass) or {}
             title = f.extra.get("headline") or f"{pattern.get('label', 'Possible issue')}: {f.rule['text']}"
+            if f.certainty == "unsure":
+                title = f"Please check (not sure): {title}"
             item_id, created = items.upsert(
                 study=study, thread_key=msg["thread_key"], message_id=msg_id,
                 dedup_key=f"{study.study_id}|{msg['thread_key']}|{pclass}|{pid or '-'}",

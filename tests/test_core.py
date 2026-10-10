@@ -70,6 +70,20 @@ def test_template_specificity():
     assert drafting.select("eligibility", "crc", "email", "immediate")["id"] == "email-site-notice"
 
 
+def test_unsure_finding_says_so_in_the_email():
+    t = dict(drafting.select("sample_handling", "cra", "email", "medium"), ai_edit=False)
+    ctx = {"study": {"short_name": "MAP", "monitor_signature": "Monitor"},
+           "item": {"id": 7, "title": "Please check (not sure): Sample late", "participant_id": "P1", "site": "S",
+                    "link": "http://x/items/t"},
+           "finding": {"sender_name": "A", "message_date": "1 Jan", "message_quote": "q", "doc_title": "Lab",
+                       "page": 3, "doc_quote": "d", "unsure": True, "unsure_reason": "Years of education not given."},
+           "also": [], "recipient": {"first_name": "Bo"}}
+    _, body = drafting.render(t, ctx)
+    assert "not fully sure about this one. Please check: Years of education not given." in body
+    _, body = drafting.render(t, dict(ctx, finding=dict(ctx["finding"], unsure=False)))
+    assert "not fully sure" not in body
+
+
 def test_template_refuses_missing_values():
     with pytest.raises(drafting.DraftError):
         drafting.render({"id": "t", "body": "Hello {{ recipient.first_name }} {{ missing }}"},

@@ -29,7 +29,7 @@ class Finding:
     method: str                 # numeric | judgment
     message_quote: str
     reasoning: str
-    certainty: str = "clear"    # clear | possible
+    certainty: str = "clear"    # clear | possible | unsure (the document check could not decide; a person checks)
     observed: str | None = None
     doc_quote: str | None = None
     doc_page: int | None = None
@@ -201,12 +201,18 @@ def judgment_checks(study: Study, event: dict, rules: list[dict], msg_text: str,
 
 CONFIRM_SYSTEM = """You confirm or reject a suspected protocol conflict using the ORIGINAL study document text, not a summary.
 
-Given the original passage, the event and the correspondence quote, decide whether the original document really sets a requirement that the correspondence conflicts with. Reject if the passage does not say what the rule claims, if the rule does not apply to this kind of event, if the conflict concerns participant safety rather than the study's procedures, or if confirming it would need a threshold, fact or assumption that is not stated in the passage or the correspondence. Reject if the passage itself allows what happened (an exception or a permitted alternative). Reject if the correspondence is only silent about a required step: not mentioning something is not a conflict, and reporting some results does not mean the others were not done.
+Given the original passage, the event and the correspondence quote, decide whether the original document really sets a requirement that the correspondence conflicts with.
+verdict:
+- confirmed: the passage sets the requirement, it applies to this event, and the stated facts break it.
+- unsure: the passage sets the requirement and it applies, and the stated facts would break it, but deciding needs one fact the correspondence does not give (e.g. which of two limits applies) or a judgment the document leaves to the study team or physician. A person should check it.
+- rejected: the passage does not say what the rule claims; the rule does not apply to this kind of event; the conflict concerns participant safety rather than the study's procedures; the passage itself allows what happened (an exception or a permitted alternative); or the correspondence is only silent about a required step (not mentioning something is not a conflict, and reporting some results does not mean the others were not done). Never use unsure for these.
+unsure_reason: when unsure, one short plain sentence naming what a person must check; otherwise empty.
 doc_quote: the single sentence (or shortest clause) from the ORIGINAL passage that states the requirement, copied VERBATIM, characters exactly as given.
 headline: at most 16 words, neutral and factual, naming what was reported and the requirement it appears to conflict with, e.g. "Participant randomized with eGFR 41; protocol excludes eGFR below 45". Keep the event's tense: for a planned event say what is planned ("Study drug to start tomorrow before baseline MRI; ..."). No diagnosis, no instruction, no blame."""
 
 CONFIRM_SCHEMA = llm.obj({
-    "confirmed": {"type": "boolean"},
+    "verdict": {"type": "string", "enum": ["confirmed", "unsure", "rejected"]},
+    "unsure_reason": {"type": "string"},
     "doc_quote": {"type": "string"},
     "explanation": {"type": "string"},
     "headline": {"type": "string"},
@@ -235,7 +241,10 @@ def confirm(study: Study, f: Finding, use_cache: bool) -> bool:
     out = llm.structured("confirm", CONFIRM_SYSTEM, user, CONFIRM_SCHEMA, "confirm_conflict", use_cache=use_cache)
     f.confirmation = out["explanation"]
     f.extra["headline"] = out["headline"]
-    if not out["confirmed"]:
+    if out["verdict"] == "unsure" and settings.get("matching.unsure_to_cra", True):
+        f.certainty = "unsure"
+        f.extra["unsure_reason"] = out["unsure_reason"] or out["explanation"]
+    elif out["verdict"] != "confirmed":
         return False
     doc_quote = out["doc_quote"]
     if not textutil.quote_in(doc_quote, loc["passage"]):
@@ -280,7 +289,7 @@ def sweep(study: Study, corpus: str, when: str, rules: list[dict], use_cache: bo
 
 
 def sweep_findings(study: Study, msg: dict, corpus: str, anchors: list[dict], found: list[Finding], *,
-                   use_cache: bool = True) -> list[Finding]:
+                   enrolled: set[str] = frozenset(), use_cache: bool = True) -> list[Finding]:
     """Findings from the sweep that event-by-event matching did not already make, each tied to an event of the
     same participant that its rule applies to, re-checked in code where the email gives the number, and
     confirmed against the original document."""
@@ -303,8 +312,9 @@ def sweep_findings(study: Study, msg: dict, corpus: str, anchors: list[dict], fo
         fits = [e for e in anchors if (e.get("participant_id") or "").upper() == pid
                 and (not types or e["event_type"] in types | set(IMPLIED_EVENTS.get(e["event_type"], [])))]
         if not fits and pid:
+            # a new fact about a participant the email says is already in the study can break eligibility
             fits = [e for e in anchors if (e.get("participant_id") or "").upper() == pid and e["event_type"] == "other"
-                    and rule["pattern_class"] != "eligibility"]
+                    and (rule["pattern_class"] != "eligibility" or pid in enrolled)]
         if not fits:
             db.audit("sweep_finding_without_event", entity_type="message", entity_id=msg["id"],
                      study_id=study.study_id, rule_id=rule["id"], participant_id=pid, reasoning=p["reasoning"])
