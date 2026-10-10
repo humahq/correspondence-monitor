@@ -40,8 +40,9 @@ def structured(
     schema_name: str,
     *,
     use_cache: bool = True,
+    model: str | None = None,
 ) -> dict:
-    model = model_for(task)
+    model = model or model_for(task)
     temperature = settings.get("llm.temperature", 0)
     seed = settings.get("llm.seed", 7)
     key = hashlib.sha256(

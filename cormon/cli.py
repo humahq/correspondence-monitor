@@ -458,6 +458,16 @@ def cmd_test(args):
     sys.exit(testbench.main(args.folder, args.out))
 
 
+def cmd_compare(args):
+    """Score the same test folder three ways: the bot's rules, the full documents, and a plain rule list."""
+    from . import compare
+    modes = tuple(m.strip() for m in args.modes.split(",") if m.strip())
+    bad = set(modes) - set(compare.MODES)
+    if bad:
+        sys.exit(f"unknown mode(s): {', '.join(sorted(bad))}; choose from {', '.join(compare.MODES)}")
+    compare.run(args.folder, args.out, modes, args.model)
+
+
 def cmd_inject(args):
     """Put a message into the local simulator inbox (rehearsal without real accounts)."""
     src = Path(args.file)
@@ -619,6 +629,12 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("test", help="run a folder of test messages (.txt, .eml, .csv) through a sandbox and score them")
     s.add_argument("folder"); s.add_argument("--out", help="folder for results.csv and summary.json")
     s.set_defaults(fn=cmd_test)
+
+    s = sub.add_parser("compare", help="score a test folder against the rules, the full documents and a rule list")
+    s.add_argument("folder"); s.add_argument("--out", help="folder for table.txt, per_case.csv and summary.json")
+    s.add_argument("--modes", default="rules,document,rulelist")
+    s.add_argument("--model", help="model for the document and rulelist modes (default: the configured one)")
+    s.set_defaults(fn=cmd_compare)
 
     s = sub.add_parser("inject", help="drop a .eml or Teams .json file into the local simulator")
     s.add_argument("file"); s.add_argument("--now", action="store_true", help="process immediately")

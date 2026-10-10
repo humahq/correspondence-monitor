@@ -179,3 +179,15 @@ def test_exception_turns_a_number_rule_off():
     assert found
     found, undecided = matching.numeric_checks([rule], event(cdr_score=0))
     assert not found and undecided == [rule]
+
+
+def test_compare_scores_safety_and_problems_together():
+    from cormon import compare, testbench
+
+    res = compare._result([{"kind": "eligibility", "participant_id": "map-0905"}], safety=True)
+    assert res["got"] == {"eligibility", "out_of_scope"} and res["pids"] == {"MAP-0905"}
+    case = testbench.Case(name="x", subject="s", expect={"eligibility", "out_of_scope"}, participant="MAP-0905")
+    case.result = res
+    assert testbench.verdict(case) is True
+    case.result = compare._result([], safety=True)
+    assert testbench.verdict(case) is False

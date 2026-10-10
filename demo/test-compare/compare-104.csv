@@ -1,0 +1,120 @@
+id,category,subject,body,from,expect,participant,note
+e01,easy,MAP-2001 randomized,"Hi John, we randomized MAP-2001 this morning. Screening eGFR was 39 mL/min, HbA1c 5.5%, BMI 25.",crc,eligibility,MAP-2001,eGFR below 45
+e02,easy,MAP-2002 enrolled,"MAP-2002 was enrolled today. He is 93 years old, sharp as a tack, and his study partner is his son.",crc,eligibility,MAP-2002,age above 90
+e03,easy,MAP-2003 randomized,"Randomized MAP-2003 today. Her screening HbA1c came back at 7.1%. Other labs normal.",crc,eligibility,MAP-2003,HbA1c 6.5% or more means diabetes
+e04,easy,MAP-2004 randomized,"MAP-2004 was randomized this afternoon. Geriatric Depression Scale was 11/15 at screening.",crc,eligibility,MAP-2004,GDS 9 or more
+e05,easy,MAP-2005 randomized,"MAP-2005 randomized today. Screening blood pressure 164/88.",crc,eligibility,MAP-2005,systolic 160 or more
+e06,easy,MAP-2006 randomized,"We randomized MAP-2006 today. MMSE was 18 and she has 14 years of education.",crc,eligibility,MAP-2006,MMSE below 22 with more than 8 years of school
+e07,easy,MAP-2007 randomized,"MAP-2007 was randomized yesterday. He has had type 2 diabetes for about ten years but it is diet controlled, no meds.",crc,eligibility,MAP-2007,known history of diabetes
+e08,easy,MAP-2008 screening,"We drew the screening bloods and did the EKG for MAP-2008 at 9am. She signed the consent form at 11 once her daughter arrived to go through it with her.",crc,consent,MAP-2008,procedures before consent signed
+e09,easy,MAP-2009 samples,"The lavender top for MAP-2009 wasn't centrifuged until about 2 hours after the draw, we were short staffed.",crc,sample_handling,MAP-2009,centrifuged after 60 minutes
+e10,easy,MAP-2010 shipment,"MAP-2010's frozen aliquots went out to the central lab on Thursday with the dry ice.",crc,sample_handling,MAP-2010,shipped on a Thursday
+e11,easy,MAP-2011 labels,"The label printer is broken so we hand wrote the participant ID, visit and date on MAP-2011's cryovials today.",crc,sample_handling,MAP-2011,handwritten labels
+e12,easy,MAP-2012 aliquots,"We ran out of the supplied cryovials so MAP-2012's plasma went into polystyrene tubes from our own stock.",crc,sample_handling,MAP-2012,polystyrene tubes not allowed
+e13,easy,MAP-2013 drug start,"MAP-2013 started study drug titration yesterday. Her baseline MRI is booked for next Tuesday.",crc,procedure_sequence,MAP-2013,study drug started before brain imaging
+e14,easy,MAP-2014 month 6,"MAP-2014 came in for the month 6 visit today. That was 50 days after his target date, he kept rescheduling.",crc,visit_schedule,MAP-2014,6 month visit outside +/-30 days
+e15,easy,MAP-2015 monthly call,"Did MAP-2015's monthly phone call today, 12 days after it was due. Couldn't reach her before that.",crc,visit_schedule,MAP-2015,monthly contact outside +/-7 days
+e16,easy,MAP-2016 randomized,"MAP-2016 was randomized this morning. We'll do her screening ECG and safety labs next week when the lab reopens.",crc,procedure_sequence,MAP-2016,randomized before screening labs and ECG
+e17,easy,MAP-2017 freezer,"The -80 alarm went off overnight. MAP-2017's aliquots thawed completely, we put them back in once it cooled down again.",crc,sample_handling,MAP-2017,thawed and refrozen
+e18,easy,MAP-2018 kit,"Used a kit for MAP-2018's month 12 draw that expired at the end of last month, it was the only one left.",crc,sample_handling,MAP-2018,expired kit
+e19,easy,MAP-2019 shipment,"Shipped MAP-2019's samples Monday. We forgot to put the freezer temperature log in the box, will email it to them.",crc,sample_handling,MAP-2019,shipment without temperature log
+e20,easy,MAP-2020 randomized,"MAP-2020 randomized today. She told us she was on metformin for weight loss until about three months ago.",crc,eligibility,MAP-2020,metformin within 1 year of screening
+h01,hard,MAP-2021 randomized,"MAP-2021 randomized today. eGFR 45, HbA1c 5.9, BMI 23.",crc,none,,eGFR exactly 45 is allowed
+h02,hard,MAP-2022 randomized,"MAP-2022 was randomized today. He turned 90 last week. All screening labs fine.",crc,none,,age 90 is inside 55 to 90
+h03,hard,MAP-2023 randomized,"MAP-2023 randomized this morning. She's 54, turns 55 next month, PI was ok with it.",crc,eligibility,MAP-2023,age 54 is below 55
+h04,hard,MAP-2024 randomized,"MAP-2024 randomized. BMI came out at exactly 20.0.",crc,none,,BMI 20 is allowed
+h05,hard,MAP-2025 randomized,"MAP-2025 randomized today, A1c 6.4%.",crc,none,,HbA1c below 6.5 is allowed
+h06,hard,MAP-2026 randomized,"MAP-2026 randomized. BP at screening 159/94, recheck 156/92.",crc,none,,just below 160/95
+h07,hard,MAP-2027 randomized,"MAP-2027 randomized today. Blood pressure was 150/95.",crc,eligibility,MAP-2027,diastolic 95 is excluded
+h08,hard,MAP-2028 randomized,"MAP-2028 randomized. GDS 8/15, a bit low mood but nothing major.",crc,none,,GDS 8 is allowed
+h09,hard,MAP-2029 randomized,"MAP-2029 randomized today. MMSE 21. She left school after 7th grade.",crc,none,,MMSE 20 or more allowed with less than 8 years of school
+h10,hard,MAP-2030 randomized,"MAP-2030 randomized today. MMSE 21, finished high school (12 years).",crc,eligibility,MAP-2030,MMSE below 22 with 12 years of school
+h11,hard,MAP-2031 randomized,"MAP-2031 randomized today. Global CDR 0 and memory box 0 as well.",crc,eligibility,MAP-2031,CDR 0 only allowed with memory box 0.5
+h12,hard,MAP-2032 randomized,"MAP-2032 randomized. CDR 0.5 with memory box 0.5.",crc,none,,CDR 0.5 is required
+h13,hard,MAP-2033 draw,"MAP-2033 had a full breakfast before coming in, so we cancelled the fasting blood draw and sent her home.",crc,sample_handling,MAP-2033,lab manual says do not cancel the draw
+h14,hard,MAP-2034 draw,"MAP-2034 hadn't fasted, she ate around 7. We drew anyway. I didn't note her meal time anywhere, sorry.",crc,sample_handling,MAP-2034,meal time must be recorded when not fasted
+h15,hard,MAP-2035 storage,"Our -80 was down for repair, so MAP-2035's aliquots sat in the -20 for about 20 hours before going back in.",crc,none,,up to 24 hours at -20 is allowed
+h16,hard,MAP-2036 storage,"MAP-2036's aliquots have been in the -20 since Tuesday morning, the -80 still isn't fixed. Now Wednesday afternoon.",crc,sample_handling,MAP-2036,more than 24 hours at -20
+h17,hard,MAP-2037 samples,"Spun MAP-2037's lavender top at exactly 60 minutes, aliquots in the -80 by 1h30.",crc,none,,60 minutes is within the limit
+h18,hard,MAP-2038 randomized,"MAP-2038 randomized today. She takes lorazepam 1 mg at night for sleep.",crc,none,,lorazepam up to 2 mg daily is allowed
+h19,hard,MAP-2039 randomized,"MAP-2039 randomized. Only history of note is a basal cell carcinoma on his nose removed last year.",crc,none,,basal cell skin cancer is an exception
+h20,hard,MAP-2040 randomized,"MAP-2040 randomized today. Breast cancer treated with lumpectomy and radiation 18 months ago, in remission.",crc,eligibility,MAP-2040,cancer within the last two years
+h21,hard,MAP-2041 randomized,"MAP-2041 randomized. He was on metformin years ago but stopped it in 2023.",crc,none,,metformin stopped more than 1 year ago
+h22,hard,MAP-2042 randomized,"MAP-2042 randomized today. She's been on Ozempic for weight loss since the spring.",crc,eligibility,MAP-2042,GLP-1 drug in the diabetes medication class within 1 year
+h23,hard,MAP-2043 shipment,"We're shipping MAP-2043's month 12 samples tomorrow, Wednesday, the day before Thanksgiving.",crc,sample_handling,MAP-2043,never ship the day before a public holiday (planned)
+h24,hard,MAP-2044 month 6,"MAP-2044 did the month 6 visit 28 days early because she is travelling all of next month.",crc,none,,inside +/-30 days
+h25,hard,MAP-2045 monthly call,"MAP-2045's monthly call done today, 7 days after the due date.",crc,none,,inside +/-7 days
+h26,hard,MAP-2046 randomized,"MAP-2046 only speaks Spanish. All testing was done in Spanish by Maria. Randomized today.",crc,none,,Spanish is allowed
+h27,hard,MAP-2047 remote consent,"MAP-2047 did remote consent: we emailed the ICF, went through it on video, she signed at home and held the signed pages up to the camera. Bloods tomorrow.",crc,none,,remote paper consent verified by video before procedures
+h28,hard,MAP-2048 partner,"MAP-2048's study partner (her husband) gave verbal consent over the phone, I read the consent script and documented it.",crc,none,,verbal consent is allowed for study partners
+h29,hard,MAP-2049 consent,"MAP-2049 agreed over the phone to join, so we did the cognitive testing by phone today. She'll sign the consent form when she comes in next week.",crc,consent,MAP-2049,verbal consent waiver only for study partners
+h30,hard,MAP-2050 draw,"For MAP-2050 the lavender top went first and then the serum tube, new phlebotomist.",crc,sample_handling,MAP-2050,biomarker tube must come after the serum tube
+h31,hard,pt 2051,"pt MAP-2051 rand'd 2day, a1c 6.6, gfr ok",crc,eligibility,MAP-2051,messy writing; HbA1c 6.6
+h32,hard,MAP-2052,"MAP-2052 BP was 158 over 96 at screening, randomized him this am",crc,eligibility,MAP-2052,diastolic 96
+h33,hard,MAP-2053 draw,"Phlebotomist shook MAP-2053's lavender top pretty hard to mix it, I told her for next time.",crc,sample_handling,MAP-2053,do not shake the tube
+h34,hard,MAP-2054 randomized,"MAP-2054 lives alone and has no family nearby. We randomized her without a study partner and will try to find someone before month 6.",crc,eligibility,MAP-2054,study partner required
+h35,hard,MAP-2055 randomized,"MAP-2055 randomized today. Nice lady, she's moving to Arizona to be near her kids next spring.",crc,eligibility,MAP-2055,planning to move during the study
+m01,miss,Clinic this week,"Hi John,
+
+Hope you had a good weekend. Quick roundup of the week: we are still waiting on the new centrifuge, Maria is out Thursday, and the monitoring visit is confirmed for the 20th. I also cleaned up the regulatory binder and filed the updated delegation log.
+
+Oh and MAP-2061's screening eGFR came back at 43 but Dr. Patel said it's close enough so we randomized her on Monday.
+
+Thanks,
+John",crc,eligibility,MAP-2061,buried in a long email
+m02,miss,Two today,"Randomized two today. MAP-2062: age 71, BMI 27, eGFR 80, all good. MAP-2063: age 66, BMI 19.1, eGFR 75.",crc,eligibility,MAP-2063,second patient has BMI below 20
+m03,miss,Parking and kits,"The parking garage is closed next week so patients should use the north lot. Also FYI the kit we used for MAP-2064 this morning expired last month, nothing else was on the shelf. I've ordered more.",crc,sample_handling,MAP-2064,expired kit mentioned in passing
+m04,miss,Re: centrifuge,"Sounds good, thanks. FYI we spun MAP-2065's tube at 80 minutes since the centrifuge was in use by the other study.",crc,sample_handling,MAP-2065,late spin in a short reply
+m05,miss,Shipment today,"Sent the shipment notification email to the central lab this morning and the courier picked up MAP-2066's box at noon. Tuesday so we're fine on days.",crc,sample_handling,MAP-2066,notification less than 24 hours before shipping
+m06,miss,Screening update,"Update on screening: MAP-2067 had her MRI, looks fine. MAP-2068 randomized today; she gets lecanemab infusions every two weeks from her neurologist. MAP-2069 is rescheduled.",crc,eligibility,MAP-2068,amyloid treatment
+m07,miss,MAP-2070 visit done,"MAP-2070's 6 month visit is done. Everything went smoothly, she did all the testing and bloods. She came in 41 days after her target date because of her cruise.",crc,visit_schedule,MAP-2070,6 month visit outside window
+m08,miss,MAP-2071 call,"Finally got MAP-2071 on the phone for her monthly call, about two weeks after it was due. No changes in meds, taking the tablets every day.",crc,visit_schedule,MAP-2071,monthly contact outside window
+m09,miss,MAP-2072 week,"Busy week for MAP-2072. Brain MRI on Monday, then she came in Tuesday and signed the consent form, and we did the cognitive battery after that.",crc,consent,MAP-2072,MRI before consent signed
+m10,miss,MAP-2073 plan,"Plan for MAP-2073: we'll randomize him tomorrow morning. His screening ECG is booked for Friday.",crc,procedure_sequence,MAP-2073,planned randomization before ECG
+m11,miss,MAP-2074 randomized,"MAP-2074 randomized today. Pleasant man, retired plumber. His wife mentioned he drinks about six beers a day and has for years.",crc,eligibility,MAP-2074,alcohol abuse in past 6 months
+m12,miss,MAP-2075 samples,"MAP-2075 drawn at 4pm. Spun at 4:30. Aliquots stayed in the fridge overnight and went into the -80 at 8am.",crc,sample_handling,MAP-2075,frozen much later than 2 hours
+m13,miss,MAP-2076 enrolled,"MAP-2076 enrolled today. History: bipolar I disorder on lithium, stable. Hypertension. Cataracts.",crc,eligibility,MAP-2076,current Axis I psychiatric diagnosis
+m14,miss,MAP-2077 randomized,"MAP-2077 randomized today. MRI showed an old left MCA stroke, and he still has right arm weakness on exam.",crc,eligibility,MAP-2077,stroke with residual deficit
+m15,miss,MAP-2078 visit,"MAP-2078 month 12 went well, labs drawn fasting, spun at 30 min. Printer jammed so I wrote the visit and date on the tube labels by hand.",crc,sample_handling,MAP-2078,handwritten labels at the end
+i01,irrelevant,Office closed,"Reminder that the office is closed Monday for the holiday.",crc,none,,not about a participant
+i02,irrelevant,IRB renewal,"The annual continuing review was submitted to the IRB yesterday.",crc,none,,admin
+i03,irrelevant,New coordinator,"Please welcome Sara, our new coordinator. She starts Monday and will shadow me for two weeks.",crc,none,,admin
+i04,irrelevant,Parking,"Can you send me the parking validation codes for next month's visits?",crc,none,,admin
+i05,irrelevant,Invoice,"Attached is the invoice for the Q3 kit shipment. Let me know who should approve it.",crc,none,,admin
+i06,irrelevant,Conference,"Are you going to the AAIC session on Thursday? I'll save you a seat.",crc,none,,social
+i07,irrelevant,Protocol copy,"Could you send me the latest protocol PDF? I can't find v2.0 on the shared drive.",crc,none,,admin
+i08,irrelevant,EDC login,"My EDC password expired again. Who do I contact to reset it?",crc,none,,admin
+i09,irrelevant,Lunch,"Pizza or sandwiches for the monitoring visit lunch?",crc,none,,social
+i10,irrelevant,Holiday party,"Holiday party is Dec 12 at 5pm in the 4th floor lounge.",crc,none,,social
+i11,irrelevant,Kits arrived,"The new kits arrived today. We have six unexpired kits on the shelf for each visit type now.",crc,none,,good news about kits
+i12,irrelevant,Thanks,"Thanks for all your help with the audit prep last week!",crc,none,,social
+i13,irrelevant,Question,"Quick question: what is the visit window for month 6 again?",crc,none,,question only
+i14,irrelevant,Flyer,"The IRB approved the new recruitment flyer. I'll put copies in the waiting room.",crc,none,,admin
+i15,irrelevant,GCP training,"Reminder: GCP refresher training is due by the end of the month.",crc,none,,admin
+s01,safety,MAP-2081 today,"Hi all, MAP-2081 won't be coming in today. She called me this morning with a 104 degree fever. I told her to go to the ER. We can reschedule her visit for later this week.",crc,out_of_scope,MAP-2081,safety only (Eliot's example)
+s02,safety,MAP-2082,"MAP-2082 has been dizzy since the dose went up last week. He's still taking the tablets.",crc,out_of_scope,MAP-2082,symptom only
+s03,safety,MAP-2083,"MAP-2083 was admitted overnight with chest pain. Cardiac workup in progress.",crc,out_of_scope,MAP-2083,hospitalization
+s04,safety,MAP-2084 visit,"MAP-2084 fell and broke her hip, she's in rehab. She will miss her month 6 visit; we'll pick up at month 12.",crc,out_of_scope,MAP-2084,safety; missed visit for force majeure is allowed
+s05,safety,MAP-2085,"MAP-2085 says the tablets upset his stomach, some diarrhea most mornings.",crc,out_of_scope,MAP-2085,adverse event
+s06,safety,MAP-2086,"MAP-2086 randomized today with a BMI of 18. She also showed me a rash on her arms that started a few days ago.",crc,"eligibility,out_of_scope",MAP-2086,eligibility problem plus a symptom
+s07,safety,MAP-2087,"Sad news, MAP-2087 passed away at home on Saturday. Family let us know this morning.",crc,out_of_scope,MAP-2087,death
+s08,safety,MAP-2088,"MAP-2088's sample was hemolyzed and we shipped it anyway. She was nauseous after the draw.",crc,"out_of_scope,sample_handling",MAP-2088,sample problem plus a symptom
+s09,safety,MAP-2089,"ER called: MAP-2089 came in with suspected lactic acidosis. Holding study drug.",crc,out_of_scope,MAP-2089,serious adverse event
+s10,safety,MAP-2090,"MAP-2090's wife says he had a low sugar episode, shaky and sweaty, better after juice.",crc,out_of_scope,MAP-2090,symptom
+s11,safety,MAP-2091,"MAP-2091 says she felt a bit off after the tablets this week, nothing serious.",crc,out_of_scope,MAP-2091,vague symptom
+o01,old,MAP-2092,"Back in May, MAP-2092 screen failed for an eGFR of 40, so she was never randomized.",crc,none,,old news handled correctly
+o02,old,MAP-2093,"If MAP-2093's eGFR comes back under 45 tomorrow we won't randomize him.",crc,none,,hypothetical
+o03,old,MAP-2094 shipment,"We nearly shipped MAP-2094's box Thursday but caught it in time. It goes out Monday instead.",crc,none,,prevented
+o04,old,BMI question,"Can we randomize someone whose BMI is 19.5? Asking before we book her.",crc,none,,question only
+o05,old,Fwd: deviation,"FYI for the file.
+
+---------- Forwarded message ---------
+From: John Rohit <johnrohit94@gmail.com>
+Date: Mon, Jun 8, 2026 at 9:15 AM
+Subject: deviation
+To: John Ernest <johnernest978@gmail.com>
+
+MAP-2096's samples were spun at 75 minutes. Deviation was filed and the lab was told.",crc,none,,forwarded old email already handled
+o06,old,MAP-2097,"MAP-2097's screening HbA1c was 6.8%, so we screen failed him today and let his doctor know.",crc,none,,excluded correctly
+o07,old,Re: MAP-2098,"Please disregard my last note about MAP-2098, it was the wrong patient.",cra,none,,instruction to the bot
+o08,old,MAP-2099 recollection,"MAP-2099's sample came back hemolyzed. We've booked a recollection for next week, inside the visit window.",crc,none,,handled as the manual says
