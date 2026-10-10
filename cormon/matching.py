@@ -246,6 +246,95 @@ def confirm(study: Study, f: Finding, use_cache: bool) -> bool:
     return True
 
 
+SWEEP_SYSTEM = """You read one email from a clinical trial site and list every study rule it may break, so that nothing is missed. Each item you list is checked again afterwards (quotes, numbers and the original document), so list anything the email's stated facts plausibly break.
+
+Report a rule only when the email states facts that break it. Missing information is never a problem by itself, and listing some results does not mean the others were not done. Do NOT report: old news (already happened and dealt with, or forwarded from weeks ago); questions and hypotheticals; something that was caught and prevented, unless the stopping itself breaks a rule; a participant who was correctly screened out. A planned action that would break a rule IS a problem. If another rule explicitly allows what happened (an exception or a permitted alternative), it is not a problem. Never assess participant safety, adverse events or clinical risk.
+
+For each problem:
+- breaks_requirement: true only if the stated facts break the rule; false if, on checking, they meet it.
+- basis: stated_fact_breaks_rule when the email says something that breaks the rule; inferred_from_wording when you are reading it between the lines (guessing an order or a timing the writer did not state); required_step_not_mentioned when the email is only silent about a step.
+- rule_id: the single best rule.
+- participant_id: as written in the email, or null.
+- email_quote: the exact words from the email that show the problem, copied VERBATIM.
+- reasoning: one sentence."""
+
+
+def sweep(study: Study, corpus: str, when: str, rules: list[dict], use_cache: bool) -> list[dict]:
+    """One pass over the whole email against the whole rule list; a safety net for what event-by-event matching
+    misses. Everything it returns still goes through the same checks as any other finding."""
+    if not rules:
+        return []
+    schema = llm.obj({"problems": {"type": "array", "items": llm.obj({
+        "breaks_requirement": {"type": "boolean"},
+        "basis": {"type": "string", "enum": ["stated_fact_breaks_rule", "inferred_from_wording",
+                                             "required_step_not_mentioned"]},
+        "rule_id": {"type": "string", "enum": [r["id"] for r in rules]},
+        "participant_id": llm.nullable("string"),
+        "email_quote": {"type": "string"},
+        "reasoning": {"type": "string"},
+    })}})
+    rule_lines = "\n".join(f"{r['id']} [{r['pattern_class']}]: {r['text']}" for r in rules)
+    system = f"{SWEEP_SYSTEM}\n\nStudy: {study.title}\n\nRULES:\n{rule_lines}"
+    out = llm.structured("sweep", system, f"{when}\n\n{corpus[:12000]}", schema, "rule_sweep", use_cache=use_cache)
+    return [p for p in out["problems"] if p["breaks_requirement"] and p["basis"] == "stated_fact_breaks_rule"]
+
+
+def sweep_findings(study: Study, msg: dict, corpus: str, anchors: list[dict], found: list[Finding], *,
+                   use_cache: bool = True) -> list[Finding]:
+    """Findings from the sweep that event-by-event matching did not already make, each tied to an event of the
+    same participant that its rule applies to, re-checked in code where the email gives the number, and
+    confirmed against the original document."""
+    if not anchors:
+        return []
+    rules = ingest.active_rules(study.study_id, [p["id"] for p in study.pattern_classes])
+    by_id = {r["id"]: r for r in rules}
+    sent = msg.get("sent_at") or ""
+    out: list[Finding] = []
+    have = {(f.rule["pattern_class"], (f.event.get("participant_id") or "").upper()) for f in found}
+    quotes = [(f.event.get("participant_id") or "").upper() + "|" + textutil.normalize(f.message_quote)
+              for f in found]
+    for p in sweep(study, corpus, f"Email sent {sent[:16]}.", rules, use_cache):
+        rule = by_id[p["rule_id"]]
+        pid = (p["participant_id"] or "").strip().upper()
+        if (rule["pattern_class"], pid) in have:
+            continue
+        pattern = study.pattern(rule["pattern_class"]) or {}
+        types = set(pattern.get("match_event_types", pattern.get("event_types", [])))
+        fits = [e for e in anchors if (e.get("participant_id") or "").upper() == pid
+                and (not types or e["event_type"] in types | set(IMPLIED_EVENTS.get(e["event_type"], [])))]
+        if not fits and pid:
+            fits = [e for e in anchors if (e.get("participant_id") or "").upper() == pid and e["event_type"] == "other"
+                    and rule["pattern_class"] != "eligibility"]
+        if not fits:
+            db.audit("sweep_finding_without_event", entity_type="message", entity_id=msg["id"],
+                     study_id=study.study_id, rule_id=rule["id"], participant_id=pid, reasoning=p["reasoning"])
+            continue
+        event = fits[0]
+        if rule["check_type"] == "numeric" and any(
+                f["parameter"] == rule["parameter"] and f.get("numeric_value") is not None for f in event["facts"]):
+            continue  # the email gives the number, and the code check already decided
+        pieces = textutil.quote_pieces(p["email_quote"], corpus)
+        if not pieces:
+            db.audit("finding_rejected_quote_not_in_message", entity_type="message", entity_id=msg["id"],
+                     study_id=study.study_id, rule_id=rule["id"], quote=p["email_quote"], source="sweep")
+            continue
+        quote = " … ".join(textutil.expand_to_sentence(q, corpus) for q in pieces)
+        key = pid + "|" + textutil.normalize(quote)
+        if any(key in q or q in key for q in quotes):
+            continue  # the same fact is already reported under another rule
+        f = Finding(rule=rule, event=event, method="judgment", message_quote=quote, reasoning=p["reasoning"],
+                    extra={"source": "sweep"})
+        if not confirm(study, f, use_cache):
+            db.audit("finding_not_confirmed_by_document", entity_type="message", entity_id=msg["id"],
+                     study_id=study.study_id, rule_id=rule["id"], reasoning=f.reasoning, explanation=f.confirmation,
+                     source="sweep")
+            continue
+        have.add((rule["pattern_class"], pid))
+        quotes.append(key)
+        out.append(f)
+    return out
+
+
 def match_event(study: Study, event: dict, msg: dict, corpus: str, *, use_cache: bool = True) -> list[Finding]:
     rules = candidate_rules(study, event)
     emails = [msg.get("from_addr")] + list(msg.get("to_addrs") or []) + list(msg.get("cc_addrs") or [])

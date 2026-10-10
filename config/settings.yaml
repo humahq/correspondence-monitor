@@ -9,6 +9,9 @@ matching:
   # Forwarded or attached content about events older than this is treated as historical (no alert),
   # so forwarding an old email does not turn an old event into a new one.
   forwarded_stale_days: 7
+  # A second pass over the whole email against the whole rule list, so a problem the event-by-event check
+  # misses is still found. Its findings go through the same quote, number and document checks.
+  sweep: true
 
 llm:
   temperature: 0

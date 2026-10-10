@@ -223,6 +223,15 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
         problem_pids: set[str] = set()
         good_news: list[tuple[dict, str | None, dict]] = []
         candidates: list[dict] = []
+        anchors: list[dict] = []   # events a finding can be tied to (not old news, not hypothetical)
+
+        def add_candidate(f, event: dict, pid: str | None, base: dict) -> None:
+            hours = triage.hours_until(event.get("event_datetime"), msg.get("sent_at"))
+            facts = {"polarity": "problem", "pattern_class": f.rule["pattern_class"],
+                     "temporality": event["temporality"], "hours_until": hours, "check_type": f.method}
+            tier, reason = triage.assign(study.study_id, facts)
+            candidates.append({"f": f, "pid": pid, "event": event, "base": base, "hours": hours,
+                               "facts": facts, "tier": tier, "reason": reason})
 
         part_dates = [r["source_date"] for r in db.q(
             "SELECT source_date FROM attachments WHERE message_id=? AND source_date IS NOT NULL", (msg_id,))]
@@ -250,6 +259,8 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                     routing.route_item(item_id)
 
             if event["safety_only"]:
+                if event["temporality"] in ("current", "planned"):
+                    anchors.append(dict(event, facts=_pooled_facts(event, pid, data["events"])))
                 out_of_scope("event is only about participant safety")
                 continue
 
@@ -282,19 +293,23 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                          quote=event["quote"])
 
             pooled = dict(event, facts=_pooled_facts(event, pid, data["events"]))
+            anchors.append(pooled)
             findings = matching.match_event(study, pooled, msg, corpus, use_cache=use_cache)
             if event["safety_signal"] and not findings:
                 out_of_scope("safety signal that matches no study requirement, so its only reading is safety")
                 continue
-            hours = triage.hours_until(event.get("event_datetime"), msg.get("sent_at"))
             for f in findings:
-                facts = {"polarity": "problem", "pattern_class": f.rule["pattern_class"],
-                         "temporality": event["temporality"], "hours_until": hours, "check_type": f.method}
-                tier, reason = triage.assign(study.study_id, facts)
-                candidates.append({"f": f, "pid": pid, "event": event, "base": base, "hours": hours,
-                                   "facts": facts, "tier": tier, "reason": reason})
+                add_candidate(f, event, pid, base)
             if not findings and event["polarity"] == "good_news" and event["temporality"] == "current":
                 good_news.append((event, pid, base))
+
+        if settings.get("matching.sweep", True):
+            for f in matching.sweep_findings(study, msg, corpus, anchors, [c["f"] for c in candidates],
+                                             use_cache=use_cache):
+                pid = _pid(f.event.get("participant_id"))
+                add_candidate(f, f.event, pid, _base_evidence(study, msg, f.event))
+                db.audit("sweep_finding_added", entity_type="message", entity_id=msg_id, study_id=study.study_id,
+                         rule_id=f.rule["id"], participant_id=pid, reasoning=f.reasoning)
 
         candidates = _drop_restatements(candidates, msg_id)
         summary["findings"] = len(candidates)

@@ -1,0 +1,181 @@
+id,category,subject,body,from,expect,participant,note
+z001,easy,MAP-5001 randomized,"Hi Dana,
+
+MAP-5001 randomized Tuesday. He has had type 2 diabetes for about 6 years but it's diet-controlled - never on any tablets - and his screening A1c was 6.1, so we felt it was fine.
+
+Rafael",crc,eligibility,MAP-5001,Known history of diabetes; protocol p.31 exclusion
+z002,easy,pre-screen visit MAP-5002,MAP-5002 came in Monday for a 'get to know us' pre-screen. While she was here we did the MMSE and an ECG to see if it was worth her coming back. She signed the consent form at her screening visit on Thursday.,crc,consent,MAP-5002,MMSE and ECG before consent; protocol p.55 consent before any study-specific procedures
+z003,easy,shipped,"shipped MAP-5003 M6 box thurs w/ dry ice, notif sent tues, req + temp log in box. trk to follow",crc,sample_handling,MAP-5003,Shipped Thursday; lab manual s.8 Monday-Wednesday only
+z004,easy,MAP-5004 started early,"Hi Dana, MAP-5004's IP kit arrived by mail faster than we expected and she started taking the tablets on Saturday. Her baseline MRI isn't until next Wednesday. We've told her to keep going since she's tolerating it.",crc,procedure_sequence,MAP-5004,IP started before MRI; protocol p.42 brain imaging before study intervention
+z005,easy,MAP-5005 Month 12,"MAP-5005 finally came in for Month 12 on Wednesday, two months after the target date. Full visit done.",crc,visit_schedule,MAP-5005,Two months late; protocol p.36 s.8 +/-30 days
+z006,easy,MAP-5006,"Randomized MAP-5006 Friday. History: melanoma on his back, excised a year ago, no further treatment needed. Otherwise healthy.",crc,eligibility,MAP-5006,Melanoma within 2 years (not squamous/basal); protocol p.31 exclusion
+z007,easy,MAP-5007 baseline tube,"Notes from MAP-5007's baseline draw: lavender top drawn after the serum tube, then set straight in the rack - we forgot to invert it at all. Spun at 20 min, frozen at 45 min.",crc,sample_handling,MAP-5007,Tube not inverted 8-10 times; lab manual s.4
+z008,easy,MAP-5008 diagnosis,Dr. Ruiz (site physician) saw MAP-5008 at screening and diagnosed mild Alzheimer's dementia - she needs help with meds and finances now. But her MMSE was 24 so we randomized her Thursday.,crc,eligibility,MAP-5008,Dementia diagnosis by site physician; protocol p.29 and p.31 exclusion
+z009,easy,Question about MAP-5009 MRI,"Hi Priya,
+
+Reviewing MAP-5009's consent: the optional MRI page is completely blank - neither YES nor NO is signed. The baseline MRI was done last week. Can you tell me how consent for the MRI was documented?
+
+Thanks, Dana",cra,consent,MAP-5009,MRI done without signed optional MRI consent; consent.pdf p.11 sign and date your choice
+z010,easy,MAP-5010,"MAP-5010 sounded great on the telephone screen Monday so we went ahead and randomized her that afternoon. Her in-person screening visit (consent, labs, ECG, neuropsych) is next Tuesday.",crc,procedure_sequence,MAP-5010,Randomized before in-person screening; protocol p.38 s.8.1 randomize only after in-person screening shows eligibility
+z011,easy,req form,Dana - realised the requisition form for MAP-5011's Month 6 draw has no draw time on it. The tech didn't write it down and nobody remembers exactly.,crc,sample_handling,MAP-5011,Exact draw time must be recorded; lab manual s.4
+z012,easy,MAP-5012 meds,"MAP-5012 randomized Monday. Meds: empagliflozin (Jardiance) 10 mg, started 6 months ago by cardiology for heart failure, metoprolol, furosemide. Never diabetic.",crc,eligibility,MAP-5012,Diabetes drug class within 1 year even for other indication; protocol p.30 exclusion
+z013,easy,MAP-5013 Month 12 testing,"Hi Dana, at MAP-5013's Month 12 our neuropsych tester was out, so we did vitals, labs, CDR and questionnaires but no FC-SRT, DSST or Trails. We're not planning to bring him back for those.",crc,visit_schedule,MAP-5013,Neuropsychological battery missing at Month 12; protocol p.8 schema and Table 7
+z014,easy,MAP-5014,"Enrolled MAP-5014 today. PMH: autoimmune hepatitis on azathioprine, hypertension.",crc,eligibility,MAP-5014,Liver disease other than NAFLD; protocol p.30 exclusion
+z015,easy,shipment notice,"Hi, I emailed CALM the shipment notification for MAP-5015's box at 9 pm Sunday; FedEx picked it up at 10 am Monday. Dry ice, req and log included.",crc,sample_handling,MAP-5015,Notification ~13 h before; lab manual s.8 at least 24 h
+z016,easy,MAP-5016 cardiology,"Randomized MAP-5016 Wed. Cardiology notes say NYHA class IV heart failure, short of breath at rest some days.",crc,eligibility,MAP-5016,Class IV CHF; protocol p.30 exclusion
+z017,easy,Remote consent process - MAP-5017,"Hi Jo,
+
+Following up on MAP-5017's phone consent. In the note it says you read the consent form to her over the phone and then mailed her the form afterwards to sign, as she hadn't received a copy beforehand. Could you confirm? The protocol process is for her to have the ICF before the remote consent meeting.
+
+Dana",cra,consent,MAP-5017,ICF must be provided before remote consent meeting; protocol p.55
+z018,easy,freezer,MAP-5018's aliquots went into the -20 for two days because the -80 was packed and it was easier - the -80 was working fine. Moved them to the -80 this morning.,crc,sample_handling,MAP-5018,-20 only if -80 unavailable and max 24 h; lab manual s.7
+z019,easy,MAP-5019 blood draws,MAP-5019 let us do her screening labs but told us firmly she won't have any more blood drawn after that - she's terrified of needles. We randomized her Monday anyway since she's otherwise a great fit.,crc,eligibility,MAP-5019,Not able to undergo phlebotomy as reported by participant; protocol p.31 exclusion
+z020,easy,MAP-5020 screening,For MAP-5020 screening took about six weeks start to finish because of his travel. He's eligible and we're randomizing Friday.,crc,visit_schedule,MAP-5020,Screening >28 days; protocol p.36 s.8
+z021,hard,MAP-5021 cognition,"MAP-5021 has 7 years of education. MMSE 20, CDR 0.5, LM II delayed 4. Randomized Tuesday.",crc,none,,MMSE 20 meets >=20 for <8 yrs; LM II 4 in 3-6; protocol p.29-30
+z022,hard,MAP-5022 MMSE,"MAP-5022, college grad (16 years). MMSE 20, LM II delayed 6, CDR 0.5. PI agrees MCI. Randomized Monday.",crc,eligibility,MAP-5022,MMSE 20 <22 for >8 yrs; protocol p.29 inclusion
+z023,hard,MAP-5023 LM II,"MAP-5023: 15 years of education. Logical Memory II delayed 9, MMSE 27, CDR 0.5. Randomized as early MCI.",crc,none,,LM II 9 within 5-9 for 8-15 yrs; protocol p.30
+z024,hard,SDV query - MAP-5024 LM II,"Hi Marcus,
+
+SDV query on MAP-5024: the source shows Logical Memory II delayed = 10 and education = 15 years, and she was randomized as early MCI. Can you confirm those values? If so, she doesn't seem to meet the paragraph recall criterion.
+
+Dana",cra,eligibility,MAP-5024,LM II 10 above 5-9 for 8-15 yrs; protocol p.30 inclusion
+z025,hard,MAP-5025 scores,"MAP-5025 is a retired lawyer, 19 years of schooling. LM II delayed 13, MMSE 29. Memory complaints from his wife, CDR 0.5. Randomized Thursday.",crc,eligibility,MAP-5025,LM II 13 above 9-11 for 16+ yrs; protocol p.30 inclusion
+z026,hard,MAP-5026 CDR,"MAP-5026's CDR: global 0.5 driven by judgment and home & hobbies boxes, memory box 0. No complaints of memory issues from her or partner beyond mild word-finding. Randomized Friday.",crc,eligibility,MAP-5026,Memory box must be at least 0.5; protocol p.29 inclusion
+z027,hard,MAP-5027 complaints,"MAP-5027 insists his memory is fine, but his wife says he repeats questions and misplaces things weekly. CDR 0.5 with memory box 0.5 based on her report, MMSE 26, LM II 6 with 12 years of school. Randomized Tuesday.",crc,none,,Memory concern reported by study partner counts; protocol p.29 inclusion
+z028,hard,MAP-5028 BMI,"MAP-5028: BMI 20.1 (55.0 kg, 165.5 cm). Randomized Wednesday.",crc,none,,BMI 20.1 >= 20; protocol p.30
+z029,hard,MAP-5029 anthropometrics,"MAP-5029 screening: BMI 19.9, waist 70 cm, BP 118/72. Randomized Monday, she's thrilled.",crc,eligibility,MAP-5029,BMI 19.9 <20; protocol p.30 exclusion
+z030,hard,MAP-5030 BP,"Seated BP for MAP-5030, average of readings 2 and 3: 146/96. Randomized Thursday.",crc,eligibility,MAP-5030,DBP 96 >=95; protocol p.31 exclusion
+z031,hard,MAP-5031 BP readings,"MAP-5031 was nervous - BP readings 168/92, 160/90, 152/86. Recorded average of 2nd and 3rd: 156/88. Randomized Tuesday.",crc,none,,Recorded BP is average of readings 2-3 (protocol p.40) = 156/88 below limits; p.31
+z032,hard,MAP-5032 GDS,"On the GDS-15, MAP-5032 answered 9 of the 15 items in the depressed direction. She was randomized Monday.",crc,eligibility,MAP-5032,GDS 9/15; protocol p.31 exclusion
+z033,hard,MAP-5033 pain meds,"MAP-5033 takes tramadol a couple of times a year when his back flares, nothing in the past 3 months. Randomized Wednesday.",crc,none,,Occasional use not regular narcotic use; protocol p.31
+z034,hard,MAP-5034 renal meds,"MAP-5034's nephrologist had him on dapagliflozin (Farxiga) for kidney protection until 11 months before screening. No diabetes, eGFR 61. Randomized Friday.",crc,eligibility,MAP-5034,Diabetes drug class within 1 year; protocol p.30 exclusion
+z035,hard,MAP-5035 history,"MAP-5035 had a lung lobectomy for early lung cancer three years ago, no chemo, scans clear since. Randomized Monday.",crc,none,,Cancer history >2 years ago; protocol p.31
+z036,hard,MAP-5036 plans,MAP-5036 randomized Thursday. She mentioned they've put their house on the market and plan to move to Philadelphia next year to be near their daughter.,crc,eligibility,MAP-5036,Planning to move to another city; protocol p.31 exclusion
+z037,hard,MAP-5037 moving,"MAP-5037 is moving apartments next month - from the Upper West Side to Washington Heights, same city, actually closer to us. Randomized Tuesday.",crc,none,,Move within same city not exclusionary; protocol p.31
+z038,hard,MAP-5038 Month 6,MAP-5038's Month 6 visit happened five weeks after the target date. Full visit completed Wednesday.,crc,visit_schedule,MAP-5038,35 days late outside +/-30; protocol p.36 s.8
+z039,hard,MAP-5039 Month 18,"MAP-5039 did Month 18 four weeks before the target date because of a planned surgery. Visit complete, kit returned.",crc,none,,28 days early within +/-30; protocol p.36 s.8
+z040,hard,MAP-5040 call,MAP-5040 Month 14 call done 7 days before the target date since she's travelling over the target week. All fine.,crc,none,,7 days early within +/-7; protocol p.36 s.8
+z041,hard,MAP-5041 call,"m3 call for MAP-5041 done 9d early - pt going on cruise. ok, 4 tabs/d.",crc,visit_schedule,MAP-5041,9 days early outside +/-7; protocol p.36 s.8
+z042,hard,MAP-5042 processing,"MAP-5042 Month 12: draw 10:02, centrifuge start 11:01 (2000 x g, 10 min, 4C), aliquots in the -80 at 11:52.",crc,none,,"Spun at 59 min, frozen at 1 h 50 min; lab manual s.5"
+z043,hard,MAP-5043 processing times,"Hi Marcus, quick check on MAP-5043's Month 6 requisition: draw time 9:15, centrifuge start 10:20. Was that recorded correctly? Dana",cra,sample_handling,MAP-5043,Centrifuged 65 min after draw; lab manual s.5 within 60 minutes
+z044,hard,MAP-5044 req,"Hi Priya,
+
+On MAP-5044's Month 18 requisition the draw is 8:40 and freezer-in is 10:50, but the processing deviation box isn't ticked and the shipment notification to CALM didn't mention it. The box shipped Tuesday. Could you look at that?
+
+Dana",cra,sample_handling,MAP-5044,Frozen 2 h 10 min after draw without deviation mark or notification; lab manual s.5
+z045,hard,shipping plan,"July 4th is a Tuesday this year, so we'll get MAP-5045's box out on Monday the 3rd. Notification to CALM Friday.",crc,sample_handling,MAP-5045,Shipping on the day before a public holiday; lab manual s.8
+z046,miss,Month 6 draws Tuesday,"Hi Dana, three Month 6 draws Tuesday:
+- MAP-5046: spun 20 min, frozen 50 min, labels fine.
+- MAP-5146: spun 25 min, frozen 55 min. Our label template was missing the collection time field so those cryovials only show ID, visit and date.
+- MAP-5246: spun 15 min, frozen 40 min.
+All going out Monday.",crc,sample_handling,MAP-5146,Label must show collection time; lab manual s.6
+z047,miss,Fwd: Fwd: MAP-5047 scheduling,"Dana, forwarding the whole thread so you have the context on scheduling. All sorted now I think.
+
+---------- Forwarded message ----------
+From: Kim
+To: Ben
+Subject: Re: Fwd: MAP-5047 scheduling
+
+Great, thanks. She's already on day 6 of titration and doing well, so the amyloid PET on the 19th works fine for us. I'll remind her about the fasting for the PET.
+
+> From: Ben
+> PET center can do the 19th or the 26th. Which do you want?
+>
+>> From: Kim
+>> MRI done Monday, images uploaded. Kit dispensed Tuesday, she started 1 tab Wednesday.
+>> Can you get her on the amyloid PET schedule?
+>>
+>>> From: Ben
+>>> Reminder MAP-5047 needs MRI + amyloid PET this month.",crc,procedure_sequence,MAP-5047,IP started before amyloid PET; protocol p.42
+z048,miss,Follow-up: MAP-5048 baseline labs,"Hi Rafael,
+
+Thanks for the baseline packet for MAP-5048. One question: the screening labs, vitals and ECG are dated 18 days before the baseline visit and I don't see repeat labs, vitals or ECG at baseline. Can you confirm whether they were repeated?
+
+Dana",cra,visit_schedule,MAP-5048,Baseline labs/vitals/ECG may be skipped only if done within 14 days; protocol p.38 Table 7 footnote d
+z049,miss,two randomized,"MAP-5049 randomized Monday - all fine.
+MAP-5149 randomized Wednesday. He had a stroke two years ago and still has trouble finding words (expressive aphasia), but his memory testing fit MCI.",crc,eligibility,MAP-5149,Stroke with residual deficit; protocol p.31 exclusion
+z050,miss,quick one,"MAP-5050 M12 drawn 0945. pt ate ~6h before, req doesnt have last meal time on it. spun 20m, -80 at 50m.",crc,sample_handling,MAP-5050,Non-fasted draw needs last meal time on requisition; lab manual s.3
+z051,miss,Month 18 wrap up,"Hi Dana!
+
+MAP-5051 finished the study Tuesday - what a milestone, the whole team signed a card for her. Neuropsych battery, CDR with her son, labs, questionnaires all done, kit returned. Our BP cuff and scale were both out for calibration so we didn't get vitals or weight; we weren't going to bring her back for that. MRI and PET booked for next week.
+
+Priya",crc,visit_schedule,MAP-5051,Vital signs and anthropometrics required at all visits; protocol p.40
+z052,miss,infusion clinic,"Hi Dana, MAP-5052 is lovely - former kindergarten teacher, very funny. She mentioned at baseline she's been getting aducanumab infusions since before it was discontinued, and still has a few left. We randomized her Tuesday. Her daughter is the study partner.",crc,eligibility,MAP-5052,Amyloid modifying treatment; protocol p.31 exclusion
+z053,miss,randomizations,"MAP-5053 - randomized Mon after all screening results reviewed.
+MAP-5153 - randomized Tues; A1c, BMP, CBC back and fine. TSH, B12 and RPR still pending at the central lab.",crc,procedure_sequence,MAP-5153,Randomized before screening blood tests resulted; protocol p.8 s.1.3
+z054,miss,MAP-5054 screening day,"Long but good day with MAP-5054. Arrived 8:30, we did height/weight and the ECG first to keep the tech's schedule, then sat down for consent and she signed at 9:45. Labs and neuropsych after.",crc,consent,MAP-5054,Measurements and ECG before consent; protocol p.55
+z055,miss,Re: MAP-5055 A1c,"Hi Lucia,
+
+Following up on our call: MAP-5055's screening HbA1c in the lab report is 6.8%, and the eligibility form says 'no diabetes'. She was randomized last Friday. Can you tell me how eligibility was assessed?
+
+Dana",cra,eligibility,MAP-5055,HbA1c 6.8% >= 6.5%; protocol p.31 exclusion
+z056,miss,phlebotomy training,"We're retraining our new phleb. At MAP-5056's Month 6 she inverted the lavender top about four times, then racked it. Otherwise processing was on time.",crc,sample_handling,MAP-5056,Must invert 8-10 times; lab manual s.4
+z057,miss,ICF audit,"Hi Priya, in the ICF audit I noticed MAP-5057's consent has her signature and date, but the 'Person Obtaining Consent' line is blank. Screening and randomization followed. Can you check? Dana",cra,consent,MAP-5057,Consent signed by participant and coordinator; protocol p.22 and consent.pdf p.16
+z058,miss,this week,"MAP-5058 - Month 6 done, all good.
+MAP-5158 - randomized Thursday. Told us he relapsed on opioids two months ago and is now in an outpatient program.
+MAP-5258 - screen fail, GDS 11.",crc,eligibility,MAP-5158,Substance abuse/dependence within 6 months; protocol p.31 exclusion
+z059,miss,centrifuge,"For MAP-5059's baseline the centrifuge timer was set to 15 minutes at 2000 x g, 4C. Spun at 20 min post draw, frozen at 55 min.",crc,sample_handling,MAP-5059,Centrifuge 10 minutes; lab manual s.5
+z060,miss,screening updates,"Screening status:
+MAP-5060 - all screening done in 12 days, randomizing Monday.
+MAP-5160 - consent and labs on the 1st; neuropsych and ECG done 5 weeks later after her hip recovered. Eligible, randomizing Monday.
+MAP-5260 - telephone screen only so far.",crc,visit_schedule,MAP-5160,Screening >28 days; protocol p.36 s.8
+z061,irrelevant,toner,"Printer on the 3rd floor is out of toner again, I've ordered more.",crc,none,,Admin
+z062,irrelevant,GCP refresher,Reminder: CITI GCP refreshers due for Kim and Ben by month end.,crc,none,,Training
+z063,irrelevant,party RSVP,"RSVP for the investigators' dinner at AAIC please - Priya, Rafael and Dr. Ruiz will attend.",crc,none,,Social
+z064,irrelevant,dry ice vendor,"Our dry ice vendor contract renews next month; same vendor, same delivery days.",crc,none,,"Supplies, no sample affected"
+z065,irrelevant,team photo,Attached is our team photo for the study newsletter!,crc,none,,Social
+z066,irrelevant,EDC downtime,DCC notice: VISION will be down Saturday 10 pm to 2 am for upgrades.,cra,none,,IT notice
+z067,irrelevant,library event,We're running a memory health talk at the public library next month with the IRB-approved flyer. Expecting 40 people.,crc,none,,Recruitment event
+z068,irrelevant,budget,Finance approved the budget amendment for the extra MRI slots.,crc,none,,Finance
+z069,irrelevant,my travel,"Hi Priya, I'll arrive Tuesday around 10 and leave Wednesday 3 pm. Can you book a desk near the reg binders? Dana",cra,none,,CRA logistics
+z070,irrelevant,new sub-I,"Dr. Chen is joining as sub-investigator. CV, license and training attached; delegation log updated.",crc,none,,Staffing
+z071,irrelevant,translation certificate,Translation certificate for the Spanish newsletter is attached for the binder.,crc,none,,Regulatory
+z072,irrelevant,logo,Could you send the MAP logo files? We're making new reminder magnets.,crc,none,,Materials
+z073,irrelevant,Re: monitoring report,"Hi Priya, the monitoring report from my last visit is attached; all action items from it were resolved. Thanks for the quick turnaround. Dana",cra,none,,"Report, no open issue"
+z074,irrelevant,elevator,Heads up: the elevator in our building will be out Thursday. We have no visits that day.,crc,none,,Admin
+z075,irrelevant,welcome,"Welcome to the team, Andre! He'll shadow Marcus for two weeks before doing draws on his own.",crc,none,,Staffing
+z076,safety,MAP-5076 dizzy,MAP-5076 feels lightheaded when she stands up since going to 3 tabs. No falls. PI asked her to stay at 3 for now.,crc,out_of_scope,MAP-5076,Adverse event; protocol p.44 dizziness/lightheadedness
+z077,safety,hives,"MAP-5077 broke out in hives Saturday and went to urgent care, given antihistamines. IP on hold per PI.",crc,out_of_scope,MAP-5077,Skin reaction AE; consent p.6
+z078,safety,car accident,"MAP-5078 was in a car accident Friday, broken ribs, admitted for two nights. SAE paperwork underway.",crc,out_of_scope,MAP-5078,Hospitalization SAE; protocol p.44
+z079,safety,seizure,"MAP-5079's husband called: she had a seizure at home last night, first ever. She's in the ER now.",crc,out_of_scope,MAP-5079,Adverse event; protocol p.43-44
+z080,safety,Hb result,"MAP-5080's Month 12 hemoglobin came back 9.4, down from 12.8. PI is concerned she's becoming anemic and has called her PCP today.",crc,out_of_scope,MAP-5080,Writer says result is a risk; consent p.6 anemia
+z081,safety,confusion,"MAP-5081's daughter says he's suddenly very confused since this morning, not making sense. We told her to call 911.",crc,out_of_scope,MAP-5081,Acute mental status change; protocol p.25 contingencies
+z082,safety,Fwd: MAP-5082 hospital records,"Dana - see below, we're reviewing now.
+
+---------- Forwarded message ----------
+From: Dr. Ruiz
+To: MAP team
+
+Records from MAP-5082's COVID admission arrived. He's on oxygen but improving. The hospital med list includes glipizide - his wife says he's been on it for diabetes for years and just never mentioned it. He was randomized 2 months ago.
+
+> From: Rafael
+> Can you look at the discharge summary when it comes?",crc,"eligibility,out_of_scope",MAP-5082,Hospitalization plus known diabetes on diabetes medication; protocol p.30-31 exclusion
+z083,safety,MAP-5083 Month 6,"Hi Dana,
+
+MAP-5083 got shaky at her Month 6 visit, fingerstick 61; juice, recovered in 15 min, PI advised PCP visit today. While we were looking after her the aliquots sat in the rack - they went into the -80 2 h 20 min after the draw. They shipped Tuesday; we didn't mark anything on the requisition.
+
+Ben",crc,"out_of_scope,sample_handling",MAP-5083,Hypoglycemia plus late freeze not marked as deviation; lab manual s.5
+z084,safety,MAP-5084 leg swelling,"MAP-5084 went to the ER with a swollen painful calf, ultrasound showed a DVT, on blood thinners now.
+
+Also - at her screening visit the ECG was done while her eConsent was still sitting unsigned in VISION; she finished signing about an hour later. Just noticed reviewing the audit trail.",crc,"consent,out_of_scope",MAP-5084,DVT AE plus ECG before consent signed; protocol p.55
+z085,safety,MAP-5085,"MAP-5085 c/o dizziness and HA x1 wk since going to 4 tabs, PI reduced to 3. Also his M10 call was done 2 wks late, my fault.",crc,"out_of_scope,visit_schedule",MAP-5085,AE plus monthly contact outside +/-7 days; protocol p.36 s.8
+z086,safety,sad news,Sorry to report MAP-5086 died Sunday of a stroke. Family let us know today. SAE and final status to follow.,crc,out_of_scope,MAP-5086,Death; protocol p.44
+z087,safety,MAP-5087 kidney,MAP-5087's eGFR dropped to 32 at Month 12 (was 70). PI stopped IP and is worried about acute kidney injury; referred to nephrology urgently.,crc,out_of_scope,MAP-5087,Writer says risk; protocol p.26 acute renal insufficiency
+z088,old,screening log cleanup,Closing MAP-5088 on the log - screen failed last spring because of a melanoma diagnosed that winter. No procedures since.,crc,none,,Old correct screen fail; protocol p.31
+z089,old,SGLT2 question,Question: MAP-5089 (phone screen) takes Jardiance for heart failure. Would that exclude him? We haven't consented him yet.,crc,none,,Question; protocol p.30
+z090,old,BP at follow-up,"Hypothetical: if a participant's BP at a follow-up visit averages 165/90, what should we do? Nobody right now, just want to be ready.",crc,none,,"Hypothetical, no participant"
+z091,old,shipment moved,"We had MAP-5091's box set for Monday the 3rd but realised July 4th is Tuesday, so we held it in the -80 and it'll ship Wednesday the 5th, notification sent Monday.",crc,none,,Prevented; lab manual s.8
+z092,old,Fwd: MAP-5092 remote consent,"Dana, fwd for the file - all done per protocol.
+
+---------- Forwarded message ----------
+From: Jo
+
+ICF was mailed to MAP-5092 last week. Video consent Tuesday, she asked about the MRI and the pay card, signed on camera. I countersigned after she showed her signed pages. Photos of signed pages received by text Tuesday afternoon; screening started Wednesday. She'll bring the original to her first in-person visit.",crc,none,,Correct remote paper consent; protocol p.55-56
+z093,old,IP supply,"MAP-5093 prefers 3-month kits, so pharmacy mailed her the second 3-month kit at Month 9.",crc,none,,Allowed; protocol p.34 and consent p.4
+z094,old,in-person monthly,"MAP-5094 likes to come in for her monthly contact rather than do it by phone, so Month 7 was in person on the target date.",crc,none,,Allowed; consent p.4
+z095,old,split visit,"MAP-5095's Month 6: GDS, MAC-Q and ADL questionnaires done by phone Monday, then in-person neuropsych, vitals and labs Wednesday. Both in window.",crc,none,,Remote and in-person modules allowed; protocol p.7 and p.36
+z096,old,Re: late freeze deviation,"Hi Marcus, thanks - the late-freeze deviation for MAP-5096 last month was marked on the requisition and CALM was told in the notification. I'm closing it. Dana",cra,none,,"Old news, handled per lab manual s.5"
+z097,old,titration held,"MAP-5097's kit arrived before her MRI so we asked her not to open it; she confirmed she hasn't started. MRI is Monday, tablets after that.",crc,none,,Prevented; protocol p.42
+z098,old,CDR question,"If a participant's UW CDR comes out 0 but they have clear complaints and meet the MCI neuropsych criteria, can the memory box be scored 0.5? Thinking of MAP-5098, still in screening.",crc,none,,Question; protocol p.29-30
+z099,old,partner by phone,"MAP-5099's study partner lives in Ohio, so she does the partner CDR and questionnaires by phone at each visit. Consented verbally with the script, documented.",crc,none,,Allowed; protocol p.30 and p.55
+z100,old,withdrawal last year,For the closeout report: MAP-5100 withdrew last year after moving abroad. Final status and termination date were entered at the time.,crc,none,,Old news handled; protocol p.36
