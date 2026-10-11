@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import operator as op
+import re
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
@@ -19,6 +20,7 @@ from dateutil import parser as dtparser
 from . import db, ingest, llm, notes, settings, textutil
 from .config import Study
 
+EARLIER_TAG = re.compile(r"\[earlier email, [^\]]*\]\s*")  # written by pipeline._with_memory
 _OPS = {"lt": op.lt, "le": op.le, "gt": op.gt, "ge": op.ge, "eq": op.eq, "ne": op.ne}
 
 
@@ -131,11 +133,14 @@ def numeric_checks(rules: list[dict], event: dict) -> tuple[list[Finding], list[
         if violates(f["numeric_value"], r["operator"], r["value"], r["value2"]):
             bound = (f"{r['value']:g}-{r['value2']:g}" if r["operator"] == "outside"
                      else f"{r['operator']} {r['value']:g}")
+            earlier = f.get("earlier")
             found.append(Finding(
-                rule=r, event=event, method="numeric", message_quote=f["quote"],
+                rule=r, event=event, method="numeric",
+                message_quote=f"{event['quote']} … {f['quote']}" if earlier else f["quote"],
                 observed=f"{f['value']} {f.get('unit') or ''}".strip(),
-                reasoning=f"{r['parameter']} = {f['numeric_value']:g} violates the rule (violation when {bound}).",
-                extra={"fact_quote": f["quote"]},
+                reasoning=f"{r['parameter']} = {f['numeric_value']:g} violates the rule (violation when {bound})."
+                          + (f" The value was reported in an earlier email ({earlier['date']})." if earlier else ""),
+                extra={"fact_quote": f["quote"], **({"earlier": earlier} if earlier else {})},
             ))
     return found, undecided
 
@@ -367,7 +372,7 @@ def match_event(study: Study, event: dict, msg: dict, corpus: str, *, use_cache:
             db.audit("finding_rejected_quote_not_in_message", entity_type="message", entity_id=msg["id"],
                      study_id=study.study_id, rule_id=f.rule["id"], quote=f.message_quote)
             continue
-        f.message_quote = " … ".join(textutil.expand_to_sentence(p, corpus) for p in pieces)
+        f.message_quote = EARLIER_TAG.sub("", " … ".join(textutil.expand_to_sentence(p, corpus) for p in pieces))
         if not confirm(study, f, use_cache):
             db.audit("finding_not_confirmed_by_document", entity_type="message", entity_id=msg["id"],
                      study_id=study.study_id, rule_id=f.rule["id"], reasoning=f.reasoning,

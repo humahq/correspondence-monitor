@@ -101,6 +101,7 @@ def item_context(study: Study, item: dict, recipient: Person | None, routed_to: 
             "sender_name": ev.get("sender_name") or ev.get("sender_email") or "unknown sender",
             "unsure": ev.get("certainty") == "unsure",
             "unsure_reason": ev.get("unsure_reason") or "",
+            "earlier": (f"{ev['earlier']['date']}, \"{ev['earlier']['subject']}\"" if ev.get("earlier") else ""),
         },
         "also": also_broken(study, ev),
         "recipient": _person_ctx(recipient, "Hello"),

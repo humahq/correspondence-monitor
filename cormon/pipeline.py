@@ -8,6 +8,7 @@ from dateutil import parser as dtparser
 
 from . import capture, config, db, events, items, matching, routing, settings, textutil, triage
 from .config import Study
+from .drafting import local_time
 
 SAFETY_TITLE = "Safety information received; not reviewed by this monitor (out of scope)"
 
@@ -74,6 +75,59 @@ def _pooled_facts(event: dict, pid: str | None, all_events: list[dict]) -> list[
             seen.add(f["parameter"])
             out.append(f)
     return out
+
+
+MEMORY_EVENTS = ("enrollment", "randomization")
+
+
+def _earlier_facts(study: Study, pid: str, msg: dict) -> list[dict]:
+    """The participant's facts from earlier messages (any thread), newest first, each marked with where it came
+    from. Used only for enrollment and randomization, where eligibility depends on values reported before."""
+    days = settings.get("matching.memory_days", 60)
+    now = _instant(msg.get("sent_at") or "")
+    out = []
+    rows = db.q("SELECT e.data, m.id, m.sent_at, m.subject FROM events e JOIN messages m ON m.id=e.message_id "
+                "WHERE m.study_id=? AND m.id<>? AND e.version=(SELECT MAX(version) FROM events WHERE message_id=m.id)",
+                (study.study_id, msg["id"]))
+    for r in sorted(rows, key=lambda r: _instant(r["sent_at"] or ""), reverse=True):
+        when = _instant(r["sent_at"] or "")
+        if not now or not when or when >= now or now - when > days * 86400:
+            continue
+        for e in db.unjs(r["data"], {}).get("events", []):
+            if _pid(e.get("participant_id")) != pid or e["temporality"] == "hypothetical" or e.get("prevented"):
+                continue
+            out += [dict(f, earlier={"message_id": r["id"], "date": local_time(r["sent_at"]),
+                                     "subject": r["subject"] or "(no subject)"}) for f in e["facts"]]
+    return out
+
+
+def _with_memory(study: Study, event: dict, pid: str | None, msg: dict, corpus: str) -> tuple[dict, str]:
+    if event["event_type"] not in MEMORY_EVENTS or not pid:
+        return event, corpus
+    have = {f["parameter"] for f in event["facts"]}
+    added = []
+    for f in _earlier_facts(study, pid, msg):
+        if f["parameter"] not in have:
+            have.add(f["parameter"])
+            added.append(f)
+    if not added:
+        return event, corpus
+    notes_ = "\n".join(f"[earlier email, {f['earlier']['date']}, \"{f['earlier']['subject']}\"] {f['quote']}"
+                       for f in added)
+    return dict(event, facts=event["facts"] + added), f"{corpus}\n\nEARLIER EMAILS ABOUT {pid}:\n{notes_}"
+
+
+def _already_raised(study: Study, f, pid: str | None, msg_id: int) -> bool:
+    """A finding that rests on an earlier email's fact is not raised again if that participant already has an item
+    of the same kind (in any thread)."""
+    if not f.extra.get("earlier") or not pid:
+        return False
+    hit = db.q1("SELECT id FROM items WHERE study_id=? AND kind='finding' AND pattern_class=? AND participant_id=? "
+                "AND first_message_id<>?", (study.study_id, f.rule["pattern_class"], pid, msg_id))
+    if hit:
+        db.audit("earlier_fact_already_raised", entity_type="message", entity_id=msg_id, study_id=study.study_id,
+                 item_id=hit["id"], rule_id=f.rule["id"], participant_id=pid)
+    return hit is not None
 
 
 def _base_evidence(study: Study, msg: dict, event: dict) -> dict:
@@ -295,8 +349,10 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                          quote=event["quote"])
 
             pooled = dict(event, facts=_pooled_facts(event, pid, data["events"]))
+            pooled, event_corpus = _with_memory(study, pooled, pid, msg, corpus)
             anchors.append(pooled)
-            findings = matching.match_event(study, pooled, msg, corpus, use_cache=use_cache)
+            findings = matching.match_event(study, pooled, msg, event_corpus, use_cache=use_cache)
+            findings = [f for f in findings if not _already_raised(study, f, pid, msg_id)]
             if event["safety_signal"] and not findings:
                 out_of_scope("safety signal that matches no study requirement, so its only reading is safety")
                 continue
@@ -340,6 +396,7 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 doc_quote=f.doc_quote, doc_page=f.doc_page, doc_passage=f.doc_passage,
                 method=f.method, observed=f.observed, certainty=f.certainty,
                 confirmation=f.confirmation, unsure_reason=f.extra.get("unsure_reason"),
+                earlier=f.extra.get("earlier"),
                 hours_until=lead["hours"], triage_facts=lead["facts"],
                 additional=[{"rule_id": c["f"].rule["id"], "rule_text": c["f"].rule["text"],
                              "doc_id": c["f"].rule["doc_id"], "doc_title": study.doc(c["f"].rule["doc_id"])["title"],

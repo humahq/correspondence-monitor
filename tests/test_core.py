@@ -76,7 +76,7 @@ def test_unsure_finding_says_so_in_the_email():
            "item": {"id": 7, "title": "Please check (not sure): Sample late", "participant_id": "P1", "site": "S",
                     "link": "http://x/items/t"},
            "finding": {"sender_name": "A", "message_date": "1 Jan", "message_quote": "q", "doc_title": "Lab",
-                       "page": 3, "doc_quote": "d", "unsure": True, "unsure_reason": "Years of education not given."},
+                       "page": 3, "doc_quote": "d", "unsure": True, "unsure_reason": "Years of education not given.", "earlier": ""},
            "also": [], "recipient": {"first_name": "Bo"}}
     _, body = drafting.render(t, ctx)
     assert "Please check (not sure): Sample late" in body
