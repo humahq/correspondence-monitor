@@ -22,7 +22,7 @@ templates:
       <p><b>[{{ item.tier_label }}] {{ study.short_name }} · {{ item.site }} · {{ item.participant_id or "participant not named" }}</b><br>
       {{ item.title }}</p>
       {%- if finding.unsure %}
-      <p><b>Not fully sure.</b> Please check: {{ finding.unsure_reason }}</p>
+      <p><b>Why I am not sure:</b> {{ finding.unsure_reason }}</p>
       {%- endif %}
       <p><b>Correspondence</b> ({{ finding.sender_name }}, {{ finding.message_date }}):<br><i>"{{ finding.message_quote }}"</i></p>
       <p><b>Study requirement</b> ({{ finding.doc_title }}, p. {{ finding.page }}):<br><i>"{{ finding.doc_quote }}"</i></p>
@@ -68,10 +68,10 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      {{ item.participant_id or "A participant" }} at {{ item.site }} appears to have been enrolled outside the eligibility criteria.
+      {{ item.title }} ({{ item.participant_id or "participant not named" }}, {{ item.site }}).
       {%- if finding.unsure %}
 
-      I am not fully sure about this one. Please check: {{ finding.unsure_reason }}
+      Why I am not sure: {{ finding.unsure_reason }}
       {%- endif %}
 
       Asked of you: confirm with the site within two days whether this is a deviation, and record it if so.
@@ -107,7 +107,7 @@ templates:
       {{ item.title }} ({{ item.participant_id or "participant not named" }}, {{ item.site }}).
       {%- if finding.unsure %}
 
-      I am not fully sure about this one. Please check: {{ finding.unsure_reason }}
+      Why I am not sure: {{ finding.unsure_reason }}
       {%- endif %}
 
       Asked of you: follow up with the site within two days.

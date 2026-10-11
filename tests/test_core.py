@@ -79,9 +79,13 @@ def test_unsure_finding_says_so_in_the_email():
                        "page": 3, "doc_quote": "d", "unsure": True, "unsure_reason": "Years of education not given."},
            "also": [], "recipient": {"first_name": "Bo"}}
     _, body = drafting.render(t, ctx)
-    assert "not fully sure about this one. Please check: Years of education not given." in body
+    assert "Please check (not sure): Sample late" in body
+    assert "Why I am not sure: Years of education not given." in body
     _, body = drafting.render(t, dict(ctx, finding=dict(ctx["finding"], unsure=False)))
-    assert "not fully sure" not in body
+    assert "not sure:" not in body
+    elig = dict(drafting.select("eligibility", "cra", "email", "medium"), ai_edit=False)
+    _, body = drafting.render(elig, dict(ctx, item=dict(ctx["item"], title="Randomization planned with eGFR 41")))
+    assert "Randomization planned with eGFR 41 (P1, S)." in body and "enrolled" not in body
 
 
 def test_template_refuses_missing_values():
