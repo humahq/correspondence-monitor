@@ -78,10 +78,13 @@ Teams messages are shown in the bot's records only (simulated); they are not pos
 **What it does with each email, in 4 steps:**
 
 1. **Reads it.** It works out what happened, to which patient, and when. It also decides whether this is **new** (happening now), **planned** (about to happen), or **old news** (already happened and been dealt with, or forwarded from weeks ago).
-2. **Checks it against the study rules.** The bot turned the protocol, lab manual and consent form into **111 short rules** (see them with `./bin/cormon-cloud rules`). It only looks for 5 kinds of problem: **eligibility, visit schedule, procedure order, sample handling and consent.** Anything else is ignored on purpose.
+2. **Checks it against the study rules.** The bot turned the protocol, lab manual and consent form into **124 short rules** (see them with `./bin/cormon-cloud rules`). It only looks for 5 kinds of problem: **eligibility, visit schedule, procedure order, sample handling and consent.** Anything else is ignored on purpose.
    - Rules with a number ("eGFR must be 45 or more") are checked by plain code, so the same email always gets the same answer.
    - Rules without a number ("consent must be signed before any study procedure") are judged by the AI.
+   - **Second reading:** it also reads the whole email once against the full rule list, to catch anything the first pass missed.
+   - **Memory:** when an email says a patient was enrolled or randomized, it also checks that patient's numbers from earlier emails (any thread, last 60 days). The alert says which earlier email the number came from.
 3. **Double-checks.** Before raising anything, it must find the exact words in the email **and** the exact sentence in the protocol. If it can't find both, it stays quiet. That's why every alert quotes both.
+   - **Not sure?** If the protocol leaves the call to the study doctor, or the email is missing one fact (for example years of education), it doesn't stay quiet. It sends the alert to the CRA marked **"Please check (not sure)"** with the reason.
 4. **Decides how urgent it is, and who to tell:**
    - **Immediate:** the problem is planned within 48 hours (so it can still be stopped), or it's a consent problem. The CRA and the sponsor are emailed, and the site gets a short careful note.
    - **Medium:** a problem that has already happened. The CRA is emailed (the sponsor lead is copied), and it goes in the daily summary.
@@ -116,6 +119,7 @@ The lab manual is a practice version written for this demo, so the sample-handli
 - **Safety only:** "MAP-0305 fell and broke her wrist." It should refuse and point to the medical monitor.
 - **Messy writing:** typos, short forms ("pt", "rand'd", "GFR 4l"), missing units.
 - **Two patients in one email,** one fine and one not. It should flag only the right patient.
+- **Two emails together:** first "MAP-0410 screened, eGFR 41", then a few minutes later a new email "Randomized MAP-0410 today." The second one should alert, quoting the first.
 - **Vague:** "Labs a bit off, enrolled anyway." This is a judgment call, so tell us what you'd expect.
 - **Not about the study at all:** "Office closed Monday." It should stay quiet.
 
@@ -224,7 +228,7 @@ Each test email uses the AI, so a run costs a few cents.
 
 | Command | What it does |
 |---|---|
-| `./bin/cormon-cloud rules` | The 111 rules the bot made from the study documents |
+| `./bin/cormon-cloud rules` | The 124 rules the bot made from the study documents |
 | `./bin/cormon-cloud status` | What the bot did recently |
 | `./bin/cormon-cloud log --item 1` | The full history of item 1 |
 | `./bin/cormon-cloud digest --hours 24` | Preview the sponsor's daily summary |
