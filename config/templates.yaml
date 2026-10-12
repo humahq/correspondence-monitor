@@ -50,7 +50,7 @@ templates:
     channel: teams
     severity: immediate
     body: |
-      <p><b>URGENT · {{ study.short_name }} · {{ item.participant_id or "participant not named" }} · {{ item.site }}</b></p>
+      <p><b>{{ item.tier_label }} · {{ study.short_name }} · {{ item.participant_id or "participant not named" }} · {{ item.site }}</b></p>
       <p><b>Problem:</b> {{ item.title }}</p>
       <p><b>What the study rule says</b> ({{ finding.doc_title }}, page {{ finding.page }}):<br><i>"{{ finding.doc_quote }}"</i></p>
       {%- for a in also %}
