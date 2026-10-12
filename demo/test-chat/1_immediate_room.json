@@ -1,0 +1,7 @@
+{
+ "text": "MAP-0181 at Site 01: BP 170/95 this morning. We plan to randomize her at 2pm today.",
+ "expect": "eligibility",
+ "participant": "MAP-0181",
+ "from": "crc",
+ "chat": "room"
+}

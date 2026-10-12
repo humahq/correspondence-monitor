@@ -1,0 +1,7 @@
+{
+ "text": "MAP-0182 was randomized yesterday. Her screening eGFR was 40.",
+ "expect": "eligibility",
+ "participant": "MAP-0182",
+ "from": "crc",
+ "chat": "room"
+}

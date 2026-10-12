@@ -18,6 +18,10 @@ Input formats (mix freely):
   .eml   a real email file; the study address is added to Cc if no study address is on it.
          Expectations can go in X-Expect / X-Participant headers.
   .csv   one message per row, columns: id, subject, body, from, expect, participant (only body is required).
+  .json  a chat message (Teams or Google Chat), posted in the study room or sent to the bot directly:
+             {"text": "MAP-0301 randomized today, eGFR 41", "from": "crc", "chat": "room",
+              "expect": "eligibility", "participant": "MAP-0301"}
+         "chat" is "room" (the default) or "direct"; only "text" is required.
 """
 
 from __future__ import annotations
@@ -52,6 +56,7 @@ class Case:
     expect: set[str] | None = None
     participant: str | None = None
     raw: bytes | None = None
+    chat: str | None = None          # room | direct, for a chat message instead of an email
     result: dict = field(default_factory=dict)
 
 
@@ -98,6 +103,14 @@ def _read_csv(path: Path) -> list[Case]:
     return out
 
 
+def _read_json(path: Path) -> Case:
+    d = json.loads(path.read_text(encoding="utf-8"))
+    chat = (d.get("chat") or "room").strip().lower()
+    return Case(name=path.name, subject=d.get("subject") or d["text"][:60], body=d["text"].strip(),
+                sender=d.get("from") or "crc", expect=_expect(d.get("expect")),
+                participant=d.get("participant") or None, chat="direct" if chat == "direct" else "room")
+
+
 def read_folder(folder: Path) -> list[Case]:
     files = sorted(p for p in folder.rglob("*") if p.is_file() and not p.name.startswith("."))
     cases: list[Case] = []
@@ -109,6 +122,8 @@ def read_folder(folder: Path) -> list[Case]:
             cases.append(_read_eml(p))
         elif ext == ".csv":
             cases.extend(_read_csv(p))
+        elif ext == ".json":
+            cases.append(_read_json(p))
     return cases
 
 
@@ -207,17 +222,34 @@ def _build(study, case: Case) -> bytes:
     return bytes(msg)
 
 
+def _post_chat(study, case: Case, inbox: Path) -> str:
+    """Drop the case into the chat simulator; returns the message's external id."""
+    (name, addr), = getaddresses([_sender(study, case.sender)[0]])
+    ext = f"test-chat:{time.time_ns()}"
+    (inbox / f"case-{time.time_ns()}.json").write_text(json.dumps({
+        "id": ext, "study_id": study.study_id, "channel": case.chat, "from_email": addr, "from_name": name,
+        "text": case.body}))
+    return ext
+
+
 def run_case(study, case: Case) -> None:
     from . import db, service, settings
-    raw = _build(study, case)
-    rfc = email.message_from_bytes(raw, policy=email.policy.default).get("Message-ID", "").strip()
-    inbox = settings.data_dir() / "sim" / "inbox"
-    inbox.mkdir(parents=True, exist_ok=True)
     before_out = db.q1("SELECT COALESCE(MAX(id), 0) m FROM outbox")["m"]
     t0 = time.time()
-    (inbox / f"case-{time.time_ns()}.eml").write_bytes(raw)
-    service.tick(log=lambda *_: None)
-    m = db.q1("SELECT id, study_id, status, error FROM messages WHERE rfc_message_id=? ORDER BY id DESC", (rfc,))
+    if case.chat:
+        inbox = settings.data_dir() / "sim" / "teams_inbox"
+        inbox.mkdir(parents=True, exist_ok=True)
+        ext = _post_chat(study, case, inbox)
+        service.tick(log=lambda *_: None)
+        m = db.q1("SELECT id, study_id, status, error FROM messages WHERE channel='teams' AND external_id=?", (ext,))
+    else:
+        raw = _build(study, case)
+        rfc = email.message_from_bytes(raw, policy=email.policy.default).get("Message-ID", "").strip()
+        inbox = settings.data_dir() / "sim" / "inbox"
+        inbox.mkdir(parents=True, exist_ok=True)
+        (inbox / f"case-{time.time_ns()}.eml").write_bytes(raw)
+        service.tick(log=lambda *_: None)
+        m = db.q1("SELECT id, study_id, status, error FROM messages WHERE rfc_message_id=? ORDER BY id DESC", (rfc,))
     found = [dict(r) for r in db.q("SELECT id, kind, pattern_class, tier, participant_id, title, reasoning FROM items "
                                    "WHERE first_message_id=?", (m["id"],))] if m else []
     classes = {i["pattern_class"] for i in found if i["kind"] == "finding" and i["pattern_class"]}
@@ -343,7 +375,7 @@ def child_main(argv: list[str]) -> None:
         sys.exit(f"{settings.ROOT} is not a sandbox (channels are not 'sim'); refusing to run")
     cases = read_folder(Path(args.folder))
     if not cases:
-        sys.exit(f"no .txt, .eml or .csv messages found in {args.folder}")
+        sys.exit(f"no .txt, .eml, .csv or .json messages found in {args.folder}")
     _fresh_db(Path(args.seed_from))
     study = next(iter(config.studies().values()))
     print(f"running {len(cases)} message(s) through the sandbox (nothing is sent)\n", flush=True)

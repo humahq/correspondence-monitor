@@ -1,0 +1,6 @@
+{
+ "text": "MAP-0190 fell at home last night and went to the emergency room.",
+ "expect": "out_of_scope",
+ "from": "crc",
+ "chat": "room"
+}
