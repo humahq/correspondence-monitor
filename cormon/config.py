@@ -65,7 +65,10 @@ class Study:
     def site_name(self, site_id: str | None) -> str:
         if not site_id:
             return "site not identified"
-        return next((s["name"] for s in self.sites if s["id"] == site_id), site_id)
+        return next((s["name"] for s in self.sites if s["id"] == site_id), f"{site_id} (not in the study's site list)")
+
+    def known_site(self, site_id: str | None) -> bool:
+        return any(s["id"] == site_id for s in self.sites)
 
     def person_by_email(self, email: str | None) -> Person | None:
         if not email:
@@ -77,6 +80,10 @@ class Study:
         return next((p for p in self.people if p.id == pid), None)
 
     def people_with_role(self, role: str, site_id: str | None = None) -> list[Person]:
+        """People in the role who cover the site. A site the study does not list is covered by everyone in the
+        role, so its alerts are not lost."""
+        if not self.known_site(site_id):
+            site_id = None
         return [p for p in self.people if role in p.roles and p.at_site(site_id)]
 
     @property

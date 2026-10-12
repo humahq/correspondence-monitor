@@ -19,17 +19,18 @@ templates:
     channel: teams
     severity: "*"
     body: |
-      <p><b>[{{ item.tier_label }}] {{ study.short_name }} · {{ item.site }} · {{ item.participant_id or "participant not named" }}</b><br>
-      {{ item.title }}</p>
+      <p><b>{{ item.tier_label }} · {{ study.short_name }} · {{ item.participant_id or "participant not named" }} · {{ item.site }}</b></p>
+      <p><b>Problem:</b> {{ item.title }}</p>
       {%- if finding.unsure %}
       <p><b>Why I am not sure:</b> {{ finding.unsure_reason }}</p>
       {%- endif %}
-      <p><b>Correspondence</b> ({{ finding.sender_name }}, {{ finding.message_date }}):<br><i>"{{ finding.message_quote }}"</i></p>
-      <p><b>Study requirement</b> ({{ finding.doc_title }}, p. {{ finding.page }}):<br><i>"{{ finding.doc_quote }}"</i></p>
+      <p><b>What the site wrote</b> ({{ finding.sender_name }}, {{ finding.message_date }}):<br><i>"{{ finding.message_quote }}"</i>
+      {%- if finding.earlier %}<br>(Part of this is from an earlier message: {{ finding.earlier }}.){% endif %}</p>
+      <p><b>What the study rule says</b> ({{ finding.doc_title }}, page {{ finding.page }}):<br><i>"{{ finding.doc_quote }}"</i></p>
       {%- for a in also %}
-      <p><b>Also does not meet</b> ({{ a.where }}):<br><i>"{{ a.doc_quote }}"</i>{% if a.message_quote %}<br>Site wrote: <i>"{{ a.message_quote }}"</i>{% endif %}</p>
+      <p><b>It also goes against this rule</b> ({{ a.where }}):<br><i>"{{ a.doc_quote }}"</i>{% if a.message_quote and a.message_quote != finding.message_quote %}<br>The site wrote: <i>"{{ a.message_quote }}"</i>{% endif %}</p>
       {%- endfor %}
-      <p>Routed to: {{ item.routed_to }} · Item #{{ item.id }} · <a href="{{ item.link }}">details</a></p>
+      <p><b>Who was told:</b> {{ item.routed_to }}<br>Item #{{ item.id }} · <a href="{{ item.link }}">details</a></p>
 
   - id: teams-study-good-news
     topic: good_news
@@ -37,10 +38,10 @@ templates:
     channel: teams
     severity: "*"
     body: |
-      <p><b>[Update] {{ study.short_name }} · {{ item.site }} · {{ item.participant_id or "study" }}</b><br>
-      {{ item.title }}</p>
-      <p><i>"{{ finding.message_quote }}"</i> ({{ finding.sender_name }}, {{ finding.message_date }})</p>
-      <p>Item #{{ item.id }} · added to the clearing list</p>
+      <p><b>Good news · {{ study.short_name }} · {{ item.participant_id or "study" }} · {{ item.site }}</b></p>
+      <p>{{ item.title }}</p>
+      <p><b>What the site wrote</b> ({{ finding.sender_name }}, {{ finding.message_date }}):<br><i>"{{ finding.message_quote }}"</i></p>
+      <p>Item #{{ item.id }} · added to the CRA's to-do list</p>
 
   # ---------------- Teams: alert channel (immediate only) ----------------
   - id: teams-alert
@@ -49,13 +50,13 @@ templates:
     channel: teams
     severity: immediate
     body: |
-      <p><b>IMMEDIATE · {{ study.short_name }} · {{ item.site }} · {{ item.participant_id or "participant not named" }}</b></p>
-      <p>{{ item.title }}</p>
-      <p><b>Requirement:</b> "{{ finding.doc_quote }}" ({{ finding.doc_title }}, p. {{ finding.page }})</p>
+      <p><b>URGENT · {{ study.short_name }} · {{ item.participant_id or "participant not named" }} · {{ item.site }}</b></p>
+      <p><b>Problem:</b> {{ item.title }}</p>
+      <p><b>What the study rule says</b> ({{ finding.doc_title }}, page {{ finding.page }}):<br><i>"{{ finding.doc_quote }}"</i></p>
       {%- for a in also %}
-      <p><b>Also:</b> "{{ a.doc_quote }}" ({{ a.where }})</p>
+      <p><b>It also goes against this rule</b> ({{ a.where }}):<br><i>"{{ a.doc_quote }}"</i></p>
       {%- endfor %}
-      <p><b>Asked of {{ people.cra.name }}:</b> call the site today.</p>
+      <p><b>Next step:</b> {{ people.cra.name }} (CRA) has been asked to call the site today.</p>
       <p>Item #{{ item.id }} · <a href="{{ item.link }}">details</a></p>
 
   # ---------------- Email: CRA ----------------
@@ -82,14 +83,14 @@ templates:
       (Part of this is from an earlier email: {{ finding.earlier }}.)
       {%- endif %}
 
-      Study requirement ({{ finding.doc_title }}, p. {{ finding.page }}):
+      What the study rule says ({{ finding.doc_title }}, page {{ finding.page }}):
       "{{ finding.doc_quote }}"
       {%- for a in also %}
 
-      Also does not meet ({{ a.where }}):
+      It also goes against this rule ({{ a.where }}):
       "{{ a.doc_quote }}"
-      {%- if a.message_quote %}
-      Site wrote: "{{ a.message_quote }}"
+      {%- if a.message_quote and a.message_quote != finding.message_quote %}
+      The site wrote: "{{ a.message_quote }}"
       {%- endif %}
       {%- endfor %}
 
@@ -121,14 +122,14 @@ templates:
       (Part of this is from an earlier email: {{ finding.earlier }}.)
       {%- endif %}
 
-      Study requirement ({{ finding.doc_title }}, p. {{ finding.page }}):
+      What the study rule says ({{ finding.doc_title }}, page {{ finding.page }}):
       "{{ finding.doc_quote }}"
       {%- for a in also %}
 
-      Also does not meet ({{ a.where }}):
+      It also goes against this rule ({{ a.where }}):
       "{{ a.doc_quote }}"
-      {%- if a.message_quote %}
-      Site wrote: "{{ a.message_quote }}"
+      {%- if a.message_quote and a.message_quote != finding.message_quote %}
+      The site wrote: "{{ a.message_quote }}"
       {%- endif %}
       {%- endfor %}
 
@@ -154,14 +155,14 @@ templates:
       (Part of this is from an earlier email: {{ finding.earlier }}.)
       {%- endif %}
 
-      Study requirement ({{ finding.doc_title }}, p. {{ finding.page }}):
+      What the study rule says ({{ finding.doc_title }}, page {{ finding.page }}):
       "{{ finding.doc_quote }}"
       {%- for a in also %}
 
-      Also does not meet ({{ a.where }}):
+      It also goes against this rule ({{ a.where }}):
       "{{ a.doc_quote }}"
-      {%- if a.message_quote %}
-      Site wrote: "{{ a.message_quote }}"
+      {%- if a.message_quote and a.message_quote != finding.message_quote %}
+      The site wrote: "{{ a.message_quote }}"
       {%- endif %}
       {%- endfor %}
 
@@ -188,9 +189,9 @@ templates:
       - {{ people.cra.name }} (CRA) has the context and has been asked to call the site today.
       - {{ people.crc.name }} (site coordinator) was told a possible issue was noted and that their monitor has been informed.
 
-      Requirement at issue ({{ finding.doc_title }}, p. {{ finding.page }}): "{{ finding.doc_quote }}"
+      The study rule ({{ finding.doc_title }}, page {{ finding.page }}): "{{ finding.doc_quote }}"
       {%- for a in also %}
-      Also at issue ({{ a.where }}): "{{ a.doc_quote }}"
+      It also goes against this rule ({{ a.where }}): "{{ a.doc_quote }}"
       {%- endfor %}
 
       Details: {{ item.link }}
@@ -257,7 +258,7 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      Correspondence monitor digest for {{ digest.window }}.
+      Summary of study messages for {{ digest.window }}.
       {%- for s in digest.studies %}
 
       == {{ s.short_name }} ({{ s.study_id }}) ==

@@ -27,7 +27,7 @@ def _e(v) -> str:
 def _also(study, ev: dict) -> str:
     parts = [f"""<p class="muted">{_e(a['where'])}</p><blockquote>{_e(a['doc_quote'])}</blockquote>
 <p class="muted">Site wrote: "{_e(a['message_quote'])}"</p>""" for a in also_broken(study, ev)]
-    return f"<h2>Also does not meet</h2>{''.join(parts)}" if parts else ""
+    return f"<h2>It also goes against this rule</h2>{''.join(parts)}" if parts else ""
 
 
 def render_item(item: dict) -> str:
@@ -45,12 +45,12 @@ def render_item(item: dict) -> str:
 <p><span class="tag {item['tier']}">{_e(TIER_LABELS.get(item['tier'], item['tier']))}</span>
 <span class="tag">{_e(item['state'])}</span><span class="tag">{_e(s.site_name(item['site']))}</span>
 <span class="tag">{_e(item['participant_id'] or 'participant not named')}</span></p>
-<h2>What the correspondence said</h2>
+<h2>What the site wrote</h2>
 <p class="muted">{_e(ev.get('sender_name'))}, {_e(local_time(ev.get('message_date')))}, via {_e(ev.get('channel'))}
  ({_e(ev.get('visibility'))}) · subject: {_e(ev.get('message_subject'))}</p>
 <blockquote>{_e(ev.get('message_quote'))}</blockquote>
 <p class="muted">Timing: {_e(event.get('temporality'))}. "{_e(event.get('temporality_evidence'))}"</p>
-<h2>Study requirement</h2>
+<h2>What the study rule says</h2>
 <p class="muted">{_e(ev.get('doc_title'))}, page {_e(ev.get('doc_page'))} · rule {_e(ev.get('rule_id'))}</p>
 <blockquote>{_e(ev.get('doc_quote'))}</blockquote>
 <details><summary class="muted">Surrounding passage in the original document</summary>

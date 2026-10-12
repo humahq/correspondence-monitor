@@ -79,10 +79,11 @@ def _routed_to(study: Study, entries: list[dict], item: dict, msg: dict) -> str:
                 label = study.role_label(axis) if axis in {r["id"] for r in study.roles} else axis
                 names.append(f"{p.name if p else addr} ({label})")
         elif e["destination"] == "teams_alert_channel":
-            names.append("alert channel")
+            room = (study.teams.get("alert_channel") or {}).get("name")
+            names.append(f"the {room} room" if room else "the alert room")
         elif e["destination"] == "clearing_list":
-            names.append("clearing list")
-    return ", ".join(dict.fromkeys(names)) or "study channel only"
+            names.append("the CRA's to-do list")
+    return ", ".join(dict.fromkeys(names)) or "nobody else (posted here only)"
 
 
 def teams_target(study: Study, destination: str) -> dict:

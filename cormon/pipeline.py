@@ -13,7 +13,40 @@ from .drafting import local_time
 SAFETY_TITLE = "Safety information received; not reviewed by this monitor (out of scope)"
 
 
+def _own_text(body: str) -> str:
+    """The writer's own words: quoted earlier replies cut off."""
+    m = _WROTE.search(body)
+    body = body[:m.start()] if m else body
+    return "\n".join(line for line in body.splitlines() if not line.lstrip().startswith(">"))
+
+
+_SITE_NUMBER = re.compile(r"\bsite\s*(?:#|no\.?|number)?\s*(\d{1,4})\b", re.I)
+
+
+def _sites_named(study: Study, text: str) -> list[str]:
+    """Sites the message names, by number ("Site 3", "site #03") or by place ("the Columbia site").
+    A numbered site the study does not list is returned as written, e.g. "Site 03"."""
+    found: list[tuple[int, str]] = []
+    numbered = {}
+    for s in study.sites:
+        num = re.search(r"\d+", s["id"]) or re.search(r"\d+", s.get("name", ""))
+        if num:
+            numbered[int(num.group())] = s["id"]
+        places = re.findall(r"\(([^)]+)\)", s.get("name", "")) + list(s.get("aliases", []))
+        for place in places:
+            m = re.search(rf"\b{re.escape(place.strip())}\b", text, re.I)
+            if m:
+                found.append((m.start(), s["id"]))
+    for m in _SITE_NUMBER.finditer(text):
+        n = int(m.group(1))
+        found.append((m.start(), numbered.get(n) or f"Site {m.group(1)}"))
+    return list(dict.fromkeys(site for _, site in sorted(found)))
+
+
 def _site_for(study: Study, msg: dict) -> str | None:
+    named = _sites_named(study, f"{msg.get('subject') or ''}\n{_own_text(msg.get('body_text') or '')}")
+    if len(named) == 1:
+        return named[0]
     p = study.person_by_email(msg.get("from_addr"))
     if p:
         sites = [s for s in p.sites if s != "*"]

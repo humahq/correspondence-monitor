@@ -88,7 +88,7 @@ def item_context(study: Study, item: dict, recipient: Person | None, routed_to: 
             "site": study.site_name(item.get("site")),
             "pattern_class": item.get("pattern_class"),
             "pattern_label": pattern.get("label", item.get("pattern_class") or "study"),
-            "link": item_link(item), "routed_to": routed_to or "study channel",
+            "link": item_link(item), "routed_to": routed_to or "nobody else (posted here only)",
         },
         "finding": {
             "requirement": ev.get("rule_text", ""),
@@ -123,7 +123,7 @@ def also_broken(study: Study, ev: dict) -> list[dict]:
             rule = db.q1("SELECT doc_id FROM rules WHERE id=?", (a.get("rule_id"),))
             title = study.doc(rule["doc_id"])["title"] if rule else "study documents"
         page = a.get("doc_page")
-        out.append({"doc_title": title, "where": f"{title}, p. {page}" if page else title,
+        out.append({"doc_title": title, "where": f"{title}, page {page}" if page else title,
                     "doc_quote": a.get("doc_quote") or "", "message_quote": a.get("message_quote") or ""})
     return out
 

@@ -388,6 +388,24 @@ def test_google_chat_reads_spaces_and_direct_messages_and_posts_alerts(monkeypat
     assert chat_text("<p>a</p><p>b</p>") == "a\n\nb"
 
 
+def test_site_named_in_the_message_wins_over_the_senders_site(monkeypatch):
+    from cormon import config, pipeline
+
+    study = config.study("NCT04098666")
+    monkeypatch.setattr(study, "sites", [{"id": "site-01", "name": "Site 01 (Columbia)"},
+                                         {"id": "site-02", "name": "Site 02 (Boston)", "aliases": ["MGH"]}])
+    crc = next(p.email for p in study.people if "crc" in p.roles)
+    site = lambda body, subject="": pipeline._site_for(study, {"from_addr": crc, "subject": subject, "body_text": body})
+    assert site("MAP-0161 at site #2: BP 168/92") == "site-02"
+    assert site("Update from MGH: MAP-0161 BP 168/92") == "site-02"
+    assert site("BP 168/92, randomizing at 3pm") == "site-01"                         # nothing named: sender's site
+    assert site("MAP-0161 at Site 03: BP 168/92") == "Site 03"                        # not in the list: as written
+    assert site("Moved from Site 01 to Site 02 today") == "site-01"                   # two named: sender's site
+    assert site("Thanks.\n\nOn Mon, Oct 12, 2026 at 9:00 AM A <a@b.org> wrote:\n> Site 02 called") == "site-01"
+    assert study.site_name("Site 03") == "Site 03 (not in the study's site list)"
+    assert {p.id for p in study.people_with_role("cra", "Site 03")} == {p.id for p in study.people_with_role("cra")}
+
+
 def test_one_chat_post_when_study_and_alert_channels_are_the_same_room(monkeypatch):
     from cormon import config, routing
 

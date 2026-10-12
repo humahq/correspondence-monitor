@@ -10,7 +10,7 @@ from dateutil import parser as dtparser
 from . import config, settings
 
 TIERS = ("low", "medium", "immediate")
-TIER_LABELS = {"low": "Low", "medium": "Medium", "immediate": "Immediate"}
+TIER_LABELS = {"low": "For information", "medium": "Needs action", "immediate": "URGENT"}
 
 
 def hours_until(event_dt: str | None, message_dt: str | None) -> float | None:
