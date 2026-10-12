@@ -28,7 +28,7 @@ llm:
 # so the whole flow can be rehearsed without real accounts.
 channels:
   email: imap       # imap | gmail | sim
-  teams: sim        # the chat channel: graph (Microsoft Teams) | gchat (Google Chat) | sim | off
+  teams: gchat      # the chat channel: graph (Microsoft Teams) | gchat (Google Chat) | sim | off
 
 mailbox:
   address: bot@huma.ai

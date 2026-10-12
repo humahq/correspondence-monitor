@@ -93,8 +93,8 @@ pattern_classes:
 # Chat channels. Teams uses team_id and channel_id (`cormon teams-channels`); Google Chat uses space
 # (`cormon chat-spaces`). The study and alert channels may be the same space.
 teams:
-  study_channel: { team_id: "", channel_id: "", space: "", name: "MAP study channel" }
-  alert_channel: { team_id: "", channel_id: "", space: "", name: "MAP alerts" }
+  study_channel: { team_id: "", channel_id: "", space: "spaces/AAQAAvjJzMU", name: "MAP study alerts" }
+  alert_channel: { team_id: "", channel_id: "", space: "spaces/AAQAAvjJzMU", name: "MAP study alerts" }
 
 # Study-specific tier rules, evaluated before config/triage.yaml.
 triage: []
