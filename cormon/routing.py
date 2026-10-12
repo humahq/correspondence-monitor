@@ -90,6 +90,24 @@ def teams_target(study: Study, destination: str) -> dict:
     return dict(study.teams.get(key) or {}, key=key)
 
 
+def _room(target: dict) -> tuple | None:
+    if target.get("space"):
+        return ("space", target["space"])
+    if target.get("team_id") and target.get("channel_id"):
+        return ("channel", target["team_id"], target["channel_id"])
+    return None
+
+
+def _one_post_per_room(study: Study, entries: list[dict]) -> list[dict]:
+    """When the study and alert channels are the same room, only the alert is posted there."""
+    rooms = {e["destination"]: _room(teams_target(study, e["destination"]))
+             for e in entries if e["destination"].startswith("teams_")}
+    alert = rooms.get("teams_alert_channel")
+    if alert and rooms.get("teams_study_channel") == alert:
+        return [e for e in entries if e["destination"] != "teams_study_channel"]
+    return entries
+
+
 def route_item(item_id: int, *, force: bool = False, actor: str = "system") -> list[int]:
     item = items.get(item_id)
     study = config.study(item["study_id"])
@@ -106,6 +124,7 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system") -> l
         entries = rconf.get("good_news", [])
     else:
         entries = rconf.get("tiers", {}).get(item["tier"], [])
+    entries = _one_post_per_room(study, entries)
 
     msg = capture.message(item["last_message_id"] if force else item["first_message_id"])
     routed_to = _routed_to(study, entries, item, msg)

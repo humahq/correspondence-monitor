@@ -386,3 +386,17 @@ def test_google_chat_reads_spaces_and_direct_messages_and_posts_alerts(monkeypat
     assert url.endswith("/spaces/S1/messages")
     assert body["text"] == '*IMMEDIATE · MAP*\n\nBP > limit\n_"q"_\n\nItem #3 · <https://x/items/3|details>'
     assert chat_text("<p>a</p><p>b</p>") == "a\n\nb"
+
+
+def test_one_chat_post_when_study_and_alert_channels_are_the_same_room(monkeypatch):
+    from cormon import config, routing
+
+    study = config.study("NCT04098666")
+    immediate = [{"destination": "teams_study_channel"}, {"destination": "teams_alert_channel"},
+                 {"destination": "email"}]
+    monkeypatch.setattr(study, "teams", {"study_channel": {"space": "spaces/A"}, "alert_channel": {"space": "spaces/A"}})
+    assert [e["destination"] for e in routing._one_post_per_room(study, immediate)] == \
+        ["teams_alert_channel", "email"]
+    monkeypatch.setattr(study, "teams", {"study_channel": {"space": "spaces/A"}, "alert_channel": {"space": "spaces/B"}})
+    assert routing._one_post_per_room(study, immediate) == immediate
+    assert routing._one_post_per_room(study, immediate[:1]) == immediate[:1]
