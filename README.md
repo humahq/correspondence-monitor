@@ -236,13 +236,6 @@ Each test email uses the AI, so a run costs a few cents.
 
 Anything you do is recorded under your own name.
 
-### For John: updating the cloud copy
-
-- **Updating the code:** `./deploy/create_vm.sh` copies the current code to the server and restarts the bot. The live data on the server is kept.
-- **Updating the rules:** rebuild them in the practice copy (`CORMON_HOME=practice cormon ingest --force`), read `cormon rules --report`, run the test sets, then `cormon import-model practice/data/cormon.db --reason "..."` on the laptop and `SYNC_MODEL=1 ./deploy/create_vm.sh`. Messages and items on the server are kept; the swap is recorded in the log.
-- **Settings:** changes made on the server with `cormon config set` are overwritten by the repo's `config/` on the next update, so make permanent changes in the repo.
-- **Giving someone access:** `./deploy/grant_access.sh name@huma.ai` (Eliot and Peter already have access).
-
 ## How it works
 
 1. **Capture.** Every message is stored whole: body, headers, attachments, arrival time, and how the monitor saw it (to, cc, bcc, channel, direct). The study comes from the address: `bot+NCT04098666@huma.ai` belongs to MAP. Mail to the bare `bot@huma.ai` is logged as a general message and never matched against a study.
