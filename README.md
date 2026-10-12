@@ -238,6 +238,19 @@ Each test email uses the AI, so a run costs a few cents.
 
 Anything you do is recorded under your own name.
 
+### Part 5: Trim the rules (you decide, the AI only suggests)
+
+John sends you a spreadsheet of all 124 rules (`MAP rules <date>.xlsx`). On the **Rules in use** tab, each rule has:
+
+- **AI suggests:** keep or remove. Right now it suggests removing 9: 8 that repeat another rule, and 1 that only matters when the study starts.
+- **Why:** one short reason.
+- **Team decision:** empty. Write **keep** or **remove**. Leave it empty if you have no view (the rule stays).
+- **Team note:** optional, for example "checked on the intake form".
+
+The AI can't know which steps your sites already record on a form or checklist (like verbal consent at intake), so it never suggests those. Mark them yourself if the bot doesn't need to watch for them.
+
+Send the file back to John. He applies it with `cormon rules-decide <file>.xlsx` and updates the cloud copy. Nothing is turned off until then, any rule can be turned back on, and every decision is logged with your name.
+
 ### For John: updating the cloud copy
 
 - **Updating the code:** `./deploy/create_vm.sh` copies the current code to the server and restarts the bot. The live data on the server is kept.
