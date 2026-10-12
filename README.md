@@ -71,8 +71,6 @@ The bot sends alerts to people by their **role** in the study. Right now the rol
 
 Teams messages are shown in the bot's records only (simulated); they are not posted to a real Teams channel yet.
 
-**To get the alerts yourself:** tell John which email to use for each role (coordinator, CRA, sponsor lead). He changes the `people:` list in `studies/NCT04098666/study.yaml` and updates the cloud copy. One person can test as several roles.
-
 ### Before you test: how the bot thinks
 
 **What it does with each email, in 4 steps:**
@@ -237,19 +235,6 @@ Each test email uses the AI, so a run costs a few cents.
 | `./bin/cormon-cloud logs` | The server's technical log |
 
 Anything you do is recorded under your own name.
-
-### Part 5: Trim the rules (you decide, the AI only suggests)
-
-John sends you a spreadsheet of all 124 rules (`MAP rules <date>.xlsx`). On the **Rules in use** tab, each rule has:
-
-- **AI suggests:** keep or remove. Right now it suggests removing 9: 8 that repeat another rule, and 1 that only matters when the study starts.
-- **Why:** one short reason.
-- **Team decision:** empty. Write **keep** or **remove**. Leave it empty if you have no view (the rule stays).
-- **Team note:** optional, for example "checked on the intake form".
-
-The AI can't know which steps your sites already record on a form or checklist (like verbal consent at intake), so it never suggests those. Mark them yourself if the bot doesn't need to watch for them.
-
-Send the file back to John. He applies it with `cormon rules-decide <file>.xlsx` and updates the cloud copy. Nothing is turned off until then, any rule can be turned back on, and every decision is logged with your name.
 
 ### For John: updating the cloud copy
 
