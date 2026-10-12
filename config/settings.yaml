@@ -28,7 +28,7 @@ llm:
 # so the whole flow can be rehearsed without real accounts.
 channels:
   email: imap       # imap | gmail | sim
-  teams: sim        # graph | sim | off
+  teams: sim        # the chat channel: graph (Microsoft Teams) | gchat (Google Chat) | sim | off
 
 mailbox:
   address: bot@huma.ai
@@ -66,6 +66,13 @@ teams:
   client_id: ""
   token_cache: secrets/teams_token.json
   # Direct 1:1 chats with the bot user are read as well.
+  read_direct_chats: true
+
+gchat:
+  account: bot@huma.ai
+  client_secrets_file: secrets/gchat_client.json
+  token_file: secrets/gchat_token.json
+  # Direct messages to the bot account are read as well.
   read_direct_chats: true
 
 digest:

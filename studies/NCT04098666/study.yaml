@@ -90,10 +90,11 @@ pattern_classes:
     documents: [consent, protocol]
     event_types: [consent, screening, enrollment, randomization, dosing, sample_collection, imaging]
 
-# Teams channels (filled in once the Microsoft 365 tenant exists).
+# Chat channels. Teams uses team_id and channel_id (`cormon teams-channels`); Google Chat uses space
+# (`cormon chat-spaces`). The study and alert channels may be the same space.
 teams:
-  study_channel: { team_id: "", channel_id: "", name: "MAP study channel" }
-  alert_channel: { team_id: "", channel_id: "", name: "MAP alerts" }
+  study_channel: { team_id: "", channel_id: "", space: "", name: "MAP study channel" }
+  alert_channel: { team_id: "", channel_id: "", space: "", name: "MAP alerts" }
 
 # Study-specific tier rules, evaluated before config/triage.yaml.
 triage: []

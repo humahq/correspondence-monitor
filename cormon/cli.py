@@ -523,6 +523,16 @@ def cmd_auth(args):
 
         r = ImapChannel().check()
         print(f"Gmail login works for {r['user']} ({r['inbox_messages']} emails in the inbox)")
+    elif args.service == "gchat":
+        from .channels.gchat import GoogleChatChannel, credentials
+
+        credentials(interactive=True)
+        ch = GoogleChatChannel()
+        who = ch._users.get(ch.me) or ch.me
+        print(f"Google Chat authorised as {who}")
+        if who != settings.get("gchat.account", settings.get("mailbox.address")):
+            print(f"Warning: this is not {settings.get('gchat.account', settings.get('mailbox.address'))}."
+                  " Run it again and sign in as the bot account.")
     else:
         from .channels.teams import token
 
@@ -535,6 +545,12 @@ def cmd_teams(args):
 
     table(TeamsChannel().list_channels(), [("team", "team", 24), ("channel", "channel", 24),
                                            ("team_id", "team_id", 38), ("channel_id", "channel_id", 50)])
+
+
+def cmd_chat_spaces(args):
+    from .channels.gchat import GoogleChatChannel
+
+    table(GoogleChatChannel().list_spaces(), [("name", "name", 30), ("type", "type", 16), ("space", "space", 24)])
 
 
 def cmd_gmail(args):
@@ -681,9 +697,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("file"); s.add_argument("--now", action="store_true", help="process immediately")
     s.set_defaults(fn=cmd_inject)
 
-    s = sub.add_parser("auth", help="sign in to Gmail or Teams"); s.add_argument("service", choices=["imap", "gmail", "teams"])
+    s = sub.add_parser("auth", help="sign in to Gmail, Teams or Google Chat")
+    s.add_argument("service", choices=["imap", "gmail", "teams", "gchat"])
     s.set_defaults(fn=cmd_auth)
     sub.add_parser("teams-channels", help="list Teams channels the bot can see (for study.yaml)").set_defaults(fn=cmd_teams)
+    sub.add_parser("chat-spaces", help="list Google Chat spaces the bot is in (for study.yaml)").set_defaults(
+        fn=cmd_chat_spaces)
     s = sub.add_parser("gmail", help="Gmail setup helpers"); s.add_argument("action", choices=["send-as", "add-aliases"])
     s.set_defaults(fn=cmd_gmail)
     return p

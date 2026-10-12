@@ -327,6 +327,17 @@ The inbox is shared with the scheduler, so only mail sent to a `bot+<study>` add
 3. In Gmail (as the bot) go to Settings → Accounts → **Send mail as** and add `bot+NCT04098666@huma.ai` as an alias, so replies leave from the study address. `cormon gmail send-as` lists what is configured.
 4. Set `channels.email: gmail` in `config/settings.yaml`.
 
+### Google Chat
+
+The bot posts and reads as bot@huma.ai. The Chat API and People API are already on in project optical-depth-506808-t0.
+
+1. In Google Chat (as bot@huma.ai or anyone), create a space, for example **MAP study alerts**. Add bot@huma.ai and the people who should see alerts.
+2. In the Cloud console, open **Google Chat API → Configuration**. Give the app a name (e.g. "Study monitor"), an avatar URL and a description. Leave **interactive features** off. Save.
+3. Under **APIs & Services → Credentials**, create an **OAuth client ID** of type **Desktop app** (consent screen: *Internal*). Save the JSON as `secrets/gchat_client.json`.
+4. Run `cormon auth gchat` and sign in as **bot@huma.ai**. The token is saved to `secrets/gchat_token.json`.
+5. Run `cormon chat-spaces`. Put the space name (`spaces/...`) as `space:` for both `study_channel` and `alert_channel` in `studies/NCT04098666/study.yaml`.
+6. Set `channels.teams: gchat` in `config/settings.yaml`.
+
 ### Microsoft Teams
 
 A personal Microsoft account cannot do this. You need a work tenant, for example a Microsoft 365 Business Basic trial or the Microsoft 365 Developer Program sandbox.

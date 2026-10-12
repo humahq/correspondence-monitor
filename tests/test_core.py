@@ -331,3 +331,58 @@ def test_duplicate_suggestions_never_lose_a_check():
     assert got["A"][0] == "keep" and got["B"][0] == "remove"   # of two naming each other, one stays
     assert got["C"][0] == "keep"                                # 22 and 20 are different checks
     assert got["F"][0] == "keep"                                # twin is another problem type
+
+
+class _FakeGoogle:
+    """Answers the few Chat, People and sign-in calls the Google Chat adapter makes."""
+
+    def __init__(self, spaces):
+        self.spaces, self.posted = spaces, []
+
+    def _reply(self, data):
+        return type("R", (), {"raise_for_status": lambda s: None, "json": lambda s: data})()
+
+    def get(self, url, params=None, timeout=None):
+        if url.endswith("/userinfo"):
+            return self._reply({"sub": "100", "email": "bot@huma.ai"})
+        if "/people/" in url:
+            return self._reply({"emailAddresses": [{"value": f"user{url.rsplit('/', 1)[1]}@site.org"}]})
+        if url.endswith("/spaces"):
+            return self._reply({"spaces": [{"name": n} for n in self.spaces if n.startswith("spaces/dm")]})
+        return self._reply({"messages": self.spaces[url.split("/v1/", 1)[1].rsplit("/messages", 1)[0]]})
+
+    def post(self, url, json=None, params=None, timeout=None):
+        self.posted.append((url, json, params))
+        return self._reply({"name": "spaces/S1/messages/new"})
+
+
+def test_google_chat_reads_spaces_and_direct_messages_and_posts_alerts(monkeypatch):
+    from cormon import config
+    from cormon.channels.gchat import GoogleChatChannel, chat_text
+
+    study = config.study("NCT04098666")
+    monkeypatch.setattr(study, "teams", {"study_channel": {"space": "spaces/S1"}})
+    monkeypatch.setattr(config, "studies", lambda: {study.study_id: study})
+    db.set_state("gchat_since", "2026-10-12T10:00:00+00:00")
+    msg = lambda name, user, t, **kw: dict({"name": name, "sender": {"name": f"users/{user}", "type": "HUMAN"},
+                                            "createTime": t, "text": "BP 168/92, randomizing at 3pm",
+                                            "thread": {"name": "spaces/S1/threads/T1"}}, **kw)
+    fake = _FakeGoogle({
+        "spaces/S1": [msg("spaces/S1/messages/1", 7, "2026-10-12T10:05:00Z"),
+                      msg("spaces/S1/messages/2", 100, "2026-10-12T10:06:00Z"),          # the bot itself
+                      msg("spaces/S1/messages/3", 8, "2026-10-12T10:07:00Z", threadReply=True)],
+        "spaces/dm1": [msg("spaces/dm1/messages/9", 9, "2026-10-12T10:08:00Z", thread={"name": "spaces/dm1/threads/D"})],
+    })
+    got = GoogleChatChannel(session=fake).fetch()
+    assert [i.external_id for i in got] == ["spaces/S1/messages/1", "spaces/S1/messages/3", "spaces/dm1/messages/9"]
+    assert got[0].study_id == "NCT04098666" and got[0].visibility == "channel" and got[0].from_addr == "user7@site.org"
+    assert got[1].reply_to_external == "spaces/S1/threads/T1" and got[1].thread_ref == got[0].thread_ref
+    assert got[2].visibility == "direct" and got[2].study_id == "NCT04098666"
+
+    GoogleChatChannel(session=fake).send({"body": '<p><b>IMMEDIATE · MAP</b></p>\n<p>BP &gt; limit<br><i>"q"</i></p>'
+                                                  '\n<p>Item #3 · <a href="https://x/items/3">details</a></p>',
+                                          "meta": {"target": {"space": "spaces/S1", "key": "alert_channel"}}})
+    url, body, _ = fake.posted[0]
+    assert url.endswith("/spaces/S1/messages")
+    assert body["text"] == '*IMMEDIATE · MAP*\n\nBP > limit\n_"q"_\n\nItem #3 · <https://x/items/3|details>'
+    assert chat_text("<p>a</p><p>b</p>") == "a\n\nb"

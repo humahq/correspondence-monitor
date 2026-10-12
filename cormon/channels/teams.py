@@ -16,6 +16,7 @@ import requests
 
 from .. import config, db, settings
 from ..capture import Inbound
+from . import study_for_person
 
 GRAPH = "https://graph.microsoft.com/v1.0"
 SCOPES = ["ChannelMessage.Send", "ChannelMessage.Read.All", "Chat.ReadWrite",
@@ -161,20 +162,11 @@ class TeamsChannel:
                                            thread_ref=f"chat:{chat['id']}", reply_to=None,
                                            ext_prefix=f"chat:{chat['id']}")
                     if inb:
-                        inb.study_id = self._study_for_person(inb.from_addr)
+                        inb.study_id = study_for_person(inb.from_addr)
                         out.append(inb)
                         newest = max(newest, created)
         db.set_state("teams_since", (newest + timedelta(minutes=10)).isoformat())
         return sorted(out, key=lambda i: i.sent_at)
-
-    @staticmethod
-    def _study_for_person(addr: str | None) -> str | None:
-        all_studies = list(config.studies().values())
-        for s in all_studies:
-            p = s.person_by_email(addr)
-            if p is not None or (addr and any((x.teams_upn or "").lower() == addr for x in s.people)):
-                return s.study_id
-        return all_studies[0].study_id if len(all_studies) == 1 else None
 
     # -------------------------------------------------------------- outbound
     def send(self, row: dict) -> dict:
