@@ -1,16 +1,18 @@
-# Correspondence Monitor (board demo build)
+# Correspondence Monitor
 
-A headless monitor for clinical trial correspondence. It reads the email and Teams messages it is copied on, checks them against the study's own documents, and routes what it finds: a Teams study channel, an alert channel, the CRA's inbox, the sponsor's daily digest, and in the most urgent case a short hedged notice to the site. It never reviews safety information.
+A monitor for clinical trial messages. It reads the emails and Google Chat messages it is included on, checks them against the study's own documents, and tells the right people when something breaks the protocol. It never reviews safety information.
 
-Demo study: **MAP, Metformin in Alzheimer's Dementia Prevention (NCT04098666)**. The protocol and consent form come from ClinicalTrials.gov. The lab manual (`studies/NCT04098666/docs/lab_manual.md`) is a **placeholder written for the demo**, because no public one exists.
+**Live study:** HEALEY ALS Platform Trial, **Regimen G (DNL343), NCT05842941**. The documents are the Master Protocol V6.0 and the Regimen G Appendix V2.0 (`studies/NCT05842941/docs/`).
+
+An older demo study, **MAP (NCT04098666)**, is still in the code. Its lab manual is a placeholder written for the demo.
 
 ## Testing guide (for Eliot and Peter)
 
-**How it's set up:** the bot runs on a small Google Cloud server that is always on. You don't install the bot. You install a small Google tool, and then you type short commands in Terminal on your laptop to talk to the bot. You sign in with your own huma.ai Google account. The connection is secure, and there's no VPN or extra password.
+**How it's set up:** the bot runs on a small Google Cloud server that is always on (project `optical-depth-506808-t0`, server `cormon-demo`). You don't install the bot. You talk to it in Google Chat or by email. To run test sets or look inside, you type short commands in Terminal, signed in with your own huma.ai Google account.
 
-Only one copy of the bot should read the email, so **don't start the bot on your own laptop.** Always use `./bin/cormon-cloud`.
+Only one copy of the bot should read the inbox and chat, so **don't start the bot on your own laptop.** Always use `./bin/cormon-cloud`.
 
-### Part 1: One-time setup (about 5 minutes)
+### Part 1: One-time setup (about 5 minutes; only needed for the Terminal commands)
 
 **Step 1. Install the Google Cloud tool.** Open the Terminal app and type:
 
@@ -26,7 +28,7 @@ No Homebrew? Download it from <https://cloud.google.com/sdk/docs/install> instea
 gcloud auth login
 ```
 
-A browser window opens. Choose your huma.ai account and click **Allow**.
+A browser window opens. Choose your huma.ai account and click **Allow**. (John must first give you access: `./deploy/grant_access.sh you@huma.ai`.)
 
 **Step 3. Download the code:**
 
@@ -41,214 +43,192 @@ cd correspondence-monitor
 ./bin/cormon-cloud status
 ```
 
-The first time, it asks to create a key. Just press **Enter** when asked. If you see the bot's status, you're ready.
+The first time, it asks to create a key. Press **Enter**. If you see the bot's status, you're ready. Run all commands from inside the `correspondence-monitor` folder.
 
-You'll run all the commands below from inside the `correspondence-monitor` folder.
+### Who's who
 
-### Who's who (and which email is which)
+The bot tells people by their **role** in the study. Right now the roles use John's test addresses:
 
-The bot sends alerts to people by their **role** in the study. Right now the roles use John's test addresses:
-
-| Role | What they do | Test email now |
+| Role | What they do | Test address now |
 |---|---|---|
-| **Coordinator (CRC)** | Works at the hospital site. Writes the day-to-day emails about patients. | `johnrohit94@gmail.com` |
+| **Coordinator (CRC)** | Works at the site. Writes the day-to-day messages about patients. | `johnrohit94@gmail.com` |
 | **CRA** | The sponsor's monitor for the site. Gets the bot's alerts and decides what to do. | `johnernest978@gmail.com` |
-| **Sponsor lead (ClinOps)** | Runs the study for the sponsor. Copied on alerts and gets the daily summary. | `john@huma.ai` |
+| **Sponsor lead (ClinOps)** | Runs the study for the sponsor. Gets urgent alerts and the daily summary. | `john@huma.ai` |
 | **Medical monitor** | The doctor who handles safety. The bot never alerts them; it tells people to contact them. | none |
-| **The bot** | Reads every email it is copied on. | `bot+NCT04098666@huma.ai` |
+| **The bot (email)** | Reads every email it is copied on. | `bot+NCT05842941@huma.ai` |
+| **The bot (chat)** | Reads and posts in the study's chat spaces. | spaces **DNL343 Study Updates** and **DNL343 URGENT** |
 
-**The normal flow:** the coordinator emails the CRA as usual and puts the bot in **CC**. The bot reads the email, checks it against the study rules, and if something is wrong it emails an alert. The coordinator doesn't have to do anything different.
+### Who gets what
 
-**Who gets what:**
-
-| What the bot finds | Who is emailed |
+| What the bot finds | Where it goes |
 |---|---|
-| **Medium** (a problem that already happened) | The CRA, with the sponsor lead in CC. It also goes in the sponsor lead's daily summary. |
-| **Immediate** (a problem planned within 48 hours, or a consent problem) | The CRA and the sponsor lead, each in a separate email. If a coordinator wrote the email, they get a short careful note too. |
-| **Low** (for example, a visit a little out of its window) | No email. It goes on a to-do list and in the daily summary. |
-| **Safety** (side effects, falls, hospital visits) | Only the person who wrote the email gets a reply: "please contact the medical monitor". |
+| **Immediate** (a consent problem, or a problem planned within 48 hours) | Its own post in **DNL343 URGENT** and **DNL343 Study Updates**, an email to the CRA, and an email to the sponsor lead. If a site coordinator wrote the message, they get a short careful note too. |
+| **Medium** (a problem that already happened, or one planned later) | A post in **DNL343 Study Updates** and an email to the CRA, with the sponsor lead in CC. It goes in the sponsor lead's daily summary. |
+| **Low** (for example, a visit a few days outside its window) | A post in **DNL343 Study Updates**, an email to the CRA (subject "For your to-do list"), the CRA's to-do list and the daily summary. |
+| **Safety** (a death, side effects, falls, hospital visits) | Only the person who wrote gets a reply: "please take it to the medical monitor". Nothing is judged. |
 | **Nothing wrong, or not about the study** | Nobody. The bot stays quiet. |
+| **A general question** ("what is the Week 4 window?") | Nobody. The bot does not answer questions (yet). |
 
-Teams messages are shown in the bot's records only (simulated); they are not posted to a real Teams channel yet.
+**One message, one alert.** If one site message has several problems, they come together in **one** chat post and **one** email, numbered 1, 2, 3. Immediate problems are the exception: they always go out on their own.
 
-### Before you test: how the bot thinks
+### What an alert looks like
 
-**What it does with each email, in 4 steps:**
+```
+Medium · DNL343 · G-708-002 · Site 01 (MGH)
 
-1. **Reads it.** It works out what happened, to which patient, and when. It also decides whether this is **new** (happening now), **planned** (about to happen), or **old news** (already happened and been dealt with, or forwarded from weeks ago).
-2. **Checks it against the study rules.** The bot turned the protocol, lab manual and consent form into **124 short rules** (see them with `./bin/cormon-cloud rules`). It only looks for 5 kinds of problem: **eligibility, visit schedule, procedure order, sample handling and consent.** Anything else is ignored on purpose.
-   - Rules with a number ("eGFR must be 45 or more") are checked by plain code, so the same email always gets the same answer.
-   - Rules without a number ("consent must be signed before any study procedure") are judged by the AI.
-   - **Second reading:** it also reads the whole email once against the full rule list, to catch anything the first pass missed.
-   - **Memory:** when an email says a patient was enrolled or randomized, it also checks that patient's numbers from earlier emails (any thread, last 60 days). The alert says which earlier email the number came from.
-3. **Double-checks.** Before raising anything, it must find the exact words in the email **and** the exact sentence in the protocol. If it can't find both, it stays quiet. That's why every alert quotes both.
-   - **Not sure?** If the protocol leaves the call to the study doctor, or the email is missing one fact (for example years of education), it doesn't stay quiet. It sends the alert to the CRA marked **"Please check (not sure)"** with the reason.
-4. **Decides how urgent it is, and who to tell:**
-   - **Immediate:** the problem is planned within 48 hours (so it can still be stopped), or it's a consent problem. The CRA and the sponsor are emailed, and the site gets a short careful note.
-   - **Medium:** a problem that has already happened. The CRA is emailed (the sponsor lead is copied), and it goes in the daily summary.
-   - **Low:** for example, a visit outside its window. It goes on a to-do list and in the daily summary.
+3 problems found:
+1. Baseline CSF was collected too early. (Medium, Item #19)
+2. The study drug storage temperature was above the allowed limit. (Medium, Item #21)
+3. The Week 2 phone visit was done late. (Low, Item #20)
+
+What to do:
+1. Record a deviation ...
+2. Quarantine the affected supply ...
+3. Record the visit deviation ...
+
+──────────
+Evidence for problem 1
+Site wrote: baseline csf was 9/5 ... baseline + first dose were 9/15
+Study rule: For the Baseline visit, CSF may be collected at any time within one week prior to ...
+From: Regimen-Specific Appendix G, DNL343, V2.0, section 6.1 Baseline Visit
+```
+
+- **Study rule** is always the protocol's own words, found word for word in the document. If the bot cannot find the exact words, it shows no quote. It writes "exact words not found, please read this section: ..." and marks the problem **please check**.
+- **Please check (not sure)** means the bot thinks it is a problem but is not certain. The line "Why not sure" says why.
+- Each problem has an **item number** (#19). The **details** link opens a web page with everything the bot used.
+
+### Replying to an alert: "cleared" and "disregard"
+
+Only the CRA or the sponsor lead can do this. It works in chat and by email.
+
+| You write | What happens |
+|---|---|
+| `cleared` (in the alert's chat thread, or as a reply to the alert email) | Every problem in that alert is marked resolved. |
+| `cleared #20` | Only problem #20 is marked resolved. |
+| `disregard` / `disregard #20` | The same, but the problem is dropped as not real (it no longer counts). |
+| `cleared #20` posted anywhere in the study space | Works too, by the number. |
+
+In chat the bot answers in the thread, for example "Done: #20 cleared, by John Huma." If it can't tell which problem you mean, it says how to name one.
+
+### How the bot thinks (in 5 steps)
+
+1. **Reads the message.** It works out which patient, what happened, and when. It decides if it is **done**, **planned**, or **old news**.
+2. **Works out the dates.** It turns "9/15" and "wk2 done 10/6" into days from Baseline (Day 0) and compares them with each visit's window.
+3. **Checks the rules.**
+   - Dates, times and numbers are checked by plain **code** (139 checks made from the documents), so the same message always gets the same answer. Example: Week 2 must be Day 11 to 17.
+   - Rules without a number ("consent before any study procedure") are judged by the **AI**, using short topic summaries of the documents (visit schedule, dosing, samples, eligibility, consent and others).
+4. **Double-checks.** A second AI reads the original protocol section and must agree. The bot must also find the site's words in the message and the protocol's words in the document.
+5. **Decides how urgent it is and who to tell** (see "Who gets what").
 
 **What it will NOT do, by design:**
 
-- **Safety:** it doesn't judge safety (side effects, hospital visits, falls). It replies "please contact the medical monitor" and does nothing else.
-- **Old news:** it doesn't alert on past events or old forwarded emails.
-- **Vague or missing information:** it doesn't alert on missing information ("we didn't mention the fasting time" isn't a problem by itself).
-- **Repeats:** it doesn't send a second alert for the same problem in the same email thread.
-- **Unknown study:** it doesn't check emails sent to the general address `bot+clinical@huma.ai`, because it never guesses the study.
+- **Safety:** no judging of side effects, deaths or hospital visits. It replies "please take it to the medical monitor".
+- **Old news:** no alert on past events that were already dealt with.
+- **Missing information:** no alert just because something wasn't mentioned.
+- **Questions:** no answers to protocol questions.
+- **Unknown study:** mail to the general address `bot+clinical@huma.ai` is never checked, because the bot never guesses the study.
 
-**Key limits it checks (handy for writing tests):**
+**Key Regimen G limits (handy for writing tests).** Baseline is Day 0.
 
 | Area | Rule (from the study documents) |
 |---|---|
-| Eligibility | age 55–90 · eGFR 45 or more · BMI 20 or more · HbA1c below 6.5% · blood pressure below 160/95 · MMSE 22 or more (20 with 8 years of school or less) · CDR exactly 0.5 · GDS below 9 · fluent in English or Spanish · no known diabetes |
-| Sample handling | fasting 8 hours or more · spin the tube within 60 minutes · freeze within 2 hours · no more than 24 hours at −20 °C · ship Monday to Wednesday only · hemolyzed samples not acceptable · temperature log in the box · email the lab before shipping |
-| Visit schedule | screening within 28 days · 6-month visit ±30 days · monthly call ±7 days |
-| Procedure order | brain MRI before the study drug starts · screening labs, vitals and ECG before randomization |
-| Consent | consent signed before any study procedure |
+| Visit windows | Week 2 phone: Day 14 ± 3 · Week 4 clinic: Day 28 ± 7 · Week 8 clinic: Day 56 ± 7 · Week 12 phone: Day 84 ± 3 · Week 16 clinic: Day 112 ± 7 · Week 20 phone: Day 140 ± 3 · Week 24: Day 168 ± 7 |
+| Samples | Baseline CSF within one week before the first dose · predose PK 0 to 2 hours before the dose · postdose PK 1 to 8 hours after the dose · samples labelled with a code, never the patient's name |
+| Study drug | stored below 30 °C · one dose a day in the morning · temperature excursions in transit resolved before use |
+| Medicines | strong CYP3A4/5 inducers (for example phenytoin) stopped at least 2 weeks before the first dose |
+| Consent | Master Protocol consent signed before any screening procedure |
 
-The lab manual is a practice version written for this demo, so the sample-handling rules are examples, not a real lab's rules.
+### Part 2: Test in chat or by email
 
-**Test ideas** (mix easy and tricky):
-
-- **Clear problem:** "Randomized MAP-0301 today, eGFR 41." It should alert (eligibility).
-- **Within limits:** "eGFR 62, BMI 24, all fine." It should stay quiet.
-- **Planned:** "We'll start study drug tomorrow; the MRI is next week." It should give an Immediate alert.
-- **Old news:** "Back in July, MAP-0201 was screened out for low eGFR." It should stay quiet.
-- **Safety only:** "MAP-0305 fell and broke her wrist." It should refuse and point to the medical monitor.
-- **Messy writing:** typos, short forms ("pt", "rand'd", "GFR 4l"), missing units.
-- **Two patients in one email,** one fine and one not. It should flag only the right patient.
-- **Two emails together:** first "MAP-0410 screened, eGFR 41", then a few minutes later a new email "Randomized MAP-0410 today." The second one should alert, quoting the first.
-- **Vague:** "Labs a bit off, enrolled anyway." This is a judgment call, so tell us what you'd expect.
-- **Not about the study at all:** "Office closed Monday." It should stay quiet.
-
-### Part 2: Test with a real email
-
-**Step 1.** Send an email like a coordinator would: **To** the CRA, with the bot in **CC**. (Any email account works as the sender.) For example:
-
-> **To:** `johnernest978@gmail.com` (the CRA)
-> **CC:** `bot+NCT04098666@huma.ai`
-> **Subject:** MAP-0142 randomized today
-> **Body:** We randomized MAP-0142 this morning. Her eGFR at screening was 41.
-
-Use a new patient number (MAP-0142, MAP-0143 …) for each test. The bot doesn't alert twice on the same problem in the same thread.
-
-**Step 2.** Wait about one minute. The bot should notice that an eGFR of 41 is too low (the study needs 45 or more). It is a Medium problem, so it emails an alert to the CRA (`johnernest978@gmail.com`) with the sponsor lead (`john@huma.ai`) in CC. The alert quotes the email and the protocol page.
-
-**Step 3.** See what the bot found. Each problem gets an item number:
+**In chat (easiest).** Post a message in **DNL343 Study Updates**, as a site coordinator would. For example:
 
 ```
-./bin/cormon-cloud items
+Hi team, update on G-708-002: baseline + first dose were 9/15. Baseline CSF was drawn 9/5. Wk2 phone call done 10/6. Wk4 visit done 10/13, all fine. Also our kit fridge read 32C this morning.
 ```
 
-**Step 4.** See the full details of one item (use the number from Step 3): what it quoted from the email and the protocol, its reasoning, and every email it sent:
+Within about a minute you should get one post with 3 problems (CSF too early, fridge too warm, Week 2 late). The Week 4 visit is inside its window, so it should not be flagged. The CRA gets the same alert by email.
+
+**By email.** Send an email **to** the CRA (`johnernest978@gmail.com`) with the bot in **CC** (`bot+NCT05842941@huma.ai`). Any email account works as the sender.
+
+**Tips:**
+
+- Use a **new patient number** for each test (G-708-002, G-709-001 ...). Reusing one can make the bot treat it as a repeat.
+- An urgent test: `G-709-001 came in today for screening. We did the blood draws and ECG first, then he signed the master consent form after.` It should come as **Immediate** in DNL343 URGENT too.
+- See what the bot found: `./bin/cormon-cloud items --study NCT05842941`, then `./bin/cormon-cloud item 19 --drafts` for one item.
+
+### Part 3: Test many messages at once (nothing is sent)
+
+This runs test messages through a separate practice copy of the bot on the server. Nothing is posted or emailed, and the live data isn't touched.
 
 ```
-./bin/cormon-cloud item 3 --drafts
+./bin/cormon-cloud test demo/test-chat-g/chats --study NCT05842941
 ```
 
-Each item also has a web page link (shown as "Detail page") that you can open in a browser.
+**Always add `--study NCT05842941`** for Regimen G. Without it, the test uses the old MAP study.
 
-**Step 5 (optional).** Reply to the bot's alert email with the word **disregard**. The bot marks the alert as dropped.
+**Write your own tests.** Make a folder, for example `my-tests`, with one file per message:
 
-### Part 3: Test many emails at once (no emails are sent)
+- **A chat message:** a `.json` file, for example `my-tests/t1.json`:
 
-This runs test emails through a separate practice copy of the bot. Nothing is emailed to anyone, and the real data isn't touched.
+  ```
+  {"text": "G-801-001 wk2 call done 10/6, baseline was 9/15", "from": "crc", "expect": "visit_schedule"}
+  ```
 
-**Step 1. Try 3 ready-made examples:**
+- **An email:** a `.txt` file:
 
-```
-./bin/cormon-cloud test demo/test-quick
-```
+  ```
+  Subject: G-801-002 update
+  From: crc
+  Expect: sample_handling
 
-**Step 2. Try 41 practice emails** (about 4 minutes):
+  Baseline CSF drawn 9/1, first dose 9/15.
+  ```
 
-```
-./bin/cormon-cloud test demo/test-emails
-```
+- **Many at once:** one `.csv` spreadsheet with the columns `subject`, `body`, `from` and `expect`.
 
-**Step 3. Write your own test emails.** Make a folder, for example `my-emails`, and put one text file per email in it. Example file `my-emails/test1.txt`:
+**Expect** (optional) is what the bot *should* find, so it can be scored: `eligibility`, `visit_schedule`, `procedure_sequence`, `sample_handling`, `study_drug`, `consent`, `none` (nothing wrong) or `out_of_scope` (safety). Several are allowed, separated by commas.
 
-```
-Subject: MAP-0301 randomized
-From: crc
-Expect: eligibility
+Then run `./bin/cormon-cloud test my-tests --study NCT05842941`.
 
-We randomized MAP-0301 today. eGFR was 41.
-```
+**Reading the result.** Each message shows **RIGHT** or **WRONG** and what the bot found. At the end:
 
-What the top lines mean (all of them are optional):
+- **Precision:** of the alerts raised, how many were real problems (fewer false alarms is higher).
+- **Recall:** of the real problems, how many were caught (fewer misses is higher).
+- **F1:** both combined. 1.00 is perfect.
 
-- **Subject:** the email's subject line.
-- **From:** who sent it: `crc` (the site coordinator) or `cra` (the monitor).
-- **Expect:** what the bot *should* find, so it can be scored right or wrong:
-
-| Write | When the email is about |
-|---|---|
-| `eligibility` | a patient who doesn't meet the entry criteria |
-| `visit_schedule` | a visit outside its allowed window |
-| `procedure_sequence` | steps done in the wrong order |
-| `sample_handling` | a lab sample handled wrongly |
-| `consent` | a consent problem |
-| `none` | nothing wrong; the bot should stay quiet |
-| `out_of_scope` | safety only; the bot should refuse and point to the medical monitor |
-
-Leave out **Expect** if you just want to see what the bot does.
-
-Then run:
+The results are saved on your laptop in `results/<date-time>/results.csv`. To see why the bot decided something in the last test run:
 
 ```
-./bin/cormon-cloud test my-emails
+./bin/cormon-cloud sandbox item 2 --drafts    # what it found, both quotes, what it would send
+./bin/cormon-cloud sandbox message 4          # how it understood the message
+./bin/cormon-cloud sandbox log --message 4    # every step it took, including ideas it rejected
 ```
 
-**Many emails?** Instead of one file each, use a single spreadsheet saved as `.csv` with the columns `subject`, `body`, `from` and `expect`. See `demo/test-emails/practice-41.csv` for an example.
-
-**Step 4. Read the result.** For each email you'll see **RIGHT** or **WRONG**, and what the bot found. At the end there's a score:
-
-- **Precision:** of the alerts the bot raised, how many were real problems (fewer false alarms means higher).
-- **Recall:** of the real problems, how many the bot caught (fewer misses means higher).
-- **F1:** both combined into one number. 1.00 is perfect.
-
-The results are also saved as a spreadsheet on your laptop: `results/<date-time>/results.csv`. It includes the bot's reasoning for every email.
-
-**Step 5. Find out why the bot decided something.** Each line of the result shows a message number (`msg 4`) and item numbers (`#2`). Look inside the test run with `sandbox`:
-
-```
-./bin/cormon-cloud sandbox item 2 --drafts    # what it found, both quotes, its reasoning, what it would send
-./bin/cormon-cloud sandbox message 4          # how it understood the email (useful when it found nothing)
-./bin/cormon-cloud sandbox log --message 4    # every step it took, including ideas it rejected and why
-```
-
-The `sandbox` view shows the most recent test run only. Each new run starts fresh.
-
-Each test email uses the AI, so a run costs a few cents.
+Each test message uses the AI, so a run costs a few cents.
 
 ### Part 4: Other useful commands
 
 | Command | What it does |
 |---|---|
-| `./bin/cormon-cloud rules` | The 124 rules the bot made from the study documents |
 | `./bin/cormon-cloud status` | What the bot did recently |
-| `./bin/cormon-cloud log --item 1` | The full history of item 1 |
+| `./bin/cormon-cloud items --study NCT05842941` | Every problem found |
+| `./bin/cormon-cloud log --item 19` | The full history of item 19 |
 | `./bin/cormon-cloud digest --hours 24` | Preview the sponsor's daily summary |
-| `./bin/cormon-cloud pause` | Stop the bot from acting (it still collects email) |
-| `./bin/cormon-cloud resume` | Start it again |
+| `./bin/cormon-cloud pause` / `resume` | Stop the bot from acting (it still collects messages) / start it again |
 | `./bin/cormon-cloud logs` | The server's technical log |
 
 Anything you do is recorded under your own name.
 
-## How it works
+## How it works (technical)
 
-1. **Capture.** Every message is stored whole: body, headers, attachments, arrival time, and how the monitor saw it (to, cc, bcc, channel, direct). The study comes from the address: `bot+NCT04098666@huma.ai` belongs to MAP. Mail to the bare `bot@huma.ai` is logged as a general message and never matched against a study.
-2. **Study model.** `cormon ingest` turns each document into atomic rules ("Exclude if eGFR is below 45 mL/min"). Each rule keeps a verbatim quote from the document. A rule whose quote can't be found in the document is rejected as a defect. Rules are rebuilt only when a document changes.
-3. **Event model.** Each message becomes structured events: what happened, to whom, when, whether it is new, planned, or historical (already known), plus the facts stated.
-4. **Matching.** An event is checked only against the problem classes agreed for the study (eligibility, visit schedule, procedure order, sample handling, consent).
-   - Number thresholds are checked in code, so the same value always gives the same answer.
-   - Other rules are checked by the AI, one atomic rule at a time.
-   - Every finding is then confirmed against the original document passage, and both quotes (email and document) must be found verbatim before anything is raised.
-5. **Safety boundary.** An event about participant safety (or a safety signal that matches no study rule) is recorded as out of scope. It is routed nowhere, and the sender is told to take it to the medical monitor.
-6. **Triage.** Tiers (low / medium / immediate) come from `config/triage.yaml`, a first-match rule list you can read and edit. One deviation discussed over several replies is one item.
-7. **Routing and drafts.** `config/routing.yaml` says where each tier goes. `config/templates.yaml` holds templates chosen by topic × recipient × channel × severity. Everything is sent from the study's own alias, never from a customer address.
-8. **Record.** Every message, classification, routing decision, send and operator action goes to an append-only log (database triggers block updates and deletes).
+1. **Capture.** Every message is stored whole (body, headers, attachments, arrival time, channel). Mail to `bot+NCT05842941@huma.ai` belongs to Regimen G. Chat messages belong to the study whose space they are in.
+2. **Study model.** `cormon ingest` reads the documents into sections. `cormon/guide.py` writes short **topic briefs** (each line cites its section). `cormon/checks.py` holds the **code checks**: dates, times and numbers with their limits, each with a quote from the document.
+3. **Reader** (`cormon/reader.py`, chosen by `checker:` in `study.yaml`). For each patient in the message: scope (which visits and sections apply), date notes worked out in code, an AI judge reads the topic briefs, the code checks run on facts taken from the message, duplicates are merged, and a second AI confirms each finding against the original section.
+4. **Evidence.** The protocol quote is looked up sentence by sentence in the real documents. It is never a heading, another visit's line, or the bot's own summary, and a schedule table shows only the visit's own cell. Words that can't be proven are not shown, and the finding becomes "please check".
+5. **Safety boundary.** Safety events are recorded as out of scope, routed nowhere, and the sender is told to take them to the medical monitor.
+6. **Triage.** Tiers (low / medium / immediate) come from `config/triage.yaml`, a first-match rule list.
+7. **Routing.** `config/routing.yaml` says where each tier goes. `config/templates.yaml` holds the message layouts. The problems of one message are sent as one alert (`routing.route_items`); immediate ones go alone. Replies ("cleared", "disregard", "#N") are matched to the alert by email headers or by chat thread.
+8. **Record.** Every message, decision, send and operator action goes to an append-only log.
 
 ## Quick start (local, no accounts needed)
 
@@ -259,7 +239,8 @@ echo "OPENAI_API_KEY=sk-..." > .env
 
 cormon init
 cormon ingest                 # builds the study model (about 2-3 minutes the first time)
-python demo/rehearse.py       # runs every demo scenario and checks the result
+python -m pytest -q tests/    # the fast checks (no AI calls)
+python demo/rehearse.py       # runs every demo scenario (MAP study) and checks the result
 cormon items                  # what it found
 cormon item 2 --drafts        # one item: evidence, every drafted message, history
 cormon digest --hours 24      # preview the sponsor digest
@@ -267,7 +248,14 @@ cormon digest --hours 24      # preview the sponsor digest
 
 With `channels.email: sim` and `channels.teams: sim` (the default), mail is read from `data/sim/inbox/` and "sent" to `data/sim/outbox/`. Teams posts are appended to `data/sim/teams/*.md`.
 
-## Demo scenarios (`demo/scenarios/`)
+**Test Regimen G on the laptop** (uses a practice copy, so the live data is safe; run one test at a time, never two in parallel, because they share the practice database):
+
+```bash
+CORMON_HOME=practice7 CORMON_VIEW=briefs CORMON_MODEL=gpt-5.4-mini \
+  .venv/bin/cormon test demo/test-chat-g/chats --study NCT05842941 --out /tmp/run1
+```
+
+## Demo scenarios for the MAP study (`demo/scenarios/`)
 
 | File | What it shows | Expected |
 |---|---|---|
@@ -347,12 +335,17 @@ A personal Microsoft account cannot do this. You need a work tenant, for example
 3. Put the tenant ID and client ID under `teams:` in `config/settings.yaml` and set `channels.teams: graph`.
 4. `cormon auth teams` (device code; sign in as the bot user), then `cormon teams-channels` to get the IDs for the `teams:` section of `studies/NCT04098666/study.yaml`.
 
-### GCP
+### GCP (the cloud copy)
 
 ```bash
 ./deploy/create_vm.sh                          # create or update (PROJECT, ZONE, NAME can be overridden)
 ./deploy/grant_access.sh someone@huma.ai       # let a person use ./bin/cormon-cloud
 ```
+
+**Updating the cloud with new code.** Run the tests first (`python -m pytest -q tests/`), then `./deploy/create_vm.sh`. It copies the code, keeps the server's database and messages, sets the server's own web address in its settings, and restarts the bot. Check afterwards with `./bin/cormon-cloud status` and `./bin/cormon-cloud logs`.
+
+- Only use `SYNC_MODEL=1 ./deploy/create_vm.sh` after rebuilding and testing the study model on the laptop. It replaces the server's rules with the laptop's.
+- When copying single files by hand, make the archive with `COPYFILE_DISABLE=1 tar --no-xattrs ...`. Otherwise macOS adds hidden `._` files, which stop the bot reading its settings.
 
 What this sets up:
 
@@ -370,7 +363,10 @@ What this sets up:
 
 ## Known limits of this build
 
-- The lab manual is a placeholder; real lab manuals will need their own check.
+- The bot does not answer protocol questions yet.
+- The same problem can sometimes be alerted twice; some headlines are worded loosely; some date problems arrive as "please check" when they are clear.
+- The web address is a test one (`sslip.io`); a proper Huma address needs one DNS entry.
+- The MAP lab manual is a placeholder; real lab manuals will need their own check.
 - There is no approval queue: drafts are sent automatically (open question 1). `cormon pause` and `--send-draft no` are the brakes.
 - Item detail pages are protected by an unguessable link (over HTTPS on the cloud copy), not by a login.
 - Later: when mail reaches the general address (bot+clinical@huma.ai), reply once saying it is not linked to a study and naming the study addresses. It must never guess the study.

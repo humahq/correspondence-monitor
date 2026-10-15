@@ -19,7 +19,7 @@ fi
 id cormon >/dev/null 2>&1 || useradd --system --home "$APP" --shell /usr/sbin/nologin cormon
 [ -d "$APP/.venv" ] || python3 -m venv "$APP/.venv"
 "$APP/.venv/bin/pip" install -q --upgrade pip
-"$APP/.venv/bin/pip" install -q "$APP"
+"$APP/.venv/bin/pip" install -q -e "$APP"   # editable: the service runs the files under $APP, never a stale copy
 mkdir -p "$APP/data" "$APP/secrets"
 
 # Cloud-only settings: pages are served by Caddy over HTTPS, the app itself listens on localhost only.
