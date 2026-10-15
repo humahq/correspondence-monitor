@@ -1,0 +1,815 @@
+{
+ "note": "written by gpt-6.1-sol from full protocol sections before any bot run",
+ "emails": {
+  "n003": {
+   "issues": [],
+   "fine": [
+    "The 29.4\u00b0C maximum is below the stated limit, with no stricter batch instruction reported: 'DNL343 drug product and placebo should be stored at room temperature (store below 30\u00b0C).' [regimen_g:5.3].",
+    "Escorted monitor access is appropriate; independent badge access is not required: 'The SIs will agree to allow monitors access to the clinical supplies, dispensing and storage areas' [master:12.3].",
+    "Continuous retained daily temperature records satisfy the minimum: 'controlled, monitored and recorded, at a minimum daily' [master:7.1.3]."
+   ],
+   "good": [
+    "Confirm that the signed receipt review, transit data, and batch label instructions are available during monitoring.",
+    "The planned monitoring visit is 18 Aug, six calendar days after the 12 Aug receipt; the email does not describe a missed protocol deadline."
+   ],
+   "wrong": [
+    "Do not invent a 25\u00b0C storage ceiling or require quarantine solely because the temperature reached 29.4\u00b0C.",
+    "Do not require the CRA to have unrestricted independent access to the IP room."
+   ],
+   "topic": "drug_supply"
+  },
+  "n006": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "A prior placebo-controlled reduction does not authorize starting ATE at 100 mg without pre-entry discussion. 'All participants in the ATE will be dosed with DNL343 200 mg QD regardless of whether they had a dose reduction during the placebo-controlled period.' Also, 'In situations that may necessitate initiation of DNL343 at the reduced dose (100 mg) in the ATE, the investigator should discuss with the medical monitor before entry into the ATE.' [regimen_g:5.6.1] Entry and the reduced first dose were on 05 Oct; discussion was on 06 Oct, the next day, not before entry."
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "The ATE TEAE-driven interruption on 08 Oct called for an unscheduled PK sample even though no routine PK was scheduled. 'If a TEAE is reported that results in dose modification or dose interruption or for a severe TEAE that requires an in-clinic evaluation, an unscheduled PK sample should be obtained.' [regimen_g:s011] The event was moderate but resulted in interruption, and the email documents no collection barrier."
+    }
+   ],
+   "fine": [
+    "The 08 Oct interruption itself was permissible with safety justification and MM consultation: 'As in the placebo-controlled period, the site investigator, in consultation with the medical monitor, may withhold study drug (dose interruption), temporarily reduce the dose (administer one stick pack rather than two stick packs), or discontinue study drug for an individual participant.' [regimen_g:5.6.1]",
+    "Maintaining the original assignment blind was appropriate: 'they will be blinded to active product or matching placebo assignment and this blind will be maintained throughout the ATE period of the study.' [master:4.1]",
+    "The transition postdose sample two hours after dosing met 'The postdose sample can be collected anytime between 1 to 8 hours postdose.' [regimen_g:6.7]"
+   ],
+   "good": [
+    "Separate the earlier blinded-period consultation from the specific pre-entry ATE discussion requirement.",
+    "The 08 Oct assessment occurred one calendar day after the last dose on 07 Oct; the actual assessment time is not supplied, so do not invent an exact last-dose-to-assessment interval.",
+    "Ask the site to document the missed unscheduled PK and review event-triggered sampling instructions."
+   ],
+   "wrong": [
+    "Do not say every ATE participant must start at 200 mg without exception; a reduced start can be discussed before entry.",
+    "Do not claim that the moderate event needed to be severe as well as causing interruption to trigger the ATE PK provision.",
+    "Do not invent a routine ATE PK schedule or classify the nausea automatically as an SAE."
+   ],
+   "topic": "dosing"
+  },
+  "n009": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "The exact elapsed interval fails the controlling five-half-life requirement for this documented narrow-therapeutic-index substrate: 'within 7 days or 5 half-lives (whichever is longer) of the first dose administration' [regimen_g:4.2.2]. Table 5 gives '48.4 \u00b1 12.3 h (based on tacrolimus concentrations)' and recommends '10 days' [regimen_g:s094]. Using the cited 48.4-hour half-life, 5 \u00d7 48.4 = 242 hours = 10 days 2 hours, longer than seven days. From 2 Sep 09:00 to 12 Sep 09:00 is 240 hours, two hours short; 242 hours would elapse at 11:00 on 12 Sep."
+    }
+   ],
+   "fine": [
+    "The reported completion of baseline procedures before dosing is consistent with 'Administer the first dose of study drug only after the Baseline Visit procedures are completed.' [regimen_g:s010]"
+   ],
+   "good": [
+    "Preserve the exact times and distinguish the rounded table recommendation from the governing eligibility calculation.",
+    "The narrow therapeutic index is expressly established for this participant; the finding need not rely on a universal classification of tacrolimus."
+   ],
+   "wrong": [
+    "Do not substitute the shorter radioactivity-based half-life for the concentration-based value explicitly used in the specialist assessment.",
+    "Do not treat a displayed ten-day recommendation as proof that every exactly ten-day interval satisfies five half-lives."
+   ],
+   "topic": "concomitant_medications"
+  },
+  "n012": {
+   "issues": [],
+   "fine": [
+    "Severe intensity does not automatically make the migraine an SAE. 'Of note, the term \"severe\" does not necessarily equate to \"serious\".' [master:10.2.1]",
+    "The safety interruption was made with MM consultation. 'the site investigator, in consultation with the medical monitor, may withhold study drug (dose interruption)' [regimen_g:5.6.1]",
+    "Rosuvastatin is not automatically excluded just because it appears in the transporter table. 'Medications that are considered to have a wide therapeutic index are permitted, and participants taking them are to be monitored for signs of AEs noted in the respective medication\u2019s prescribing information.' [regimen_g:s095]",
+    "Obtaining PK during this ATE event was appropriate. 'If a TEAE is reported that results in dose modification or dose interruption or for a severe TEAE that requires an in-clinic evaluation, an unscheduled PK sample should be obtained.' [regimen_g:s011]"
+   ],
+   "good": [
+    "The interruption began 22 Sep and resumption was 24 Sep, a two-calendar-day interval; retain the exact dose dates in the compliance record.",
+    "Keep the individual therapeutic-index assessment and monitoring plan with the conmed documentation."
+   ],
+   "wrong": [
+    "Do not classify every severe headache as serious.",
+    "Do not require a CC SAE report within 24 hours solely because this AE was severe.",
+    "Do not impose a blanket ban on every drug in the BCRP/OAT3 examples table."
+   ],
+   "topic": "safety"
+  },
+  "n015": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "The original Master screening was outside the allowable window, and repeating selected tests did not replace full re-screening with consent. 03-Aug to 15-Sep = 28 + 15 = 43 days, one day beyond 42. 'Master Protocol Screening procedures must be completed within 42 days to 1 day prior to the Baseline Visit.' [regimen_g:s010] 'If a participant is re-screened for Master Protocol eligibility after the initial screening window ends, they must complete a full Master Protocol Screening Visit, including informed consent, as outlined in section 8.1.' [master:8.1.2]"
+    }
+   ],
+   "fine": [
+    "Regimen screening and baseline may occur together, provided the required sequence is followed: 'This visit may be combined with the Baseline Visit, please refer to the RSA for applicability.' [master:8.2]",
+    "Giving the first dose after the completed baseline assessments is appropriate: 'Administer the first dose of study drug only after the Baseline Visit procedures are completed.' [regimen_g:s010]"
+   ],
+   "good": [
+    "Ask the site to reconcile the screening and baseline records and address the incomplete re-screening through its deviation process.",
+    "The van cancellation explains the date change but does not extend the screening window."
+   ],
+   "wrong": [
+    "Do not say the participant needed a second regimen assignment merely because baseline moved.",
+    "Do not treat acceptable repeat labs as sufficient to renew the full Master screening window."
+   ],
+   "topic": "visit_schedule"
+  },
+  "n018": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "Flag the research-only ECG before Master consent. 'Written informed consent will be obtained from participants before any study procedures or assessments, not performed as clinic visit standard of care (e.g., vital signs, weight), are done' [master:6.2]. The 08:35 ECG preceded the 09:42 Master signature by 67 minutes; it was expressly not standard-of-care testing."
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "Flag obtaining G consent before actual regimen assignment, regardless of the expected assignment or postponement of G assessments. 'After a participant is randomly assigned to a regimen, participants will be consented a second time via the regimen-specific ICF.' [regimen_g:s010]. G consent at 10:05 preceded assignment at 14:31 by 4 hours 26 minutes, and preceded Master eligibility confirmation at 14:20."
+    }
+   ],
+   "fine": [
+    "Using one calendar day is not itself prohibited; the required sequence is what matters: 'Informed consent will be conducted for the Master Protocol and subsequently for the applicable RSA to which that participant was assigned.' [master:6.2]."
+   ],
+   "good": [
+    "Ask the site to address both the pre-consent assessment and the premature regimen consent in its corrective plan.",
+    "Do not imply that a later signature retroactively authorizes an earlier research assessment."
+   ],
+   "wrong": [
+    "Do not treat the ECG as exempt routine care when the email explicitly identifies a research-only visit.",
+    "Do not treat an expected assignment as an actual random assignment.",
+    "Do not invent a requirement for a minimum number of days between Master and regimen consent."
+   ],
+   "topic": "consent"
+  },
+  "n021": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "G-530-002 requires an EDC screen-failure record despite never being assigned a regimen. 'Any participant who signs the Master Protocol consent form will be considered enrolled in the Platform Trial.' [master:8.1.2]. For a Master screen failure, the listed demographics including NeuroSTAMP, failure reason, and assessed eligibility information must be 'captured and entered into the EDC system' [master:8.1.2]. Paper records and a local spreadsheet do not fulfill that requirement."
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "G-530-003's G consent and G-specific screening were premature: Master eligibility had not been established and there was no random regimen assignment. The consent sequence is 'Informed consent will be conducted for the Master Protocol and subsequently for the applicable RSA to which that participant was assigned.' [master:6.2]. The regimen visit 'will take place in-person after random assignment to a regimen' [master:8.2]. Riluzole stability at 2 October was only 22 days: 20 days from 10 to 30 September plus two days in October. The inclusion criterion is 'on a stable dose of riluzole for \u2265 30 days prior to the Master Protocol Screening Visit' [master:5.2.1]. Reaching 30 elapsed days on 10 October may permit resolution of that time-dependent condition within the screening period, but does not authorize G consent or screening on 5 October before eligibility and assignment."
+    }
+   ],
+   "fine": [
+    "Not proceeding with G-530-002 was supported by the unconditional renal threshold: 'eGFR) < 30' and 'exclusionary regardless of clinical symptoms' [master:5.2.2]. The reported value, 28, is below 30.",
+    "G-530-003 need not automatically undergo a full new Master screening solely to resolve the riluzole stability interval: a participant 'may become eligible immediately after resolution of the disqualifying condition if resolution occurs within the screening period and re-screening is not required' [master:8.1.2]. From 2 to 10 October is eight days; 10 September to 10 October is 30 days."
+   ],
+   "good": [
+    "Transfer the existing screen-failure information into EDC while preserving the source documents.",
+    "Keep IRT and treatment on hold until eligibility and the proper assignment/consent sequence are established.",
+    "Do not assume the eventual random assignment will be G."
+   ],
+   "wrong": [
+    "Do not say a participant without regimen assignment is outside the Master enrollment record requirements.",
+    "Do not count 10 September through 2 October inclusively to manufacture 30 days of riluzole stability.",
+    "Do not require a new full screening solely because a time-dependent criterion resolves during the initial screening period."
+   ],
+   "topic": "eligibility"
+  },
+  "n024": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "Identify that the ET CSF collection was not permitted this early. 'CSF collection for the ET visit will be performed only if the participant has consented to the lumbar puncture with baseline CSF collection and the ET visit occurs at or after the Week 12 visit.' [regimen_g:6.7]. 03 Aug to 03 Sep is 31 days, plus 30 days to 03 Oct, plus 2 days to 05 Oct = Day 63, or Week 9, before Week 12. Consent and baseline CSF do not remove the timing condition."
+    },
+    {
+     "id": "b",
+     "severity": "high",
+     "must": "Identify that the second coagulation collection occurred in the wrong order. 'Coagulation parameters will be collected a second time, prior to the second lumbar puncture, as defined in the RSA.' [master:9.3.4]. The 11:05 blood draw was 55 minutes after the 10:10 second LP, not prior to it; screening coagulation does not substitute for this second collection."
+    }
+   ],
+   "fine": [],
+   "good": [
+    "Document the unnecessary early ET LP and the coagulation sequence as distinct departures, with investigator review of the participant's safety.",
+    "Do not change the actual visit or collection dates to make the CSF appear to be a Week 24 collection."
+   ],
+   "wrong": [
+    "Do not accept optional-LP consent alone as authorization for CSF collection at any ET date.",
+    "Do not treat a post-LP coagulation result as satisfying a requirement for pre-LP collection.",
+    "Do not say that all ET assessments were forbidden before Week 12; the threshold here concerns ET CSF."
+   ],
+   "topic": "samples"
+  },
+  "n027": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "Identify the omitted ATE Week 4 ECG; the requirement is not conditional on PK collection. The Week 4 ATE procedure list includes '-lead ECG' [regimen_g:6.10.2], and the regimen specifies '12. -lead ECG (to be done at all in-clinic visits)' [regimen_g:6]."
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "Identify the omitted urine pregnancy test for a woman of childbearing potential at this clinic visit. Prior negative serum testing and compliant contraception do not replace it. 'Urine pregnancy testing will occur at every in clinic visit for women of childbearing potential.' [regimen_g:s011]"
+    }
+   ],
+   "fine": [
+    "The ATE Week 4 visit date is correct: 31 Aug \u2212 03 Aug = 28 days; its window was 24 Aug\u201307 Sep. 'This visit will take place in-person 28 \u00b1 7 days after the Week 24 Visit of the placebo-controlled portion of the trial.' [regimen_g:6.10.2]",
+    "Home dosing is not prohibited at this non-predose-PK visit. 'On clinic visit days with predose PK assessments, participants will be administered their dose of study drug in the clinic.' [regimen_g:5.4]"
+   ],
+   "good": [
+    "Correct the N/A rationale and document the genuinely unperformed assessments rather than treating them as completed."
+   ],
+   "wrong": [
+    "Do not invent a routine ATE Week 4 PK requirement.",
+    "Do not apply the ATE Week 16 hold-until-procedures-complete instruction to ATE Week 4."
+   ],
+   "topic": "visit_schedule"
+  },
+  "n030": {
+   "issues": [],
+   "fine": [
+    "An investigator-directed unscheduled safety assessment was allowed: 'Unscheduled visits for safety assessments that are deemed medically appropriate and necessary by the Investigator may be performed at any time, independent of scheduled in-clinic visits' [regimen_g:6].",
+    "The additional local serum test was allowed when pregnancy was suspected: 'The SI may order additional local testing or a retest at the central laboratory, if needed' and 'if there is any suspicion that a participant may be pregnant' [master:9.1.2].",
+    "The unscheduled clinic urine pregnancy test was appropriate: 'Urine pregnancy testing will occur at every in clinic visit for women of childbearing potential' [regimen_g:s011].",
+    "The AE and resolution update were entered promptly: 'The site enters the AE and Key Study Event information into the EDC system as soon as possible after learning of the event or receiving an update on an existing event' [master:10.2.3].",
+    "The stated event did not trigger the described unscheduled PK indications: 'Additional unscheduled PK samples should be collected as needed as part of assessment for TEAEs leading to dose reduction or dose interruption or any severe TEAE that requires an unscheduled visit for assessment' [regimen_g:6]."
+   ],
+   "good": [
+    "The initial EDC entry was made 1 day after onset and on the day the site learned of and assessed the event; the resolution update was entered the day it was received.",
+    "A pregnancy concern was investigated without representing negative testing as a confirmed pregnancy.",
+    "The email supplies the investigator's seriousness assessment and the absence of dose interruption rather than leaving those points ambiguous."
+   ],
+   "wrong": [
+    "Do not prohibit an extra serum test merely because a urine test was negative.",
+    "Do not require a pregnancy Key Study Event for a concern with negative testing and no established pregnancy.",
+    "Do not require unscheduled PK solely because any unscheduled visit occurred.",
+    "Do not classify this mild outpatient event as an SAE solely because it prompted a clinic assessment."
+   ],
+   "topic": "contraception_pregnancy"
+  },
+  "n033": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "Temperature monitoring and recording were absent for two calendar days, 5 and 6 Sep. The 4 and 7 Sep readings are three days apart and cannot establish the intervening daily temperatures. The minimum is 'controlled, monitored and recorded, at a minimum daily' [master:7.1.3]."
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "Independent access was extended to a general security group outside the specified trial staff, despite the door remaining locked. IP must be kept in a secure location 'to which only the trial pharmacist and designated pharmacy staff, SI, and clinical staff have access' [master:7.1.3]."
+    }
+   ],
+   "fine": [
+    "The two observed temperatures themselves are within the stated limit: 'store below 30\u00b0C' [regimen_g:5.3]."
+   ],
+   "good": [
+    "Do not fabricate weekend measurements or enter an inferred range as observed data.",
+    "Review access permissions and establish actual daily monitoring coverage, including weekends."
+   ],
+   "wrong": [
+    "Do not assert a confirmed weekend temperature excursion from missing data alone.",
+    "Do not treat an HVAC system remaining on as equivalent to recorded daily temperature monitoring."
+   ],
+   "topic": "drug_supply"
+  },
+  "n036": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "The post-Master-consent rash must be recorded as an AE even though it preceded regimen consent and dosing. 'Participants will be monitored for adverse events from the time they sign consent for the Master Protocol until completion of their participation as defined in the RSA.' [master:10.1.1] Master consent was 10 Aug and rash onset was 12 Aug, two days later. 'All AEs will be collected and reported in the EDC system' [master:10.2]. A screening progress note alone is insufficient."
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "The worsened arthritis requires an AE record, not just a medical-history update. 'Chronic conditions that occur more frequently (for intermittent conditions) or with greater severity, would be considered as worsened and therefore would be recorded as adverse events.' [master:10.1.1] The 18 Sep worsening, functional limitation and new treatment distinguish it from stable pre-existing arthritis; unrelatedness does not remove the recording duty."
+    }
+   ],
+   "fine": [
+    "Not recording ordinary ALS progression as an AE is correct. 'Symptoms of progression/worsening of ALS, including 'normal' progression, will not be recorded as adverse events.' [master:10.1.1]",
+    "The W4 visit is on target: 24 Aug + 28 days = 21 Sep. 'Day 28 \u00b1 7' [regimen_g:s010]"
+   ],
+   "good": [
+    "Obtain the complete AE fields for both events, including severity, seriousness, causality, action and outcome.",
+    "Retain the original history and screening notes rather than replacing them when adding the AE records."
+   ],
+   "wrong": [
+    "Do not demand AE entries for the ALSFRS-R decline or SI-attributed ordinary ALS weakness.",
+    "Do not treat an unrelated event as exempt from AE collection.",
+    "Do not assume either event is serious merely because treatment was used."
+   ],
+   "topic": "safety"
+  },
+  "n039": {
+   "issues": [],
+   "fine": [
+    "Remote reconsent is permitted for this remotely conducted clinic visit: 'If the participant\u2019s next in-clinic visit is conducted remotely, reconsent may also be completed remotely using the following procedures:' [regimen_g:6]. Remote conversion for disability is permitted by 'Visit may be conducted via phone or telemedicine with remote services instead of in-person if this is needed to protect the safety of the participant due to a pandemic, disability, or a medically necessary reason.' [regimen_g:s010].",
+    "Different participant and investigator signature dates are appropriate here: 'Once received at the site, the individual who consented the participant via phone or telemedicine signs the informed consent form.' [master:6.2]. Participant signature on 20 Aug to site receipt and investigator signature on 26 Aug is 6 calendar days; no return-mail deadline is specified in the supplied text.",
+    "Reading without signing before the discussion follows 'The participant reads through the consent form but does not sign.' [master:6.2]."
+   ],
+   "good": [
+    "Keep the receipt evidence and the explanation for the genuine signature dates together.",
+    "The separate Master-then-G discussions preserve the consent sequence."
+   ],
+   "wrong": [
+    "Do not flag the six-day postal transit as a specified deadline violation.",
+    "Do not require the investigator to backdate her signature to match the participant.",
+    "Do not insist on an in-person reconsent when the protocol permits this remote pathway."
+   ],
+   "topic": "consent"
+  },
+  "n042": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "Identify the late Follow-Up Safety Call. Sep 1 + 28 days = Sep 29; \u00b13 days gives Sep 26\u2013Oct 2. Oct 6 is day 35, four days beyond the upper limit. 'Participants will have a Follow-Up Safety Call 28 \u00b1 3 days after their last dose of study drug.' [regimen_g:6.10.12]. Participant preference explains but does not eliminate the missed window."
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "Identify the omitted current contraception review. The safety call procedures include 'Review contraceptive methods being used by participant and partner' [regimen_g:6.10.12]. Carrying forward a prior clinic response without asking does not perform that call procedure."
+    }
+   ],
+   "fine": [
+    "A safety call is appropriate even after planned completion, not just early discontinuation: participants completing this visit include those who 'Complete the ATE' [regimen_g:6.10.12]."
+   ],
+   "good": [
+    "Document the offered date, participant preference, actual contact and missed window accurately.",
+    "Obtain the outstanding contraception review rather than merely copying the prior response again."
+   ],
+   "wrong": [
+    "Do not calculate the window from the date the caregiver returned or from the originally offered appointment.",
+    "Do not treat final clinic completion as eliminating the post-treatment safety call."
+   ],
+   "topic": "extension_period"
+  },
+  "n045": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "The Week 2 assessment was late. Baseline 10-Aug + 14 days = 24-Aug; the \u00b13-day window was 21\u201327 Aug. Completion on 28-Aug was Day 18, one day late; voicemail attempts did not complete the visit. 'This visit will take place 14 \u00b1 3 days after the Baseline Visit via telephone.' [regimen_g:6.2]"
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "The Week 2 call omitted the required contraception review; baseline documentation and male sex do not remove that duty for a man with a partner of childbearing potential. 'Review contraceptive methods being used by participant and partner' [regimen_g:6.2] 'For female participants of childbearing potential and for men with a female partner of childbearing potential, review and document current contraceptive method(s) and ensure they meet study requirements.' [regimen_g:s010]"
+    }
+   ],
+   "fine": [
+    "A phone compliance discussion without packet counting is appropriate: 'Drug accountability will not be done at phone visits. A drug compliance check in should be held during phone visits to ensure participant is taking drug per dose regimen and to note any report of missed doses.' [regimen_g:s010]"
+   ],
+   "good": [
+    "Retain the unsuccessful contact attempts, but use the actual assessment date for visit completion.",
+    "Obtain and document the omitted contraceptive-method review rather than waiting solely for the next clinic appointment."
+   ],
+   "wrong": [
+    "Do not require physical drug accountability at Week 2.",
+    "Do not claim the reported IUD-plus-condom combination is itself inadequate.",
+    "Do not count voicemail dates as completed visits."
+   ],
+   "topic": "visit_schedule"
+  },
+  "n048": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "high",
+     "must": "St. John's wort use during study treatment is prohibited; separating morning and evening doses does not create an exception. Table 4 identifies 'St. John\u2019s wort' among strong inducers, and states 'The medications in Table 4 are examples of strong CYP3A4/5 inducers and are excluded during the study.' [regimen_g:s093]. The restriction explicitly includes 'herbal medicines such as St. John\u2019s wort' [regimen_g:5.9]. Reported use was 1\u201311 Oct inclusive, 11 days of concurrent study treatment."
+    },
+    {
+     "id": "b",
+     "severity": "low",
+     "must": "The herbal product must be entered in the medication source record and eCRF; storing bottle photographs in correspondence is not the reported completion of those entries. 'All concomitant medications and significant non-drug therapies, including supplements, received by a participant should be recorded on the appropriate source document and electronic Case Report Form (eCRF).' [master:7.5]"
+    },
+    {
+     "id": "c",
+     "severity": "moderate",
+     "must": "The scheduled Week 2 concomitant-medication review was omitted, not satisfied by carrying forward an unasked 'no changes.' Week 2 requires 'Review of Concomitant Medications and Adverse Events' [regimen_g:6.2]. Baseline 28 Sep + 14 days = 12 Oct, so this was the scheduled on-target Week 2 call, not an optional administrative contact."
+    }
+   ],
+   "fine": [
+    "A phone compliance check rather than physical drug accountability is appropriate: 'Drug accountability will not be done at phone visits. A drug compliance check in should be held during phone visits to ensure participant is taking drug per dose regimen and to note any report of missed doses.' [regimen_g:s010]"
+   ],
+   "good": [
+    "Obtain the product strength, amount, exact last administration time and any additional ingredients, then promptly involve the SI in the prohibited-medication assessment.",
+    "The protocol says IP 'may need to be discontinued' when prohibited medication raises concern; do not substitute an automatic permanent-discontinuation rule for clinical assessment."
+   ],
+   "wrong": [
+    "Do not accept dose-time separation as a solution to the strong-inducer prohibition.",
+    "Do not require a physical pack count during the telephone visit."
+   ],
+   "topic": "concomitant_medications"
+  },
+  "n051": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "high",
+     "must": "FSH 40.0 IU/L does not meet the protocol's strictly greater-than-40 threshold. Despite 14 months without menses, the participant was incorrectly treated as postmenopausal and dosed without a qualifying contraceptive plan. The definition requires 'no menses for \u2265 12 consecutive months before screening without an alternative medical cause, with a follicle-stimulating hormone level of > 40 IU/L or mIU/mL at screening' [regimen_g:5.10.2]. A local laboratory interpretation does not change that threshold."
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "The 14 Sep Master Screening serum pregnancy test was omitted on the basis of the unsupported reproductive-status classification. 'Serum pregnancy testing will occur in participants of childbearing potential at the Master Protocol Screening Visit and as necessary during the study' [regimen_g:s010]."
+    },
+    {
+     "id": "c",
+     "severity": "moderate",
+     "must": "The 15 Sep baseline urine pregnancy test was also omitted. 'Urine pregnancy testing for women of childbearing potential' is a baseline procedure [regimen_g:6.1], and 'Urine pregnancy testing will occur at every in clinic visit for women of childbearing potential' [regimen_g:s010]."
+    }
+   ],
+   "fine": [],
+   "good": [
+    "Explicitly distinguish >40 from \u226540; the result is exactly 40.0, not above 40.",
+    "The amenorrhea duration satisfies the duration component: 14 months is at least 12 months, but both components of the definition are needed.",
+    "Master Screening on 14 Sep preceded baseline on 15 Sep by 1 day."
+   ],
+   "wrong": [
+    "Do not say that 14 months of amenorrhea is too short.",
+    "Do not accept the hospital reference range as replacing the protocol definition.",
+    "Do not assert that a pregnancy occurred or invent pregnancy-management instructions absent from the supplied text."
+   ],
+   "topic": "contraception_pregnancy"
+  },
+  "n054": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "The new Master screening on October 5 was premature after a personal-reasons discontinuation. For that situation, 'The research participant may not be re-screened until after the date that their 36-Week Visit would have occurred, had they completed participation in that regimen.' [master:8.1.2]. August 1 to September 26 = 56 days; August 1 to October 5 = 30 + 30 + 5 = 65 days. Week 36 is day 252 (36 \u00d7 7), so October 5 was 187 days before even the nominal Week-36 date. Written re-consent does not remove this waiting restriction."
+    }
+   ],
+   "fine": [
+    "Obtaining written Master re-consent before new screening is the correct consent sequence: 'The research participant must provide written informed re-consent to the Master Protocol and must still meet the Master Protocol inclusion and exclusion eligibility criteria in order to be re-assigned into a different regimen.' [master:8.1.2]. The problem is timing, not absence of re-consent.",
+    "Encouraging off-treatment follow-up rather than automatically ending all study involvement was appropriate: 'Every effort should be made to retain participants in the study, including the ATE period, regardless of whether they have discontinued study drug.' [regimen_g:6.9]."
+   ],
+   "good": [
+    "Hold the reassignment process and document the premature screening activity.",
+    "Keep outstanding G ET and safety-follow-up obligations distinct from eligibility for a different regimen."
+   ],
+   "wrong": [
+    "Do not apply the immediate reassignment provision for someone who never met regimen eligibility; this participant was randomized in G.",
+    "Do not substitute the 30-day/5-half-life rule for the specific personal-reasons restriction.",
+    "Do not claim that a new randomization already occurred."
+   ],
+   "topic": "early_termination"
+  },
+  "n057": {
+   "issues": [],
+   "fine": [
+    "Repeating the failed SVC on a different day within the initial screening period is allowed: 'vital capacity may be reassessed on a different day during the initial screening period' [master:8.1.2]. The highest repeat value, 50%, meets 'Vital Capacity \u2265 50% of predicted capacity' [master:5.2.1], and 'The highest VC recorded is utilized for eligibility' [master:9.2.2].",
+    "The initial ALT was 126/40 = 3.15 times ULN, but repeat eligibility labs are allowed: 'Safety labs required for the site investigator to determine eligibility, can be repeated during the Master Protocol screening period, if necessary.' [master:8.1.2]. The repeat was 120/40 = 3.00 times ULN, not above the numerical exclusion threshold, 'ALT) or aspartate aminotransferase (AST) > 3 times the upper limit of normal (ULN)' [master:5.2.2]. The investigator also documented that the remaining abnormality was not clinically significant.",
+    "Screening on 8 September to baseline on 21 September is 13 days, within '42 days to 1 day prior to the Baseline Visit' [regimen_g:s010]."
+   ],
+   "good": [
+    "Retain both lab results, both SVC sessions, and the investigator's eligibility assessment rather than replacing the initial results.",
+    "Confirm that eligibility was documented before the 14 September assignment."
+   ],
+   "wrong": [
+    "Do not require averaging the SVC trials.",
+    "Do not call exactly three times ULN automatically exclusionary.",
+    "Do not require a full new screening visit solely because these assessments were repeated within the initial screening period."
+   ],
+   "topic": "eligibility"
+  },
+  "n060": {
+   "issues": [],
+   "fine": [
+    "A disability-related W8 remote visit is permitted. 'Designated visits in the SOA (i.e., Week 4, Week 8, and Week 16) may be conducted via telemedicine (or phone if telemedicine is not available) with remote services instead of in-person if needed to protect the safety of the participant due to a pandemic, disability, or other medically necessary reason.' [regimen_g:s049]",
+    "The visit is exactly on target: 03 Aug to 31 Aug = 28 days, plus 28 days to 28 Sep = Day 56. The permitted Day 49\u201363 interval is 21 Sep\u201305 Oct. 'Day 56 \u00b1 7' [regimen_g:s010]",
+    "Using the PCP's lab when central collection was infeasible is allowed. 'If clinical safety labs are needed and it is not feasible to use the central laboratory, clinical safety labs can be collected using one of the following methods:' and 'Independent labs offering such services as described in this protocol and/or local to the participant (e.g. primary care physician)' [master:8]",
+    "The included CNS-BFS is the required W8 remote regimen-specific assessment. 'CNS-BFS (Weeks 8 and 16 only)' [regimen_g:s049]"
+   ],
+   "good": [
+    "Check that the local results, reference ranges and SI review are retained together.",
+    "Confirm that missed in-person procedures are documented using the applicable remote-visit process."
+   ],
+   "wrong": [
+    "Do not require an in-person W8 visit despite the documented disability-related safety reason.",
+    "Do not insist on central laboratory collection when it is infeasible and an allowed local alternative is used.",
+    "Do not infer missed remote AE review, C-SSRS, CNS-BFS or contraception review; each is explicitly documented.",
+    "Do not demand a urine pregnancy test for this male participant."
+   ],
+   "topic": "safety"
+  },
+  "n063": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "The SVC was performed with a mouthpiece/nose clips instead of the required mask. The protocol states 'assessments will be performed using a face mask' [master:9.2.2]. A good seal does not substitute for the specified interface; address the method departure and ensure the required mask is used going forward."
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "Trials four and five were obtained without meeting the variability condition. The protocol permits additional trials only under the stated condition: 'up to 5 trials may be performed if the variability between the highest and second highest VC is 10% or greater for the first 3 trials' [master:9.2.2]. Here, 2.95 \u2212 2.82 = 0.13 L; 0.13/2.95 \u00d7 100 = 4.41% (4.61% using 2.82), below 10%. Extra efforts to improve the result were not authorized by that rule; review the resulting CRF data with the study team without silently replacing source values."
+    }
+   ],
+   "fine": [
+    "A different evaluator is not independently a departure when appropriately qualified: 'It is strongly preferred that a single evaluator performs all measures throughout the study, as much as possible.' [master:9.2.2] The replacement is reported to have current certification and delegation."
+   ],
+   "good": [
+    "03 Aug + 56 days = 28 Sep; the Week 8 visit itself was on target.",
+    "Preserve all five original strips and document the circumstances and corrective action rather than deleting the additional trials."
+   ],
+   "wrong": [
+    "Do not flag changing evaluators as automatically prohibited.",
+    "Do not treat entering three trials rather than all five on the CRF as an additional departure; the issue is the unauthorized additional testing, not the CRF's three-trial format.",
+    "Do not infer that this participant became ineligible from a postbaseline respiratory assessment."
+   ],
+   "topic": "assessments"
+  },
+  "n066": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "The predose sample was outside the allowed lead time: 09:00 minus 06:35 = 2 hours 25 minutes, exceeding the two-hour maximum by 25 minutes. 'The predose sample should be collected prior to dosing (0 to 2 hours before the dose) and approximately 24 hours after the last dose.' [regimen_g:6.3]"
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "The postdose sample was late: 17:10 minus 09:00 = 8 hours 10 minutes, 10 minutes beyond the permitted range. 'The postdose sample can be collected anytime between 1 to 8 hours postdose.' [regimen_g:6.3] Being on the same date does not satisfy this interval."
+    }
+   ],
+   "fine": [
+    "The visit was exactly Day 28: 01 Sep + 28 days = 29 Sep, within 'Days 28 \u00b1 7' [regimen_g:6.3].",
+    "Dosing followed completion of the other predose procedures: 'Study drug should not be taken until after study visit procedures are complete.' [regimen_g:6.3]",
+    "The independent confirmation was appropriate: 'by a member of the study site staff other than the person administering the study drug.' [regimen_g:5.7]",
+    "Administration lasted 09:08 minus 09:00 = 8 minutes, meeting 'All dosing should be completed within 15 minutes.' [regimen_g:5.4]"
+   ],
+   "good": [
+    "Retain the actual PK timestamps and address both timing departures separately.",
+    "The previous dose to clinic dose interval was exactly 24 hours; the clear predose departure is its 2-hour-25-minute lead time, not a need to invent a numerical tolerance for 'approximately 24 hours'."
+   ],
+   "wrong": [
+    "Do not flag the correctly timed Day 28 visit.",
+    "Do not treat same-calendar-day collection as sufficient for postdose PK.",
+    "Do not allege missing independent dose confirmation or missing eCRF timestamps."
+   ],
+   "topic": "dosing"
+  },
+  "n069": {
+   "issues": [],
+   "fine": [
+    "The 03 Aug routine-care weight and vital signs may precede consent: 'before any study procedures or assessments, not performed as clinic visit standard of care (e.g., vital signs, weight)' [master:6.2]. The research assessments began 17 minutes after signature: 10:05 minus 09:48.",
+    "A trained, delegated licensed RN may obtain consent; a physician need not personally obtain every consent: 'the site investigator or other licensed staff who are trained on the study and delegated to obtain consent' [master:6.2]. The offered physician discussion was declined and documented, consistent with 'the participant's decision to accept or decline this opportunity will be documented in the research file' [master:6.2].",
+    "Master consent on 03 Aug followed by assignment and G consent on 04 Aug follows 'Informed consent will be conducted for the Master Protocol and subsequently for the applicable RSA to which that participant was assigned.' [master:6.2]."
+   ],
+   "good": [
+    "Confirm that the routine-care provenance of the vitals remains clear in source.",
+    "The email establishes delivery of fully executed copies and retention of originals for both consents."
+   ],
+   "wrong": [
+    "Do not require repeat vitals solely because routine-care measurements preceded consent.",
+    "Do not require a physician signature or physician discussion after the participant documented declining that opportunity.",
+    "Do not flag sequential Master and G consent on different days."
+   ],
+   "topic": "consent"
+  },
+  "n072": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "Identify the omitted five outcome assessments at an ET before ATE Week 52. The rule is 'If the participant early terminates or withdraws consent during the ATE period before reaching Week 52, all assessments that are collected at the ATE Week 52 in-clinic visit should be conducted.' [regimen_g:6.10.13]. Week 52 includes 'ALSAQ-40', 'ROADS', 'PGI-C', 'PGI-S', and 'CGI-C' [regimen_g:6.10.10]. The post-Week-52 exemption does not apply."
+    }
+   ],
+   "fine": [
+    "The combined ET/safety follow-up timing is acceptable: Aug 20 + 28 days = Sep 17; the \u00b13-day window is Sep 14\u201320, so Sep 14 is day 25. 'If the ET Visit occurs approximately 28\u00b13 days after the last dose of study drug, the information for the Follow-Up Safety Call can be collected during the ET visit, and a separate Follow-Up Safety Call does not need to be completed.' [regimen_g:6.10.13].",
+    "No new supply is appropriate for a participant not returning: 'For participants returning for another visit only.' [regimen_g:s011]."
+   ],
+   "good": [
+    "Correct the not-applicable classification and ensure the ET folder distinguishes terminations before versus after Week 52.",
+    "Acknowledge the documented attempts to arrange an earlier appointment rather than assuming the site deliberately delayed ET."
+   ],
+   "wrong": [
+    "Do not flag the combined safety follow-up as too early; day 25 is within the stated window.",
+    "Do not extend the after-Week-52 questionnaire exemption to all ET visits."
+   ],
+   "topic": "extension_period"
+  },
+  "n075": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "low",
+     "must": "Identify unnecessary dispensing at the final ATE visit despite no planned return. The dispensing footnote states 'For participants returning for another visit only.' [regimen_g:s011]. The Aug 31 dispensing was outside that condition even though the supply was returned unopened Sep 8, eight days later."
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "Identify the missing repeat vital-status determination at ATE LPLV for a participant alive at the end of individual follow-up. 'If at that time the participant is alive, his or her vital status should be determined again at the time of the last participant, last visit (LPLV) of the Regimen ATE.' [regimen_g:s011]. Aug 31 to Oct 6 is 36 days (30 days to Sep 30 plus 6); copying the Aug 31 observation is not a new determination at Oct 6 LPLV."
+    }
+   ],
+   "fine": [
+    "The Sep 28 safety call is timely: Aug 31 + 28 days = Sep 28, within Sep 25\u2013Oct 1, under 'Participants will have a Follow-Up Safety Call 28 \u00b1 3 days after their last dose of study drug.' [regimen_g:6.10.12].",
+    "Not describing the historical randomized assignment is appropriate even in ATE: 'this blind will be maintained through the ATE period of the study' [master:6.4.2]. Receiving active extension drug does not itself reveal the earlier assignment."
+   ],
+   "good": [
+    "Distinguish dispensing from ingestion: the email supports an extra dispensing event, not extra treatment exposure.",
+    "Arrange the outstanding vital-status ascertainment and retain its actual ascertainment date and source."
+   ],
+   "wrong": [
+    "Do not allege that the participant took the returned supply.",
+    "Do not treat an earlier final-visit vital-status entry as automatically satisfying the later ATE LPLV determination.",
+    "Do not flag the Sep 28 safety call timing."
+   ],
+   "topic": "extension_period"
+  },
+  "n078": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "high",
+     "must": "The CC SAE report missed the deadline irrespective of unrelatedness or weekend staffing. 'must be reported to the CC within 24 hours of the site being notified of the event' [master:10.3]. Awareness was 18 Sep at 16:00; the deadline was 19 Sep at 16:00. Reporting on 21 Sep at 09:00 was 65 hours after awareness, 41 hours late."
+    },
+    {
+     "id": "b",
+     "severity": "high",
+     "must": "EDC SAE entry also missed its independent 24-hour requirement. 'SAEs must be entered into the EDC system and reported to the CC within 24 hours of site awareness of the SAE.' [master:12.2.2] Entry on 21 Sep at 10:00 was 66 hours after 18 Sep at 16:00, or 42 hours beyond the 19 Sep at 16:00 deadline. A draft worksheet did not satisfy EDC entry."
+    }
+   ],
+   "fine": [
+    "The inpatient pneumonia admission was correctly classified as serious. 'Requires inpatient hospitalization or prolongation of existing hospitalization.' [master:10.1.2]",
+    "An unrelated causality assessment does not itself conflict with serious classification. 'The relationship of the AE to the investigational product is specified by the SI based on temporal relationship and his/her clinical judgment' [master:10.2.2]"
+   ],
+   "good": [
+    "Recommend a weekend reporting backup so source preparation does not become a substitute for notification and EDC entry.",
+    "Reconcile the eventual outcome and resolution date with the hospital follow-up."
+   ],
+   "wrong": [
+    "Do not apply the protocol's discussion of anticipated respiratory failure to excuse this pneumonia report.",
+    "Do not require the site to submit an expedited FDA report itself based solely on this admission."
+   ],
+   "topic": "safety"
+  },
+  "n081": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "The 24 Sep ET visit could not replace the follow-up safety call. 'If the ET Visit occurs approximately 28\u00b13 days after the last dose of study drug, the information for the Follow-Up Safety Call can be collected during the ET visit, and a separate Follow-Up Safety Call does not need to be completed.' [regimen_g:6.9] From last dose 31 Aug, Day 28 was 28 Sep and the allowed Day 25\u201331 interval was 25 Sep\u201301 Oct. ET on 24 Sep was Day 24, one day before that interval; no subsequent contact occurred by the 06 Oct email."
+    },
+    {
+     "id": "b",
+     "severity": "moderate",
+     "must": "The ET CSF collection was too early in study participation despite baseline CSF and consent. 'For the ET Visit, optional CSF collection will be completed in participants with a Baseline CSF collection and only if the ET visit occurs at or after the Week 12 visit.' [regimen_g:6.9] Baseline 03 Aug to ET 24 Sep = 52 days (28 days to 31 Aug + 24 days in Sep). Week 12 targets Day 84, 26 Oct; even its Day 81 lower window edge is 23 Oct. The ET was well before Week 12."
+    }
+   ],
+   "fine": [
+    "The stated follow-up interview content was appropriate, although its timing did not qualify. '1. Assess and document AEs' and '2. Review contraceptive methods being used by participant and partner' [regimen_g:6.8]",
+    "Collecting a second coagulation panel before the repeat LP met the coagulation timing requirement; it did not authorize the LP itself. 'Coagulation parameters will be collected a second time, prior to the second lumbar puncture, as defined in the RSA.' [master:9.3.4]"
+   ],
+   "good": [
+    "Arrange the missed safety follow-up as soon as possible and document its actual date rather than backdating the ET interview.",
+    "Review ET CSF eligibility separately from consent and procedural safety checks."
+   ],
+   "wrong": [
+    "Do not accept a Day 24 interview as within 28\u00b13 days.",
+    "Do not say consent and baseline CSF alone permit an ET LP at any time.",
+    "Do not infer a separate coagulation deficiency; fresh pre-LP testing is explicitly documented."
+   ],
+   "topic": "safety"
+  },
+  "n084": {
+   "issues": [],
+   "fine": [
+    "Stopping after three SVC trials is appropriate: 'Three VC trials are required for each testing session, however up to 5 trials may be performed if the variability between the highest and second highest VC is 10% or greater for the first 3 trials.' [master:9.2.2] The difference is 2.80 \u2212 2.56 = 0.24 L; 0.24/2.80 \u00d7 100 = 8.57%, below 10%. Even using 2.56 as denominator gives only 9.38%.",
+    "Home dosing at Week 8 is permitted: 'For the Week 8 Visit, the participant may take their daily dose at home or in clinic, depending on the time of the visit and one postdose PK blood sample would be obtained.' [regimen_g:6.3] The sample was 10:05 \u2212 07:30 = 2 hours 35 minutes postdose, within 'anytime between 1 to 8 hours postdose' [regimen_g:6.3]."
+   ],
+   "good": [
+    "Visit arithmetic: 04 Aug + 56 days = 29 Sep. The Week 8 window is 22 Sep\u201306 Oct, corresponding to Days 49\u201363.",
+    "The retained full printout, mask, approved instrument and current delegated evaluator support closing the specific respiratory query."
+   ],
+   "wrong": [
+    "Do not require five SVC trials merely because the third value is lower.",
+    "Do not require a Week 8 predose PK sample or insist that the Week 8 dose be administered in clinic.",
+    "Do not apply the screening eligibility use of the highest VC as a new eligibility decision at Week 8."
+   ],
+   "topic": "assessments"
+  },
+  "n087": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "The site incorrectly waived safety follow-up after only 20 days of ITT follow-up: September 10 to September 30 = 20 days. The exemption applies only 'as long as the participant is followed under the ITT principle for a minimum of 28 days.' [master:6.5.1]. Day 28 was October 8; the day-25-to-day-31 window was October 5\u201311. The October 12 ET was day 32 (20 remaining September days + 12 October days), outside the window for replacing the safety call under 'If the ET Visit occurs approximately 28\u00b13 days after the last dose of study drug, the information for the Follow-Up Safety Call can be collected during the ET visit' [regimen_g:6.9]."
+    },
+    {
+     "id": "b",
+     "severity": "low",
+     "must": "The instruction to discard empty packets was inconsistent with the return requirement: 'Upon discontinuation of investigational product, the research participant is instructed to return any unused investigational product, including empty packaging, if applicable.' [master:6.5.1]. Counting the returned unused product does not correct the instruction to recycle applicable empty packaging."
+    },
+    {
+     "id": "c",
+     "severity": "moderate",
+     "must": "The permanent drug-discontinuation reason must be entered in the CRF even for an ITT participant: 'For all research participants, the reason for permanent discontinuation of investigational product must be recorded in the Case Report Form (CRF).' [master:6.5.1]. A source note alone is not the specified CRF entry."
+    }
+   ],
+   "fine": [
+    "Completing an ET after the participant ended ITT follow-up is appropriate: 'For participants followed under the ITT principle, an in-person Early Termination Visit will be completed after they discontinue follow-up under the ITT principle.' [master:6.5.1].",
+    "No ET CSF was required without baseline CSF: 'For the ET Visit, optional CSF collection will be completed in participants with a Baseline CSF collection and only if the ET visit occurs at or after the Week 12 visit.' [regimen_g:6.9]."
+   ],
+   "good": [
+    "Resolve the CRF omission and document the missed safety-follow-up window before archival.",
+    "Preserve the October 12 AE and contraception assessments as actually collected; do not relabel their date to fit the window.",
+    "Update return instructions so families are explicitly asked to retain empty packaging."
+   ],
+   "wrong": [
+    "Do not say any amount of ITT follow-up automatically waives the safety call.",
+    "Do not calculate the safety-call date from September 30, when ITT follow-up ended.",
+    "Do not say that an ITT participant is exempt from recording permanent drug discontinuation."
+   ],
+   "topic": "early_termination"
+  },
+  "n090": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "high",
+     "must": "Identify failure to report the overdose/medication error to the Coordination Center despite no symptoms. The participant took 400 mg rather than the prescribed 200 mg on 30 Sep: two 100-mg packs twice = 400 mg. 'These safety events should be reported to the Coordination Center whether they result in an AE/SAE or not.' [regimen_g:5.8]"
+    },
+    {
+     "id": "b",
+     "severity": "high",
+     "must": "Identify late Medical Monitor contact after overdose. SI awareness was 30 Sep 10:00; the 24-hour deadline was 01 Oct 10:00. Contact at 01 Oct 12:00 was 26 hours after awareness, 2 hours late. 'The Site Investigator should also contact the Medical Monitor within 24 hours of the Site Investigator\u2019s awareness.' [regimen_g:5.8]"
+    }
+   ],
+   "fine": [
+    "No clinical AE need be fabricated in an asymptomatic participant; the protocol separately requires EDC reporting when an AE/SAE accompanies the safety event. 'Safety events associated with an AE/SAE should also be reported in the electronic data capture.' [regimen_g:5.8]"
+   ],
+   "good": [
+    "Distinguish the mandatory safety-event notification from clinical AE classification.",
+    "Ensure the actual extra dosing is retained in source and compliance records, and verify the monitoring plan."
+   ],
+   "wrong": [
+    "Do not assume overdose automatically meets an SAE criterion.",
+    "Do not describe the extra dose as harmless and therefore nonreportable."
+   ],
+   "topic": "visit_schedule"
+  },
+  "n093": {
+   "issues": [
+    {
+     "id": "a",
+     "severity": "moderate",
+     "must": "The contingency supply should not have been dispensed to a participant ending participation and not entering ATE. 'Study drug will only be dispensed at this visit if the participant continues in the ATE.' [regimen_g:s010]. Instructions not to take it do not make the dispensing permissible."
+    },
+    {
+     "id": "b",
+     "severity": "low",
+     "must": "An earlier retention-project response does not fulfill the scheduled ET exit questionnaire. The schedule specifies 'Exit Questionnaire Master: done at Week 24 or ET Visit [19]' and 'The assessments listed must be completed for Early Termination Visit that occur prior to Week 24 in the placebo-controlled treatment period.' [regimen_g:s010]. The email explicitly reports that no fresh ET questionnaire was administered."
+    }
+   ],
+   "fine": [
+    "Combining the safety information with the ET was correctly timed: 'If the ET Visit occurs approximately 28\u00b13 days after the last dose of study drug, the information for the Follow-Up Safety Call can be collected during the ET visit, and a separate Follow-Up Safety Call does not need to be completed.' [regimen_g:6.9]. September 8 to October 6 = 22 remaining September days + 6 October days = 28 days; the window was October 3\u20139.",
+    "No ET LP was required in someone without baseline CSF: 'For the ET Visit, optional CSF collection will be completed in participants with a Baseline CSF collection and only if the ET visit occurs at or after the Week 12 visit.' [regimen_g:6.9]."
+   ],
+   "good": [
+    "Arrange return and reconciliation of the improperly dispensed sealed kit without suggesting that the participant restart it.",
+    "Obtain the missing exit questionnaire if the participant agrees, documenting its actual collection date.",
+    "Retain September 8 as the last-dose date unless actual subsequent dosing is reported."
+   ],
+   "wrong": [
+    "Do not infer that the participant took additional doses merely because a kit was dispensed.",
+    "Do not reset the safety-call clock to October 6, the dispensing date.",
+    "Do not allege failure to document current vital status; it was documented."
+   ],
+   "topic": "early_termination"
+  },
+  "n096": {
+   "issues": [],
+   "fine": [
+    "The visit was exactly on target: 01 Aug + 31 days = 01 Sep; +25 days = 26 Sep, or Day 56. The visits occur on 'Days 28 \u00b1 7 and 56 \u00b1 7 days, respectively.' [regimen_g:6.3]",
+    "Home dosing with a single postdose sample is permitted at Week 8: 'For the Week 8 Visit, the participant may take their daily dose at home or in clinic, depending on the time of the visit and one postdose PK blood sample would be obtained.' [regimen_g:6.3]",
+    "14:55 minus 07:10 = 7 hours 45 minutes, within 'The postdose sample can be collected anytime between 1 to 8 hours postdose.' [regimen_g:6.3]",
+    "Packet counting and recording satisfy 'Compliance with home administration of study drug will be performed by the study staff by counting the number of unused packets and will be recorded.' [regimen_g:5.7]"
+   ],
+   "good": [
+    "Use actual administration and collection times for PK interpretation.",
+    "The dose took 8 minutes to complete."
+   ],
+   "wrong": [
+    "Do not require a Week 8 predose sample.",
+    "Do not require Week 8 dosing in clinic merely because the visit was in person.",
+    "Do not import the Week 4 afternoon-visit minor-deviation requirement into Week 8."
+   ],
+   "topic": "dosing"
+  },
+  "n099": {
+   "issues": [],
+   "fine": [
+    "The documented history interview is an allowed source for male-participant azoospermia: 'documentation of azoospermia for a male participant can come from the site personnel\u2019s review of the participant\u2019s medical records, medical examination, or medical history interview' [regimen_g:5.10.2].",
+    "An azoospermic male participant with a female partner of childbearing potential may use the specified condom pathway without requiring her to add an IUD or hormonal method: 'For azoospermic male participants with a woman partner of childbearing potential the male partner must use a male barrier method such as a latex or polyurethane condom' [regimen_g:5.10.2].",
+    "Sperm-donation counseling still applies: 'Male participants must not donate sperm at any time from the start of dosing, throughout the study period, and for 90 days after the final administration of study drug' [regimen_g:5.10.2]."
+   ],
+   "good": [
+    "The interview establishes confirmed absence of sperm, not merely a history of vasectomy.",
+    "Master Screening on 01 Sep was 7 days before the 08 Sep baseline.",
+    "Obtaining an outside report may improve the file but should not be represented as an additional protocol-mandated eligibility requirement."
+   ],
+   "wrong": [
+    "Do not insist that only an original semen-analysis report can document azoospermia in a male participant.",
+    "Do not require the female partner to add a third method under the described azoospermia pathway.",
+    "Do not exempt an azoospermic participant from the sperm-donation restriction."
+   ],
+   "topic": "contraception_pregnancy"
+  }
+ }
+}

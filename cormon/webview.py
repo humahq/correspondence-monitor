@@ -24,8 +24,11 @@ def _e(v) -> str:
     return html.escape("" if v is None else str(v))
 
 
+_NO_QUOTE = "Exact words not found: please read this section of the study documents."
+
+
 def _also(study, ev: dict) -> str:
-    parts = [f"""<p class="muted">{_e(a['where'])}</p><blockquote>{_e(a['doc_quote'])}</blockquote>
+    parts = [f"""<p class="muted">{_e(a['where'])}</p><blockquote>{_e(a['doc_quote'] or _NO_QUOTE)}</blockquote>
 <p class="muted">Site wrote: "{_e(a['message_quote'])}"</p>""" for a in also_broken(study, ev)]
     return f"<h2>It also goes against this rule</h2>{''.join(parts)}" if parts else ""
 
@@ -52,7 +55,7 @@ def render_item(item: dict) -> str:
 <p class="muted">Timing: {_e(event.get('temporality'))}. "{_e(event.get('temporality_evidence'))}"</p>
 <h2>What the study rule says</h2>
 <p class="muted">{_e(ev.get('doc_title'))}, page {_e(ev.get('doc_page'))} · rule {_e(ev.get('rule_id'))}</p>
-<blockquote>{_e(ev.get('doc_quote'))}</blockquote>
+<blockquote>{_e(ev.get('doc_quote') or _NO_QUOTE)}</blockquote>
 <details><summary class="muted">Surrounding passage in the original document</summary>
 <blockquote>{_e(ev.get('doc_passage'))}</blockquote></details>
 {_also(s, ev)}

@@ -1,0 +1,118 @@
+# Eliot's test study: HEALEY ALS Platform Trial, Regimen G (DNL343, Denali).
+# Sources: ClinicalTrials.gov NCT05842941 (Regimen-Specific Appendix G, V2.0, 18 Dec 2023) and
+# NCT04297683 (Master Protocol V6.0, 14 Oct 2024; a scanned PDF, read by bin/ocr-pdf into master_protocol.ocr.txt).
+study_id: NCT05842941
+short_name: DNL343
+title: HEALEY ALS Platform Trial - Regimen G (DNL343)
+sponsor: Massachusetts General Hospital (Sean M. Healey & AMG Center for ALS)
+
+# Mail to bot+<address_tag>@huma.ai is routed to this study.
+address_tag: NCT05842941
+monitor_signature: |-
+  HEALEY Regimen G Correspondence Monitor
+  (automated message from the study monitoring service; it does not review safety information)
+
+documents:
+  - id: master
+    kind: protocol
+    title: HEALEY ALS Platform Trial Master Protocol V6.0 (14 Oct 2024)
+    version: "6.0 (14 Oct 2024)"
+    file: docs/master_protocol.pdf
+    guide_file: docs/master_protocol.ocr.txt   # text of the scan (bin/ocr-pdf), read for the guide
+  - id: regimen_g
+    kind: protocol
+    title: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023)
+    version: "2.0 (18 Dec 2023)"
+    file: docs/regimen_g.pdf
+    guide_file: docs/regimen_g.docx   # the same appendix as a Word file: clean headings and tables for the guide
+    overrides: [master]   # where the appendix changes a Master Protocol step, the appendix wins
+
+# How emails are checked. "reader": the AI reads the guide sections an email is about (cormon/guide.py,
+# cormon/reader.py). Any other value, or no checker block, uses the rule-by-rule checks.
+# packs: the documents are combined into one pack per topic (cormon/packs.py), each split into sub-topic pieces.
+# view: what the reader reads besides visit checklists: sections, packs, pieces or briefs (each topic's rules as
+# short lines citing their sections). review: a second AI reviews the judge's answer before a final round (costs
+# about twice as much; off). disputed: a finding the second reading rejects although its protocol words are found
+# is sent as "please check" (check) or dropped (drop).
+checker:
+  route: reader
+  documents: [regimen_g, master]
+  packs: true
+  view: briefs
+  review: false
+  code_checks: true   # dates, times and numbers checked by code on facts from the message (cormon/checks.py)
+
+roles:
+  - { id: crc, label: Study coordinator }
+  - { id: cra, label: Clinical research associate }
+  - { id: clinops_lead, label: Sponsor ClinOps lead }
+  - { id: medical_monitor, label: Medical monitor }
+
+sites:
+  - { id: site-01, name: "Site 01 (MGH)", aliases: [MGH, Massachusetts General] }
+
+people:
+  - id: rohit-crc
+    name: John Rohit
+    email: johnrohit94@gmail.com
+    roles: [crc]
+    sites: [site-01]
+  - id: ernest-cra
+    name: John Ernest
+    email: johnernest978@gmail.com
+    roles: [cra]
+    sites: [site-01]
+  - id: john-clinops
+    name: John Huma
+    email: john@huma.ai
+    roles: [clinops_lead]
+    sites: ["*"]
+  - id: medical-monitor
+    name: the Regimen G medical monitor
+    email: null
+    roles: [medical_monitor]
+    sites: ["*"]
+
+pattern_classes:
+  - id: eligibility
+    label: Eligibility
+    description: A participant screened, enrolled or randomized who meets an exclusion criterion or fails an inclusion criterion, of the Master Protocol or of Regimen G.
+    documents: [master, regimen_g]
+    event_types: [screening, enrollment, randomization]
+    match_event_types: [enrollment, randomization]
+  - id: visit_schedule
+    label: Visit schedule
+    description: A visit, telephone visit or safety call outside its allowed window, or a visit missing a required assessment.
+    documents: [regimen_g, master]
+    event_types: [visit, contact, screening]
+  - id: procedure_sequence
+    label: Procedure order
+    description: Procedures done in the wrong order, e.g. randomized before eligibility was confirmed, first dose before the baseline assessments, or spinal fluid collected after the first dose instead of before.
+    documents: [regimen_g, master]
+    event_types: [dosing, randomization, enrollment, visit, sample_collection]
+  - id: study_drug
+    label: Study drug
+    description: Study drug given, changed or stopped outside the protocol (wrong dose, dose change without the required steps, missed compliance checks), or a prohibited or restricted medicine taken during the study.
+    documents: [regimen_g, master]
+    event_types: [dosing, visit, other]
+  - id: sample_handling
+    label: Sample handling
+    description: Blood, DNA, urine or spinal fluid samples collected, processed or shipped outside the protocol's requirements.
+    documents: [regimen_g, master]
+    event_types: [sample_collection, sample_shipment, visit]
+  - id: consent
+    label: Informed consent
+    description: Study procedures done without valid, current, signed consent, or consent process steps skipped.
+    documents: [master, regimen_g]
+    event_types: [consent, screening, enrollment, randomization, dosing, sample_collection]
+
+teams:
+  study_channel: { team_id: "", channel_id: "", space: "spaces/AAQAvb24ANo", name: "DNL343 Study Updates" }
+  alert_channel: { team_id: "", channel_id: "", space: "spaces/AAQApsUVMPA", name: "DNL343 URGENT" }
+
+# Study-specific tier rules, evaluated before config/triage.yaml.
+triage:
+  - id: study-drug-current
+    description: Study drug given outside the protocol, or a prohibited medicine taken.
+    when: {polarity: problem, pattern_class: study_drug, temporality: [current]}
+    tier: medium

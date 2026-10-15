@@ -29,8 +29,26 @@ def client():
     return _client
 
 
+# tokens used by calls that reached the model (cache hits use none), by model: for cost reports
+USAGE: dict[str, dict[str, int]] = {}
+
+
+def _count(model: str, usage) -> None:
+    if usage is None:
+        return
+    u = USAGE.setdefault(model, {"calls": 0, "input": 0, "cached_input": 0, "output": 0})
+    u["calls"] += 1
+    u["input"] += getattr(usage, "prompt_tokens", 0) or 0
+    details = getattr(usage, "prompt_tokens_details", None)
+    u["cached_input"] += (getattr(details, "cached_tokens", 0) or 0) if details else 0
+    u["output"] += getattr(usage, "completion_tokens", 0) or 0
+
+
 def model_for(task: str) -> str:
-    return settings.get(f"llm.models.{task}") or settings.get("llm.models.default", "gpt-4.1")
+    """CORMON_MODEL_<TASK> overrides one task's model and CORMON_MODEL every task's, for comparing models on a test
+    run (CORMON_EFFORT likewise overrides llm.effort.<task> and llm.reasoning_effort for reasoning models)."""
+    return (os.environ.get(f"CORMON_MODEL_{task.upper()}") or os.environ.get("CORMON_MODEL")
+            or settings.get(f"llm.models.{task}") or settings.get("llm.models.default", "gpt-4.1"))
 
 
 def structured(
@@ -46,8 +64,12 @@ def structured(
     model = model or model_for(task)
     temperature = settings.get("llm.temperature", 0)
     seed = settings.get("llm.seed", 7)
+    reasoning = not model.startswith(("gpt-4", "gpt-3"))
+    effort = (os.environ.get("CORMON_EFFORT") or settings.get(f"llm.effort.{task}")
+              or settings.get("llm.reasoning_effort")) if reasoning else None
     key = hashlib.sha256(
-        json.dumps([model, temperature, system, user, schema], sort_keys=True).encode()
+        json.dumps([model, temperature, system, user, schema] + ([effort] if effort else []),
+                   sort_keys=True).encode()
     ).hexdigest()
     if use_cache:
         row = db.q1("SELECT response FROM llm_cache WHERE key=?", (key,))
@@ -62,15 +84,18 @@ def structured(
             "json_schema": {"name": schema_name, "schema": schema, "strict": True},
         },
     )
-    if not model.startswith(("gpt-5", "o")):
+    if not reasoning:                          # newer reasoning models take no temperature or seed
         kwargs["temperature"] = temperature
         kwargs["seed"] = seed
+    elif effort:
+        kwargs["reasoning_effort"] = effort
 
     last_err: Exception | None = None
     for attempt in range(4):
         try:
             resp = client().chat.completions.create(**kwargs)
             data = json.loads(resp.choices[0].message.content)
+            _count(model, getattr(resp, "usage", None))
             break
         except Exception as e:  # network, rate limit, malformed output
             last_err = e

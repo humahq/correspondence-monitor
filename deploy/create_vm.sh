@@ -54,7 +54,7 @@ echo "packing the project ..."
 SEED=/tmp/cormon-seed.db
 rm -f "$SEED"
 sqlite3 "$ROOT/data/cormon.db" ".backup '$SEED'"          # study model only is taken from this (see setup_vm.sh)
-COPYFILE_DISABLE=1 tar --no-xattrs --exclude '._*' --exclude .DS_Store --exclude .venv --exclude ./data --exclude ./practice --exclude ./sandbox --exclude ./results \
+COPYFILE_DISABLE=1 tar --no-xattrs --exclude '._*' --exclude .DS_Store --exclude .venv --exclude ./data --exclude './practice*' --exclude ./sandbox --exclude ./results \
     --exclude __pycache__ --exclude .pytest_cache --exclude .ruff_cache --exclude '*.egg-info' --exclude .git \
     -czf /tmp/cormon.tgz -C "$ROOT" .
 

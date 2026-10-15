@@ -72,7 +72,7 @@ def cmd_reset(args):
     db.conn()
     old = sqlite3.connect(dest)
     old.row_factory = sqlite3.Row
-    for tbl in ("documents", "doc_pages", "rules", "rule_decisions", "llm_cache"):
+    for tbl in ("documents", "doc_pages", "rules", "allowances", "guide", "rule_decisions", "llm_cache"):
         if not old.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tbl,)).fetchone():
             continue
         rows = old.execute(f"SELECT * FROM {tbl}").fetchall()
@@ -80,7 +80,7 @@ def cmd_reset(args):
             cols = rows[0].keys()
             db.conn().executemany(f"INSERT INTO {tbl} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
                                   [tuple(r) for r in rows])
-    for r in old.execute("SELECT key, value FROM state WHERE key LIKE 'ingest:%'"):
+    for r in old.execute("SELECT key, value FROM state WHERE key LIKE 'ingest:%' OR key LIKE 'allowances:%'"):
         db.set_state(r["key"], r["value"])
     old.close()
     for sub in ("sim/outbox", "sim/teams"):
@@ -97,6 +97,28 @@ def cmd_ingest(args):
         print(f"{s.study_id}: building study model")
         res = ingest.ingest_study(s, force=args.force)
         print(f"  done: {res}")
+
+
+def cmd_guide(args):
+    from . import guide
+    s = config.study(args.study)
+    if not args.packs_only:
+        for doc_id in guide.documents(s):
+            guide.prepare(s, doc_id, guide.source(s, doc_id))
+    if guide.checker(s).get("packs"):
+        from . import packs
+        packs.build(s)
+    if guide.checker(s).get("route") == "reader":
+        from . import duties
+        duties.build(s)
+
+
+def cmd_duties(args):
+    """Print the follow-up table (or rebuild it) so a person can check it against the protocol once."""
+    from . import duties
+    s = config.study(args.study)
+    events = duties.build(s) if args.rebuild else duties.table(s)
+    print(duties.render(events))
 
 
 def cmd_export_rules(args):
@@ -135,7 +157,7 @@ def cmd_rules_decide(args):
 
 
 def cmd_import_model(args):
-    counts = ingest.import_model(Path(args.db), args.reason, actor(args))
+    counts = ingest.import_model(Path(args.db), args.reason, actor(args), args.study)
     print(f"study model replaced from {args.db}: {counts}")
 
 
@@ -485,7 +507,7 @@ def cmd_config(args):
 def cmd_test(args):
     """Run a folder of test messages through the sandbox copy and score them (nothing is sent)."""
     from . import testbench
-    sys.exit(testbench.main(args.folder, args.out))
+    sys.exit(testbench.main(args.folder, args.out, args.study))
 
 
 def cmd_compare(args):
@@ -495,7 +517,7 @@ def cmd_compare(args):
     bad = set(modes) - set(compare.MODES)
     if bad:
         sys.exit(f"unknown mode(s): {', '.join(sorted(bad))}; choose from {', '.join(compare.MODES)}")
-    compare.run(args.folder, args.out, modes, args.model)
+    compare.run(args.folder, args.out, modes, args.model, args.study)
 
 
 def cmd_inject(args):
@@ -589,6 +611,22 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("ingest", help="build the study model from the study documents")
     s.add_argument("--study"); s.add_argument("--force", action="store_true"); s.set_defaults(fn=cmd_ingest)
 
+    s = sub.add_parser("guide", help="prepare the protocol as a guide (sections, tables by row, visit checklists)")
+    s.add_argument("--study", required=True)
+    s.add_argument("--packs-only", action="store_true", help="rebuild the topic packs from the stored sections")
+    s.set_defaults(fn=cmd_guide)
+
+    s = sub.add_parser("checks", help="build the check list from the protocol and print its coverage")
+    s.add_argument("--study", required=True)
+    s.add_argument("--fresh", action="store_true", help="ask the model again instead of using stored answers")
+    s.set_defaults(fn=lambda a: __import__("cormon.checks", fromlist=["build"]).build(
+        config.study(a.study), use_cache=not a.fresh))
+
+    s = sub.add_parser("duties", help="print the follow-up table: what the site must do after each event")
+    s.add_argument("--study", required=True)
+    s.add_argument("--rebuild", action="store_true", help="build it again from the guide sections")
+    s.set_defaults(fn=cmd_duties)
+
     s = sub.add_parser("export-rules", help="write the rules (Word and Excel) and the source documents to a folder")
     s.add_argument("folder"); s.add_argument("--study", default=next(iter(config.studies()), None))
     s.set_defaults(fn=cmd_export_rules)
@@ -606,7 +644,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("import-model", help="replace the study model with one rebuilt and tested in another copy")
     s.add_argument("db", help="the other copy's database, e.g. practice/data/cormon.db")
-    s.add_argument("--reason", required=True); s.set_defaults(fn=cmd_import_model)
+    s.add_argument("--reason", required=True)
+    s.add_argument("--study", action="append", help="only this study (repeatable); default every study in it")
+    s.set_defaults(fn=cmd_import_model)
 
     s = sub.add_parser("rules", help="list the study model's rules")
     s.add_argument("--study", default=next(iter(config.studies()), None))
@@ -683,12 +723,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("path", nargs="?", help="dotted path, e.g. rules.0.tier"); s.add_argument("value", nargs="?")
     s.add_argument("--reason"); s.set_defaults(fn=cmd_config)
 
-    s = sub.add_parser("test", help="run a folder of test messages (.txt, .eml, .csv) through a sandbox and score them")
+    s = sub.add_parser("test", help="run a folder of test messages (.txt, .eml, .csv, .json) through a sandbox and "
+                                    "score them")
     s.add_argument("folder"); s.add_argument("--out", help="folder for results.csv and summary.json")
+    s.add_argument("--study", help="study id the messages are about (default: the first study)")
     s.set_defaults(fn=cmd_test)
 
     s = sub.add_parser("compare", help="score a test folder against the rules, the full documents and a rule list")
     s.add_argument("folder"); s.add_argument("--out", help="folder for table.txt, per_case.csv and summary.json")
+    s.add_argument("--study", help="study id the messages are about (default: the first study)")
     s.add_argument("--modes", default="rules,document,rulelist")
     s.add_argument("--model", help="model for the document and rulelist modes (default: the configured one)")
     s.set_defaults(fn=cmd_compare)

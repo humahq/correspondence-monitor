@@ -2,6 +2,8 @@
 system:
   data_dir: data
   studies_dir: studies
+  # The studies this copy runs. Leave empty to run every folder under studies/.
+  studies: [NCT04098666, NCT05842941]
   poll_seconds: 20
   timezone: America/New_York
 
@@ -16,13 +18,22 @@ matching:
 llm:
   temperature: 0
   seed: 7
+  timeout_seconds: 600
+  # Reasoning models (gpt-5 and later) take an effort instead of a temperature; per task under effort.
+  reasoning_effort: low
+  effort:
+    ingest: high
+    ingest_links: medium
+    ingest_brief: medium
+    read_confirm: medium
+  # The documents are read once by the strong model; every email is read by the fast one.
   models:
-    default: gpt-4.1
-    ingest: gpt-4.1
-    extract: gpt-4.1
-    match: gpt-4.1
+    default: gpt-5.4-mini
+    ingest: gpt-6.1-sol
+    extract: gpt-5.4-mini
+    match: gpt-4.1        # rule-by-rule studies (NCT04098666)
     confirm: gpt-4.1
-    draft_edit: gpt-4.1-mini
+    draft_edit: gpt-5.4-mini
 
 # Which channel adapters run. "sim" reads data/sim/inbox and writes data/sim/outbox,
 # so the whole flow can be rehearsed without real accounts.

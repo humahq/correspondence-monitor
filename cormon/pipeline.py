@@ -6,7 +6,7 @@ import re
 
 from dateutil import parser as dtparser
 
-from . import capture, config, db, events, items, matching, routing, settings, textutil, triage
+from . import capture, config, db, events, guide, items, matching, reader, routing, settings, textutil, triage
 from .config import Study
 from .drafting import local_time
 
@@ -73,6 +73,36 @@ def _pid(value: str | None) -> str | None:
 
 
 TIER_RANK = {"low": 0, "medium": 1, "immediate": 2}
+
+
+def _same_words(a: str, b: str) -> bool:
+    import difflib
+    a, b = textutil.normalize(a or ""), textutil.normalize(b or "")
+    if not a or not b:
+        return False
+    return a in b or b in a or difflib.SequenceMatcher(None, a, b).ratio() >= 0.6
+
+
+def _one_alert_per_problem(study: Study, groups: dict[tuple, list[dict]]) -> dict[tuple, list[dict]]:
+    """One problem found under two problem classes (riluzole stability under eligibility and under study drug)
+    is one alert: the other class's rule is shown in it as a further rule the same words go against."""
+    order = {p["id"]: i for i, p in enumerate(study.pattern_classes)}
+
+    def rank(item):
+        (pclass, _), group = item
+        return (-max(TIER_RANK[c["tier"]] for c in group), not any(c["f"].method == "numeric" for c in group),
+                order.get(pclass, 99))
+
+    kept: dict[tuple, list[dict]] = {}
+    for key, group in sorted(groups.items(), key=rank):
+        home = next((k for k, g in kept.items() if k[1] == key[1] and key[1]
+                     and any(_same_words(c["f"].message_quote, o["f"].message_quote) for c in group for o in g)),
+                    None)
+        if home:
+            kept[home] += group
+        else:
+            kept[key] = list(group)
+    return kept
 
 
 def _drop_restatements(candidates: list[dict], msg_id: int) -> list[dict]:
@@ -180,6 +210,49 @@ def _base_evidence(study: Study, msg: dict, event: dict) -> dict:
 
 # ---------------------------------------------------------------- replies to the monitor
 
+def _replied_to(msg: dict) -> dict | None:
+    """The alert a message replies to: by email headers, or by the chat thread the alert started (Google Chat
+    names a thread spaces/S/threads/T and the post that opened it spaces/S/messages/T.T)."""
+    if msg.get("in_reply_to"):
+        row = db.q1("SELECT item_id, meta FROM outbox WHERE rfc_message_id=? AND item_id IS NOT NULL",
+                    (msg["in_reply_to"],))
+        if row:
+            return row
+    thread = (msg.get("headers") or {}).get("_cormon_reply_to") or ""
+    m = re.fullmatch(r"(spaces/[^/]+)/threads/([^/]+)", thread)
+    if m:
+        head = f"{m.group(1)}/messages/{m.group(2)}."
+        rows = db.q("SELECT item_id, meta, external_ref FROM outbox WHERE channel='teams' AND item_id IS NOT NULL"
+                    " AND external_ref LIKE ? ORDER BY id", (head + "%",))
+        return next((r for r in rows if r["external_ref"].startswith(head)), None)
+    return None
+
+
+def _target_items(msg: dict, instruction: dict) -> list[int]:
+    """The items a reply is about: all the problems of the alert it answers, or those it names ("cleared #14").
+    A number named outside any alert's thread counts when it is an item of this study."""
+    numbers = [int(n) for n in re.findall(r"#\s*(\d+)", instruction.get("text") or "")]
+    row = _replied_to(msg)
+    if row:
+        sent = db.unjs(row["meta"], {}).get("item_ids") or [row["item_id"]]
+        return [n for n in numbers if n in sent] if numbers else sent
+    if numbers:
+        return [n for n in numbers if db.q1("SELECT 1 FROM items WHERE id=? AND study_id=? AND kind != 'good_news'",
+                                            (n, msg.get("study_id")))]
+    one = _target_item(msg)
+    return [one] if one is not None else []
+
+
+def _answer_in_chat(study: Study, msg: dict, text: str) -> None:
+    """A short reply in the chat thread an instruction came from, so the sender sees it was taken."""
+    m = re.fullmatch(r"teams:((spaces/[^/]+)/threads/[^/]+)", msg.get("thread_key") or "")
+    if msg.get("channel") != "teams" or not m:
+        return
+    routing.enqueue(purpose="instruction_answer", channel="teams", destination="teams_study_channel", body=text,
+                    message_id=msg["id"], study_id=study.study_id,
+                    meta={"target": {"space": m.group(2), "thread": m.group(1), "key": "study_channel"}})
+
+
 def _target_item(msg: dict) -> int | None:
     if msg.get("in_reply_to"):
         row = db.q1("SELECT item_id FROM outbox WHERE rfc_message_id=? AND item_id IS NOT NULL",
@@ -204,24 +277,36 @@ def _target_item(msg: dict) -> int | None:
     return None
 
 
+def _shown_key(f) -> tuple[str, str]:
+    """What a reader sees of a problem; without a proven protocol quote its headline stands in for it."""
+    return (textutil.normalize(f.doc_quote or (f.extra or {}).get("headline") or ""),
+            textutil.normalize(f.message_quote or ""))
+
+
 def handle_instruction(study: Study, msg: dict, instruction: dict) -> bool:
     kind = instruction.get("type")
     if kind not in ("disregard", "cleared"):
         return False
     person = study.person_by_email(msg.get("from_addr"))
-    item_id = _target_item(msg)
-    if item_id is None or person is None or not ({"cra", "clinops_lead"} & set(person.roles)):
+    item_ids = _target_items(msg, instruction)
+    if not item_ids or person is None or not ({"cra", "clinops_lead"} & set(person.roles)):
         db.audit("instruction_not_applied", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
-                 instruction=instruction, item_id=item_id,
-                 reason="no item referenced" if item_id is None else "sender is not the CRA or sponsor lead")
+                 instruction=instruction, item_id=item_ids[0] if item_ids else None,
+                 reason="no item referenced" if not item_ids else "sender is not the CRA or sponsor lead")
+        if person is not None and not item_ids:
+            _answer_in_chat(study, msg, f'I could not tell which problem you mean. Reply "{kind}" in the alert\'s '
+                                        f'thread, or name it, for example "{kind} #12".')
         return False
     actor_type = "cra" if "cra" in person.roles else "sponsor"
     who = f"{person.name} <{person.email}>"
-    if kind == "disregard":
-        items.override(item_id, "counts", 0, who, actor_type, reason=instruction.get("text"), force=True)
-        items.set_state(item_id, "suppressed", who, actor_type, reason=f"reply: {instruction.get('text')}")
-    else:
-        items.set_state(item_id, "cleared", who, actor_type, reason=f"reply: {instruction.get('text')}")
+    for item_id in item_ids:
+        if kind == "disregard":
+            items.override(item_id, "counts", 0, who, actor_type, reason=instruction.get("text"), force=True)
+            items.set_state(item_id, "suppressed", who, actor_type, reason=f"reply: {instruction.get('text')}")
+        else:
+            items.set_state(item_id, "cleared", who, actor_type, reason=f"reply: {instruction.get('text')}")
+    done = "cleared" if kind == "cleared" else "disregarded (it will not count)"
+    _answer_in_chat(study, msg, f"Done: {', '.join(f'#{i}' for i in item_ids)} {done}, by {person.name}.")
     return True
 
 
@@ -294,9 +379,10 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                     db.audit("attachment_unplaced", entity_type="message", entity_id=msg_id,
                              study_id=study.study_id, attachment=att["filename"], what=a["what_it_is"])
 
-        if handle_instruction(study, msg, data["instruction_to_monitor"]):
-            summary["instruction"] = data["instruction_to_monitor"]["type"]
-            if not data["events"]:
+        told = data["instruction_to_monitor"]
+        if handle_instruction(study, msg, told) or (told or {}).get("type") in ("disregard", "cleared"):
+            summary["instruction"] = told["type"]
+            if not data["events"]:  # a bare "cleared #19" is an answer to us, not site news to check
                 db.ex("UPDATE messages SET status='processed' WHERE id=?", (msg_id,))
                 return summary
 
@@ -326,31 +412,34 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
             "SELECT source_date FROM attachments WHERE message_id=? AND source_date IS NOT NULL", (msg_id,))]
         newest_part_date = max(part_dates, key=_instant) if part_dates else None
 
+        reader_route = guide.checker(study).get("route") == "reader"
+        safety_waiting: list[tuple[dict, str | None, dict]] = []
+
+        def out_of_scope(why: str, pid: str | None, event: dict, base: dict) -> None:
+            summary["out_of_scope"] += 1
+            item_id, created = items.upsert(
+                study=study, thread_key=msg["thread_key"], message_id=msg_id,
+                dedup_key=f"{study.study_id}|{msg['thread_key']}|safety|{pid or '-'}",
+                kind="out_of_scope", pattern_class=None, rule_id=None, participant_id=pid, site=site,
+                polarity="neutral", title=SAFETY_TITLE, tier="low",
+                tier_reason="safety signals are out of scope (Section 4.6); routed nowhere",
+                evidence=dict(base, message_quote=event["quote"]), reasoning=why, state="out_of_scope")
+            (summary["items_created"] if created else summary["items_repeat"]).append(item_id)
+            if created:
+                db.audit("safety_out_of_scope", entity_type="item", entity_id=item_id, study_id=study.study_id,
+                         why=why, note="recorded only; sender told to contact the medical monitor")
+                routing.route_item(item_id)
+
         for event in data["events"]:
             if event.get("harm", "none") == "none":
                 event["safety_signal"] = event["safety_only"] = False
             pid = _pid(event.get("participant_id"))
             base = _base_evidence(study, msg, event)
 
-            def out_of_scope(why: str) -> None:
-                summary["out_of_scope"] += 1
-                item_id, created = items.upsert(
-                    study=study, thread_key=msg["thread_key"], message_id=msg_id,
-                    dedup_key=f"{study.study_id}|{msg['thread_key']}|safety|{pid or '-'}",
-                    kind="out_of_scope", pattern_class=None, rule_id=None, participant_id=pid, site=site,
-                    polarity="neutral", title=SAFETY_TITLE, tier="low",
-                    tier_reason="safety signals are out of scope (Section 4.6); routed nowhere",
-                    evidence=dict(base, message_quote=event["quote"]), reasoning=why, state="out_of_scope")
-                (summary["items_created"] if created else summary["items_repeat"]).append(item_id)
-                if created:
-                    db.audit("safety_out_of_scope", entity_type="item", entity_id=item_id, study_id=study.study_id,
-                             why=why, note="recorded only; sender told to contact the medical monitor")
-                    routing.route_item(item_id)
-
             if event["safety_only"]:
                 if event["temporality"] in ("current", "planned"):
                     anchors.append(dict(event, facts=_pooled_facts(event, pid, data["events"])))
-                out_of_scope("event is only about participant safety")
+                out_of_scope("event is only about participant safety", pid, event, base)
                 continue
 
             stale_days = settings.get("matching.forwarded_stale_days", 7)
@@ -381,20 +470,41 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                          study_id=study.study_id, participant_id=pid, description=event["description"],
                          quote=event["quote"])
 
+            if reader_route:
+                if event["safety_signal"]:
+                    safety_waiting.append((event, pid, base))
+                continue
             pooled = dict(event, facts=_pooled_facts(event, pid, data["events"]))
             pooled, event_corpus = _with_memory(study, pooled, pid, msg, corpus)
             anchors.append(pooled)
             findings = matching.match_event(study, pooled, msg, event_corpus, use_cache=use_cache)
             findings = [f for f in findings if not _already_raised(study, f, pid, msg_id)]
             if event["safety_signal"] and not findings:
-                out_of_scope("safety signal that matches no study requirement, so its only reading is safety")
+                out_of_scope("safety signal that matches no study requirement, so its only reading is safety",
+                             pid, event, base)
                 continue
             for f in findings:
                 add_candidate(f, event, pid, base)
             if not findings and event["polarity"] == "good_news" and event["temporality"] == "current":
                 good_news.append((event, pid, base))
 
-        if settings.get("matching.sweep", True):
+        if reader_route:
+            found, trace = reader.check(study, msg, corpus, use_cache=use_cache)
+            db.audit("reader_checked", entity_type="message", entity_id=msg_id, study_id=study.study_id,
+                     trace=trace)
+            hit = set()
+            for f in found:
+                pid = _pid(f.event.get("participant_id"))
+                if _already_raised(study, f, pid, msg_id):
+                    continue
+                hit.add(pid)
+                add_candidate(f, f.event, pid, _base_evidence(study, msg, f.event))
+            for event, pid, base in safety_waiting:
+                if pid not in hit:
+                    out_of_scope("safety signal that matches no study requirement, so its only reading is safety",
+                                 pid, event, base)
+
+        if not reader_route and settings.get("matching.sweep", True):
             enrolled = {_pid(e.get("participant_id")) for e in data["events"]
                         if e["event_type"] in ("enrollment", "randomization") and e.get("participant_id")}
             for f in matching.sweep_findings(study, msg, corpus, anchors, [c["f"] for c in candidates],
@@ -408,19 +518,26 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
         summary["findings"] = len(candidates)
         groups: dict[tuple, list[dict]] = {}
         for c in candidates:
-            groups.setdefault((c["f"].rule["pattern_class"], c["pid"]), []).append(c)
+            key = (c["f"].rule["pattern_class"], c["pid"])
+            if reader_route:   # the reader merges repeats itself: each of its findings is its own alert
+                key += (c["f"].extra.get("problem_key", ""),)
+            groups.setdefault(key, []).append(c)
             if c["pid"]:
                 problem_pids.add(c["pid"])
+        if not reader_route:
+            groups = _one_alert_per_problem(study, groups)
 
-        for (pclass, pid), group in groups.items():
-            group.sort(key=lambda c: (c["f"].certainty == "unsure", -TIER_RANK[c["tier"]], c["f"].method != "numeric"))
+        bundle: list[int] = []  # this message's new non-urgent problems: one email and one post for all of them
+        for (pclass, pid, *problem), group in groups.items():
+            group.sort(key=lambda c: (c["f"].rule["pattern_class"] != pclass, c["f"].certainty == "unsure",
+                                      -TIER_RANK[c["tier"]], c["f"].method != "numeric"))
             lead = group[0]
             f = lead["f"]
-            shown = {textutil.normalize(f.doc_quote or "")}
+            shown = {_shown_key(f)}
             others = []
             for c in group[1:]:
-                key = textutil.normalize(c["f"].doc_quote or "")
-                if key not in shown:  # two rules can rest on the same sentence; quote it once
+                key = _shown_key(c["f"])
+                if key not in shown:  # two rules can rest on the same sentence and email words; show them once
                     shown.add(key)
                     others.append(c)
             evidence = dict(
@@ -429,20 +546,23 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 doc_quote=f.doc_quote, doc_page=f.doc_page, doc_passage=f.doc_passage,
                 method=f.method, observed=f.observed, certainty=f.certainty,
                 confirmation=f.confirmation, unsure_reason=f.extra.get("unsure_reason"),
-                earlier=f.extra.get("earlier"),
+                earlier=f.extra.get("earlier"), next_step=f.extra.get("next_step"), headline=f.extra.get("headline"),
                 hours_until=lead["hours"], triage_facts=lead["facts"],
                 additional=[{"rule_id": c["f"].rule["id"], "rule_text": c["f"].rule["text"],
                              "doc_id": c["f"].rule["doc_id"], "doc_title": study.doc(c["f"].rule["doc_id"])["title"],
                              "doc_quote": c["f"].doc_quote, "doc_page": c["f"].doc_page,
                              "message_quote": c["f"].message_quote, "reasoning": c["f"].reasoning,
-                             "confirmation": c["f"].confirmation} for c in others])
+                             "confirmation": c["f"].confirmation, "headline": c["f"].extra.get("headline"),
+                             "next_step": c["f"].extra.get("next_step"), "certainty": c["f"].certainty,
+                             "unsure_reason": c["f"].extra.get("unsure_reason")} for c in others])
             pattern = study.pattern(pclass) or {}
             title = f.extra.get("headline") or f"{pattern.get('label', 'Possible issue')}: {f.rule['text']}"
             if f.certainty == "unsure":
                 title = f"Please check (not sure): {title}"
             item_id, created = items.upsert(
                 study=study, thread_key=msg["thread_key"], message_id=msg_id,
-                dedup_key=f"{study.study_id}|{msg['thread_key']}|{pclass}|{pid or '-'}",
+                dedup_key=f"{study.study_id}|{msg['thread_key']}|{pclass}|{pid or '-'}"
+                          + (f"|{problem[0]}" if problem and problem[0] else ""),
                 kind="finding", pattern_class=pclass, rule_id=f.rule["id"],
                 participant_id=pid, site=site, polarity="problem", title=title, tier=lead["tier"],
                 tier_reason=lead["reason"], evidence=evidence,
@@ -450,7 +570,10 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
             seen_item_ids.add(item_id)
             if created:
                 summary["items_created"].append(item_id)
-                routing.route_item(item_id)
+                if lead["tier"] == "immediate":
+                    routing.route_item(item_id)  # never held back to share a message with smaller problems
+                else:
+                    bundle.append(item_id)
                 continue
             summary["items_repeat"].append(item_id)
             existing = items.get(item_id)
@@ -462,6 +585,8 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                     db.audit("item_escalated", entity_type="item", entity_id=item_id, study_id=study.study_id,
                              old=existing["tier"], new=lead["tier"], message_id=msg_id, reason=lead["reason"])
                     routing.route_item(item_id, force=True)
+        if bundle:
+            routing.route_items(bundle)
 
         for event, pid, base in good_news:
             if pid in problem_pids:

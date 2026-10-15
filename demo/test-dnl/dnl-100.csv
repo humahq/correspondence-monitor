@@ -1,0 +1,101 @@
+id,category,subject,body,from,expect,participant,note
+e01,easy,DNL-1001 randomized,"Hi Sam, DNL-1001 was randomized today after baseline. Screening chem: eGFR 27, ALT 31, AST 28. First dose given in clinic.",crc,eligibility,DNL-1001,from the first 40
+e02,hard,Screening labs DNL-1002,"DNL-1002 randomized yesterday. Screening ALT came back 142 U/L (our ULN is 40), AST 61. PI felt he was otherwise well.",crc,eligibility,DNL-1002,from the first 40
+e03,easy,DNL-1003 baseline,"Randomized DNL-1003 this morning. Slow vital capacity at master screening was 46% predicted, best of 3 trials. Everything else fine.",crc,eligibility,DNL-1003,from the first 40
+e04,hard,DNL-1004 onset date,"Quick question on DNL-1004, randomized last week: going back through his history he first noticed weakness in his right hand in March 2024. Master screening was 2 Oct 2026.",crc,eligibility,DNL-1004,from the first 40
+e05,easy,DNL-1005 riluzole,DNL-1005 was randomized on Monday. Note his neurologist started riluzole 50 mg BID about two weeks before his master screening visit.,crc,eligibility,DNL-1005,from the first 40
+e06,easy,DNL-1006 enrolled,We enrolled and randomized DNL-1006 today. She turns 18 next month and her mother co-signed the paperwork.,crc,eligibility,DNL-1006,from the first 40
+e07,easy,DNL-1007 history,"FYI DNL-1007 (randomized Tuesday) mentioned at baseline that she had a seizure in June, about four months ago. Not on any antiepileptic now.",crc,eligibility,DNL-1007,from the first 40
+e08,hard,DNL-1008 meds,DNL-1008 randomized and dosed today. He had been on carbamazepine for trigeminal neuralgia; he stopped it 5 days ago for the study.,crc,eligibility,DNL-1008,from the first 40
+e09,hard,DNL-1009 prior trial,DNL-1009 randomized this week. He finished another ALS drug trial about three weeks before his master screening visit; washout of that drug unknown.,crc,eligibility,DNL-1009,from the first 40
+e10,easy,DNL-1010,Randomized DNL-1010 today. Background: he got an AAV gene therapy for ALS through an expanded access program in 2023.,crc,eligibility,DNL-1010,from the first 40
+e11,easy,DNL-1011 oncology history,"DNL-1011 was randomized Friday. She had breast cancer treated with surgery and radiation two years ago, no recurrence since.",crc,eligibility,DNL-1011,from the first 40
+e12,easy,DNL-1012 baseline,DNL-1012 randomized today. She is still breastfeeding her 6-month-old and plans to continue.,crc,eligibility,DNL-1012,from the first 40
+v01,easy,DNL-1013 Week 2 call,The Week 2 telephone visit for DNL-1013 was done on Day 19; we could not reach her earlier.,crc,visit_schedule,DNL-1013,from the first 40
+v02,easy,DNL-1014 Week 24,DNL-1014 came in for his Week 24 visit on Day 179 because of a family trip.,crc,visit_schedule,DNL-1014,from the first 40
+v03,easy,DNL-1015 Week 12,Week 12 phone visit for DNL-1015 happened on Day 90.,crc,visit_schedule,DNL-1015,from the first 40
+v04,easy,DNL-1016 safety call,DNL-1016 finished study drug; we did the follow-up safety call 35 days after his last dose.,crc,visit_schedule,DNL-1016,from the first 40
+v05,easy,DNL-1017 schedule,DNL-1017 missed his Week 8 clinic visit entirely and we did not reschedule it; we will see him at Week 16.,crc,visit_schedule,DNL-1017,from the first 40
+p01,easy,DNL-1018 baseline day,"Baseline for DNL-1018: he took his first dose of study drug at 8 am in clinic, then we did the ECG, vitals and ALSFRS-R afterwards.",crc,procedure_sequence,DNL-1018,from the first 40
+p02,easy,DNL-1019 LP,DNL-1019 had his baseline lumbar puncture on the 1st and his first dose of study drug on the 11th.,crc,procedure_sequence,DNL-1019,from the first 40
+p03,easy,DNL-1020 ATE start,DNL-1020 took his first open-label ATE dose on Monday; his Week 24 lumbar puncture was done Tuesday.,crc,procedure_sequence,DNL-1020,from the first 40
+p04,easy,DNL-1021 randomization,We went ahead and randomized DNL-1021 before the regimen-specific screening labs came back; they arrived the next day.,crc,procedure_sequence,DNL-1021,from the first 40
+d01,easy,DNL-1022 new med,DNL-1022 is at Week 10 of treatment. His PCP started rifampin last week for latent TB and he is still taking study drug.,crc,study_drug,DNL-1022,from the first 40
+d02,hard,DNL-1023,At the Week 16 visit DNL-1023 told us she started St. John's wort a month ago for low mood. She is continuing study drug.,crc,study_drug,DNL-1023,from the first 40
+d03,easy,Pharmacy fridge room,The drug storage room temperature hit 34°C over the weekend when the AC failed. We dispensed kits from that room to DNL-1024 on Monday.,crc,study_drug,DNL-1024,from the first 40
+d04,hard,DNL-1025 transplant meds,DNL-1025 (Week 6) was started on tacrolimus by his rheumatologist; he remains on study drug.,crc,study_drug,DNL-1025,from the first 40
+s01,hard,DNL-1026 Week 4 PK,"Week 4 for DNL-1026: predose PK drawn at 6:00, he took his dose in clinic at 9:30, postdose PK at 12:00.",crc,sample_handling,DNL-1026,from the first 40
+s02,easy,DNL-1027 PK,"DNL-1027 Week 4: predose PK at 8:00, dose at 8:30, postdose PK not drawn until 18:45 because the lab closed early.",crc,sample_handling,DNL-1027,from the first 40
+s03,easy,DNL-1028 Week 24 PK,"Week 24 PK for DNL-1028: predose at 7:45, dose at 8:15, postdose at 8:45 so he could leave early.",crc,sample_handling,DNL-1028,from the first 40
+c01,easy,DNL-1029 screening,We drew screening labs and did the vital capacity for DNL-1029 on Monday; he signed the consent form on Wednesday.,crc,consent,DNL-1029,from the first 40
+c02,easy,DNL-1030 ICF,The IRB approved consent version 4 last month. We have not re-consented DNL-1030 yet and did his Week 16 visit today.,crc,consent,DNL-1030,from the first 40
+o01,adverse_event,DNL-1031 fall,DNL-1031 fell at home and fractured her wrist; she was admitted overnight. Not sure if related.,crc,out_of_scope,DNL-1031,from the first 40
+o02,adverse_event,DNL-1032 symptoms,DNL-1032 reports headaches and some nausea since starting study drug last week.,crc,out_of_scope,DNL-1032,from the first 40
+n01,hard,DNL-1033 randomized,"DNL-1033 randomized today. Screening: eGFR 34, ALT 1.2x ULN, SVC 62% predicted. First dose in clinic after all baseline procedures.",crc,none,DNL-1033,from the first 40
+n02,hard,DNL-1034 history,DNL-1034 randomized Monday; he had a basal cell carcinoma removed from his nose last year.,crc,none,DNL-1034,from the first 40
+n03,irrelevant,DNL-1035 meds,DNL-1035 randomized. Stable on riluzole for 6 months and has completed two cycles of edaravone.,crc,none,DNL-1035,from the first 40
+n04,hard,DNL-1036 Week 4,"Week 4 visit for DNL-1036 was on Day 33. PK predose at 8:00, dose 8:45, postdose 11:00.",crc,none,DNL-1036,from the first 40
+n05,irrelevant,DNL-1037 Week 16,"DNL-1037 Week 16 visit done on Day 108, all assessments completed.",crc,none,DNL-1037,from the first 40
+n06,hard,DNL-1038 PK,"DNL-1038 Week 24: predose PK 1 hour before the in-clinic dose, postdose at 3 hours. CSF collected before the first ATE dose.",crc,none,DNL-1038,from the first 40
+n07,irrelevant,Monitoring visit,"Hi team, the monitoring visit is next Tuesday at 10. Please have the regulatory binder and drug accountability logs ready.",crc,none,,from the first 40
+n08,hard,DNL-1040 labs,"Labs for DNL-1040 a bit off this time, but the PI reviewed and says all within normal range. No action.",crc,none,DNL-1040,from the first 40
+x01,hard,screening chem,"DNL-1041 randomized this am. eGFR came back 29.5, creat 2.1. PI ok'd it since he 'looks well'.",crc,eligibility,DNL-1041,eGFR must be 30 or more; 29.5 is just under
+x02,hard,DNL-1042 rando,"Randomized DNL-1042. AST 125 (ULN 40), ALT 88. Otherwise unremarkable.",crc,eligibility,DNL-1042,"AST 125/40 = 3.1 x ULN, above 3x"
+x03,easy,DNL-1043 edaravone,"DNL-1043 randomized today. He just started his first edaravone cycle last Monday, so he is partway through it.",crc,eligibility,DNL-1043,must have completed at least one edaravone cycle before screening
+x04,hard,DNL-1044 onc hx,"Hi, DNL-1044 randomized Thurs. PMH: colon cancer, resected 18 months ago, clear scans since. ",crc,eligibility,DNL-1044,cancer must be curatively treated with no recurrence for at least 3 years
+x05,easy,DNL-1045,DNL-1045 randomized. He told us he will not use any contraception during the study; his partner is 34.,crc,eligibility,DNL-1045,men must agree to effective contraception
+x06,easy_to_miss,Weekly update,"Weekly update: 3 screened, 2 randomized (DNL-1046, DNL-1047). DNL-1046 had a seizure in August (about 2 months ago), neuro saw her. DNL-1047 all fine.",crc,eligibility,DNL-1046,"seizure within 6 months of randomization, buried in a weekly update"
+x07,hard,DNL-1048 meds,DNL-1048 dosed today. Recent med rec: phenytoin stopped 6 days before first dose (seizure prophylaxis after an old head injury).,crc,eligibility,DNL-1048,strong CYP3A4 inducer must be stopped at least 2 weeks before first dose; also no seizure info so eligibility only
+x08,easy_to_miss,Re: DNL-1049 labs,Thanks. Yes DNL-1049 is randomized now. One thing I forgot to mention: he's in the observational arm of another ALS drug study and got his last dose of that drug 10 days ago.,crc,eligibility,DNL-1049,investigational treatment within 30 days of screening
+x09,easy,DNL-1050 W8,"DNL-1050 Week 8 visit done on Day 66, all procedures done.",crc,visit_schedule,DNL-1050,Week 8 window is Day 49-63
+x10,easy,DNL-1051 W16,"Week 16 for DNL-1051 was on Day 121, he had a cold the week before.",crc,"out_of_scope,visit_schedule",DNL-1051,Week 16 window is Day 105-119; a cold during the study is also an adverse event
+x11,hard,DNL-1052 screening,DNL-1052 baseline today (Day 0). His master screening visit was 50 days ago; we were waiting on the regimen slot.,crc,visit_schedule,DNL-1052,screening must be within 42 days before baseline
+x12,easy_to_miss,DNL-1053 ATE,DNL-1053 rolled into the ATE. His Week 4 ATE visit was 40 days after his Week 24 visit.,crc,visit_schedule,DNL-1053,Week 4 ATE window is 21-35 days after Week 24
+x13,easy,DNL-1054 phone,We were not able to do the Week 12 telephone visit for DNL-1054 at all; next contact will be Week 16.,crc,visit_schedule,DNL-1054,a required visit skipped
+x14,hard,DNL-1055 LP,"DNL-1055: baseline LP on 9/30, first dose of study drug 10/9.",crc,procedure_sequence,DNL-1055,baseline CSF must be within one week before the first dose; 9 days
+x15,easy,DNL-1056 baseline,"Baseline for DNL-1056: first dose given at 9:00 in clinic, then the ECG and the blood draw at 9:30.",crc,procedure_sequence,DNL-1056,first dose only after all baseline procedures
+x16,easy_to_miss,DNL-1057 Week 24,DNL-1057 finished Week 24 and got his ATE kit. He took the first open-label dose at home that evening; his Week 24 LP is booked for next Tuesday.,crc,procedure_sequence,DNL-1057,Week 24 CSF must be collected before the first ATE dose
+x17,hard,DNL-1058 randomized,We randomized DNL-1058 on Monday; the regimen-specific eligibility review by the PI was signed off on Wednesday.,crc,procedure_sequence,DNL-1058,randomization only after eligibility is confirmed
+x18,hard,DNL-1059 dosing,DNL-1059 forgot his dose yesterday so this morning he took yesterday's packet and today's packet together.,crc,study_drug,DNL-1059,only one dose per day; a missed dose remembered next day is skipped
+x19,easy_to_miss,DNL-1060 W4 dosing,"Week 4 for DNL-1060: I gave the dose myself at 9:10; nobody else was free to double-check the kit and ID, it was a busy morning.",crc,study_drug,DNL-1060,dose and ID must be confirmed by a second staff member
+x20,easy,DNL-1061 accountability,DNL-1061 Week 8 visit done. We forgot to count his returned packets and he took them home again.,crc,study_drug,DNL-1061,unused packets must be counted at each clinic visit
+x21,hard,DNL-1062,DNL-1062 has trouble with the drink; it took her about 40 minutes to finish this morning's dose at the clinic.,crc,study_drug,DNL-1062,all dosing should be completed within 15 minutes
+x22,easy,DNL-1063 new med,Neurology started DNL-1063 on phenytoin last week after a fall; he is still taking study drug.,crc,study_drug,DNL-1063,"phenytoin is a strong CYP3A4 inducer, prohibited during treatment"
+x23,easy_to_miss,DNL-1064 conmeds,"Conmed update for DNL-1064 (Week 14): added St John's wort tea daily for sleep, and melatonin. No other changes.",crc,study_drug,DNL-1064,"St John's wort is a strong inducer, prohibited"
+x24,easy,DNL-1065 PK,DNL-1065 Week 4: predose PK drawn 2.5 hours before his dose; postdose 2 hours after.,crc,sample_handling,DNL-1065,predose must be 0-2 hours before the dose
+x25,hard,DNL-1066 W24 PK,"Week 24 PK DNL-1066: pre 07:50, dose 08:20, post 17:30.",crc,sample_handling,DNL-1066,postdose must be 1-8 hours after the dose; this is 9h10
+x26,easy_to_miss,DNL-1067 Week 4,"DNL-1067 Week 4 went fine. Predose PK at 8:15, dose 8:40, and we grabbed the postdose tube at 9:20 before he left.",crc,sample_handling,DNL-1067,"postdose at 40 minutes, under 1 hour"
+x27,hard,DNL-1068 ICF,"Heads up: I consented DNL-1068 on the version 3 form this morning, then saw version 4 was approved two weeks ago.",crc,consent,DNL-1068,only the current IRB-approved form may be used
+x28,easy,DNL-1069 screening,DNL-1069 came in early so we did the ECG and vitals while waiting for the PI; he signed consent after lunch.,crc,consent,DNL-1069,procedures before consent
+x29,adverse_event,DNL-1070 admitted,"DNL-1070 was admitted Sunday with pneumonia, still inpatient. Will send SAE form.",crc,out_of_scope,DNL-1070,safety only
+x30,adverse_event,DNL-1071 rash,"DNL-1071 called: itchy rash on both arms since Tuesday, two days after Week 4.",crc,out_of_scope,DNL-1071,safety only
+x31,adverse_event,DNL-1072,"Sad news, DNL-1072 passed away at home on Saturday. Family will call us with details.",crc,out_of_scope,DNL-1072,death is a safety report
+x32,adverse_event,DNL-1073 fall,"DNL-1073 had a fall at home, no injury, didn't go to the ER. Mentioned at today's call.",crc,out_of_scope,DNL-1073,safety only
+x33,adverse_event,DNL-1074 W8,DNL-1074 had bad headaches all week so his Week 8 visit ended up on Day 70.,crc,"out_of_scope,visit_schedule",DNL-1074,a safety report plus a visit outside Day 49-63
+x34,hard,DNL-1075 rando,"DNL-1075 randomized. SVC exactly 50% predicted at screening, eGFR 30, AST 2.9x ULN.",crc,none,DNL-1075,all at the limit but allowed
+x35,hard,DNL-1076 onset,DNL-1076 randomized today; weakness started about 23 months before his screening visit.,crc,none,DNL-1076,24 months or less is allowed
+x36,hard,DNL-1077 history,"DNL-1077 randomized. He had a melanoma removed 4 years ago, no recurrence.",crc,none,DNL-1077,more than 3 years is allowed
+x37,hard,DNL-1078 history,"DNL-1078: prostatic carcinoma in situ diagnosed in 2024, watchful waiting. Randomized Monday.",crc,none,DNL-1078,carcinoma in situ of the prostate is allowed
+x38,hard,DNL-1079 dosing,DNL-1079 gets his study drug through his feeding tube now; went fine at Week 16.,crc,none,DNL-1079,oral or feeding tube is allowed
+x39,hard,DNL-1080 missed dose,"DNL-1080 missed Tuesday's dose and only remembered Wednesday, so he just took Wednesday's dose as normal.",crc,none,DNL-1080,this is what the protocol says to do
+x40,hard,DNL-1081 DNA,"Baseline DNA tube for DNL-1081 hemolyzed, so we redrew DNA at Week 4.",crc,none,DNL-1081,DNA can be collected after baseline if the baseline sample is not usable
+x41,easy,DNL-1082 W2,"Week 2 call for DNL-1082 done on Day 12, compliance check done.",crc,none,DNL-1082,Week 2 window is Day 11-17
+x42,easy,DNL-1083 safety call,Follow-up safety call for DNL-1083 done 27 days after last dose.,crc,none,DNL-1083,window 25-31
+x43,hard,DNL-1084 LP,"DNL-1084: baseline LP Monday, first dose of study drug Thursday after all baseline procedures.",crc,none,DNL-1084,CSF 3 days before first dose is allowed
+x44,easy,DNL-1085 re-screen,"DNL-1085 failed SVC in July (47%), re-screened this month after the required interval at 53% and was randomized.",crc,none,DNL-1085,re-screening after resolution is allowed
+x45,hard,Question,"Quick question for the CRA: if someone's eGFR comes back 28 at screening, can we repeat it before deciding?",crc,none,DNL-1086,"a question, nothing happened"
+x46,hard,DNL-1087 screen fail,"We were about to randomize DNL-1087 when I noticed his ALT was 4x ULN. Screen failed him, nothing given.",crc,none,DNL-1087,caught and prevented
+x47,hard,Old deviation,FYI for the file: back in 2024 at our old site one participant was dosed before consent; that was reported and closed then.,crc,none,DNL-1088,"old news, already dealt with"
+x48,hard,DNL-1089 ALSFRS,"DNL-1089's ALSFRS-R dropped 3 points since Week 8, PI aware.",crc,none,DNL-1089,"disease progression, not a protocol problem"
+x49,easy,DNL-1090 W24 done,"Great news, DNL-1090 completed Week 24 on Day 166 with all assessments and CSF, and is starting ATE.",crc,none,DNL-1090,"good news, in window"
+x50,irrelevant,Holiday hours,Clinic is closed Monday for the holiday; we will reschedule any affected visits within their windows.,crc,none,,admin
+x51,irrelevant,IRB renewal,"Annual IRB continuing review approved yesterday, letter attached to the regulatory binder.",crc,none,,admin
+x52,irrelevant,Kit shipment,"Received 12 DNL343 kits today, temp logger fine, logged in IRT.",crc,none,,"admin, nothing out of range"
+x53,irrelevant,Re: query 4471,"Query 4471 answered: the ECG time was a typo, corrected in EDC.",crc,none,,admin
+x54,irrelevant,Training,Reminder: the new coordinators need GCP refresher training by end of month.,crc,none,,admin
+x55,irrelevant,Out of office,I am out of the office until Monday with limited access to email.,crc,none,,auto reply
+x56,irrelevant,Recruitment,"We have 5 people in pre-screening for Regimen G, 2 look promising.",crc,none,,admin
+x57,irrelevant,Parking,Parking garage B is closed next week; tell participants to use garage C.,crc,none,,admin
+x58,easy,DNL-1099 ECG,"DNL-1099 Week 16 ECG normal, vitals stable, ALSFRS-R stable.",crc,none,DNL-1099,routine
+x59,hard,DNL-1100 labs,"DNL-1100's potassium a little low this time, PI reviewed, not clinically significant.",crc,none,DNL-1100,"vague lab note, no study limit broken"
+x61,easy_to_miss,DNL-1092 background,Randomized DNL-1092 today. Background for the file: in the earlier DNL343 Phase 1b study he broke out in hives after the drug and was taken off it.,crc,eligibility,DNL-1092,known hypersensitivity to DNL343

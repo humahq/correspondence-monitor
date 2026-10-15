@@ -1,0 +1,41 @@
+id,subject,body,expect,participant
+e01,DNL-1001 randomized,"Hi Sam, DNL-1001 was randomized today after baseline. Screening chem: eGFR 27, ALT 31, AST 28. First dose given in clinic.",eligibility,DNL-1001
+e02,Screening labs DNL-1002,"DNL-1002 randomized yesterday. Screening ALT came back 142 U/L (our ULN is 40), AST 61. PI felt he was otherwise well.",eligibility,DNL-1002
+e03,DNL-1003 baseline,"Randomized DNL-1003 this morning. Slow vital capacity at master screening was 46% predicted, best of 3 trials. Everything else fine.",eligibility,DNL-1003
+e04,DNL-1004 onset date,"Quick question on DNL-1004, randomized last week: going back through his history he first noticed weakness in his right hand in March 2024. Master screening was 2 Oct 2026.",eligibility,DNL-1004
+e05,DNL-1005 riluzole,DNL-1005 was randomized on Monday. Note his neurologist started riluzole 50 mg BID about two weeks before his master screening visit.,eligibility,DNL-1005
+e06,DNL-1006 enrolled,We enrolled and randomized DNL-1006 today. She turns 18 next month and her mother co-signed the paperwork.,eligibility,DNL-1006
+e07,DNL-1007 history,"FYI DNL-1007 (randomized Tuesday) mentioned at baseline that she had a seizure in June, about four months ago. Not on any antiepileptic now.",eligibility,DNL-1007
+e08,DNL-1008 meds,DNL-1008 randomized and dosed today. He had been on carbamazepine for trigeminal neuralgia; he stopped it 5 days ago for the study.,eligibility,DNL-1008
+e09,DNL-1009 prior trial,DNL-1009 randomized this week. He finished another ALS drug trial about three weeks before his master screening visit; washout of that drug unknown.,eligibility,DNL-1009
+e10,DNL-1010,Randomized DNL-1010 today. Background: he got an AAV gene therapy for ALS through an expanded access program in 2023.,eligibility,DNL-1010
+e11,DNL-1011 oncology history,"DNL-1011 was randomized Friday. She had breast cancer treated with surgery and radiation two years ago, no recurrence since.",eligibility,DNL-1011
+e12,DNL-1012 baseline,DNL-1012 randomized today. She is still breastfeeding her 6-month-old and plans to continue.,eligibility,DNL-1012
+v01,DNL-1013 Week 2 call,The Week 2 telephone visit for DNL-1013 was done on Day 19; we could not reach her earlier.,visit_schedule,DNL-1013
+v02,DNL-1014 Week 24,DNL-1014 came in for his Week 24 visit on Day 179 because of a family trip.,visit_schedule,DNL-1014
+v03,DNL-1015 Week 12,Week 12 phone visit for DNL-1015 happened on Day 90.,visit_schedule,DNL-1015
+v04,DNL-1016 safety call,DNL-1016 finished study drug; we did the follow-up safety call 35 days after his last dose.,visit_schedule,DNL-1016
+v05,DNL-1017 schedule,DNL-1017 missed his Week 8 clinic visit entirely and we did not reschedule it; we will see him at Week 16.,visit_schedule,DNL-1017
+p01,DNL-1018 baseline day,"Baseline for DNL-1018: he took his first dose of study drug at 8 am in clinic, then we did the ECG, vitals and ALSFRS-R afterwards.",procedure_sequence,DNL-1018
+p02,DNL-1019 LP,DNL-1019 had his baseline lumbar puncture on the 1st and his first dose of study drug on the 11th.,procedure_sequence,DNL-1019
+p03,DNL-1020 ATE start,DNL-1020 took his first open-label ATE dose on Monday; his Week 24 lumbar puncture was done Tuesday.,procedure_sequence,DNL-1020
+p04,DNL-1021 randomization,We went ahead and randomized DNL-1021 before the regimen-specific screening labs came back; they arrived the next day.,procedure_sequence,DNL-1021
+d01,DNL-1022 new med,DNL-1022 is at Week 10 of treatment. His PCP started rifampin last week for latent TB and he is still taking study drug.,study_drug,DNL-1022
+d02,DNL-1023,At the Week 16 visit DNL-1023 told us she started St. John's wort a month ago for low mood. She is continuing study drug.,study_drug,DNL-1023
+d03,Pharmacy fridge room,The drug storage room temperature hit 34°C over the weekend when the AC failed. We dispensed kits from that room to DNL-1024 on Monday.,study_drug,DNL-1024
+d04,DNL-1025 transplant meds,DNL-1025 (Week 6) was started on tacrolimus by his rheumatologist; he remains on study drug.,study_drug,DNL-1025
+s01,DNL-1026 Week 4 PK,"Week 4 for DNL-1026: predose PK drawn at 6:00, he took his dose in clinic at 9:30, postdose PK at 12:00.",sample_handling,DNL-1026
+s02,DNL-1027 PK,"DNL-1027 Week 4: predose PK at 8:00, dose at 8:30, postdose PK not drawn until 18:45 because the lab closed early.",sample_handling,DNL-1027
+s03,DNL-1028 Week 24 PK,"Week 24 PK for DNL-1028: predose at 7:45, dose at 8:15, postdose at 8:45 so he could leave early.",sample_handling,DNL-1028
+c01,DNL-1029 screening,We drew screening labs and did the vital capacity for DNL-1029 on Monday; he signed the consent form on Wednesday.,consent,DNL-1029
+c02,DNL-1030 ICF,The IRB approved consent version 4 last month. We have not re-consented DNL-1030 yet and did his Week 16 visit today.,consent,DNL-1030
+o01,DNL-1031 fall,DNL-1031 fell at home and fractured her wrist; she was admitted overnight. Not sure if related.,out_of_scope,DNL-1031
+o02,DNL-1032 symptoms,DNL-1032 reports headaches and some nausea since starting study drug last week.,out_of_scope,DNL-1032
+n01,DNL-1033 randomized,"DNL-1033 randomized today. Screening: eGFR 34, ALT 1.2x ULN, SVC 62% predicted. First dose in clinic after all baseline procedures.",none,DNL-1033
+n02,DNL-1034 history,DNL-1034 randomized Monday; he had a basal cell carcinoma removed from his nose last year.,none,DNL-1034
+n03,DNL-1035 meds,DNL-1035 randomized. Stable on riluzole for 6 months and has completed two cycles of edaravone.,none,DNL-1035
+n04,DNL-1036 Week 4,"Week 4 visit for DNL-1036 was on Day 33. PK predose at 8:00, dose 8:45, postdose 11:00.",none,DNL-1036
+n05,DNL-1037 Week 16,"DNL-1037 Week 16 visit done on Day 108, all assessments completed.",none,DNL-1037
+n06,DNL-1038 PK,"DNL-1038 Week 24: predose PK 1 hour before the in-clinic dose, postdose at 3 hours. CSF collected before the first ATE dose.",none,DNL-1038
+n07,Monitoring visit,"Hi team, the monitoring visit is next Tuesday at 10. Please have the regulatory binder and drug accountability logs ready.",none,
+n08,DNL-1040 labs,"Labs for DNL-1040 a bit off this time, but the PI reviewed and says all within normal range. No action.",none,DNL-1040

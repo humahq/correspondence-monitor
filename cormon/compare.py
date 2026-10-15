@@ -117,9 +117,9 @@ def _result(problems: list[dict], safety: bool, safety_pids: list[str] = ()) -> 
             "message_id": None}
 
 
-def _rules_results(folder: Path, out: Path) -> dict[str, dict]:
+def _rules_results(folder: Path, out: Path, study_id: str | None = None) -> dict[str, dict]:
     """Runs the real pipeline through the sandbox and reads back what it found per case."""
-    testbench.main(str(folder), str(out))
+    testbench.main(str(folder), str(out), study_id)
     found = {}
     with (out / "results.csv").open(newline="") as fh:
         for row in csv.DictReader(fh):
@@ -183,13 +183,13 @@ def table(scored: dict[str, list[testbench.Case]], cats: dict[str, str]) -> str:
 
 
 def run(folder: str, out: str | None = None, modes: tuple[str, ...] = MODES, model: str | None = None,
-        workers: int = 6) -> dict:
+        study_id: str | None = None, workers: int = 6) -> dict:
     src = Path(folder).resolve()
     dest = Path(out).resolve() if out else None
     cases = testbench.read_folder(src)
     cases = [c for c in cases if c.raw is None]  # the single-call modes need subject and body
     cats = _categories(src)
-    study = next(iter(config.studies().values()))
+    study = config.study(study_id) if study_id else next(iter(config.studies().values()))
     classes = [p["id"] for p in study.pattern_classes]
     schema = _schema(classes)
     scored: dict[str, list[testbench.Case]] = {}
@@ -197,7 +197,7 @@ def run(folder: str, out: str | None = None, modes: tuple[str, ...] = MODES, mod
 
     if "rules" in modes:
         rules_out = (dest or src.parent / ".compare") / "rules"
-        scored["rules"] = _copy(cases, _rules_results(src, rules_out))
+        scored["rules"] = _copy(cases, _rules_results(src, rules_out, study.study_id))
 
     for mode in [m for m in modes if m != "rules"]:
         reference = document_reference(study) if mode == "document" else rulelist_reference(study)

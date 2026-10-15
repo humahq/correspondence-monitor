@@ -1,0 +1,576 @@
+id,subject,body,from,date,expect,participant
+a01,G-203-011 Week 4 recap,"Hi Priya,
+
+Quick recap of today's Week 4 for G-203-011. Her Baseline was Mon 14 Sep.
+
+She got in at 7:40. Per her diary, yesterday's dose went down at 8:30 am at home. Predose PK drawn at 7:55. Then vitals, SVC, hand-held dynamometry, ALSFRS-R, C-SSRS, 12-lead ECG and safety labs. Urine pregnancy negative. Contraception reviewed: copper IUD, and her husband uses condoms every time. Documented in the CRF.
+
+Once everything was finished, Marcus mixed her two packets into applesauce with a little thickener. I checked her ID and the kit number against IRT before he handed it to her. She finished it in about 10 minutes, dose time 8:40. Postdose PK drawn at 11:10.
+
+She brought back all her cartons. Packet count matched her diary, no missed doses. Dispensed 4 new cartons and reminded her to bring everything back next time.
+
+Thanks,
+Dana
+",crc,"Tue, 13 Oct 2026",,
+a02,Wk2 call G-205-003,"Hi team,
+
+Did the Week 2 call with G-205-003 today (Baseline Wed 23 Sep).
+
+- Compliance: he missed Tuesday morning's dose because of an early neurology appointment. He remembered around 7 pm and took it then. Back to his usual morning time on Wednesday. Reminded him how important it is to keep to the routine.
+- Reminded him to bring every carton, used or not, to the Week 4 visit.
+- Con meds: no changes.
+- AEs: mild headache on 3 Oct, gone after one day with acetaminophen. Entered.
+- Contraception: his partner is 29 and on a combined birth control pill, and they use condoms as well. Reviewed and documented.
+
+No drug count on the phone, we will count at Week 4.
+
+Leah
+",crc,"Fri, 9 Oct 2026",,
+a03,Con med review - G-209-007 (Week 8),"Hi all,
+
+I went through the medication list for G-209-007 at yesterday's chart review. All okay to continue. Notes for the file:
+
+1. Rosuvastatin 10 mg daily (long-standing). I consider it wide therapeutic index for him. I talked it over with the medical monitor last week. We will watch for muscle pain and check CK with the safety labs.
+2. Famotidine 20 mg twice daily for reflux. Wide therapeutic index. Continue and watch for side effects.
+3. Buspirone 10 mg twice daily for anxiety. Wide therapeutic index in my view. He knows to tell us if the anxiety comes back, since the study drug can lower buspirone levels.
+4. Itraconazole 200 mg daily for 14 days, started 1 Oct by his PCP for oral thrush. It is a CYP3A inhibitor, not an inducer.
+5. Modafinil 100 mg each morning for fatigue, started 20 Sep. Our pharmacist checked the Flockhart table: it is a moderate CYP3A inducer, not a strong one.
+
+Please log all of these in the con med page if they aren't there already.
+
+Dr. Okafor
+",investigator,"Mon, 2 Nov 2026",,
+a04,G-212-002 Week 8 done by video,"Hello Sam,
+
+FYI, G-212-002's Week 8 visit was done by video today instead of in clinic. His Baseline was Mon 3 Aug.
+
+Background: he fell at home on 24 Sep and broke his right ankle. Ortho has him non-weight-bearing in a boot. Getting him into the car and into the building would have been a real fall risk, so Dr. Lin approved a remote visit for safety. The fall is entered as an AE.
+
+Done by video: ALSFRS-R, CNS-BFS, C-SSRS, con meds, AE review and the compliance check. He reports no missed doses. His wife is 63 and post-menopausal, so no contraception requirement applies.
+
+Not done because the visit was remote: ECG, vitals, SVC, strength, safety labs, biomarkers and the postdose PK sample. The missed procedures are documented per the MOP. Study drug resupply went out by courier per the MOP process.
+
+Thanks,
+Rosa
+",crc,"Wed, 30 Sep 2026",,
+a05,Wk12 phone - G-214-006,"Hi,
+
+Week 12 call done today for G-214-006 (Baseline Thu 16 Jul).
+
+His wife gives the drug through his G-tube. She stirs the two packets into about 30 mL of water and flushes it through. The whole thing takes under 5 minutes, every morning around 8.
+
+One slip: on Wednesday they forgot completely. She noticed Thursday morning and just gave the normal Thursday dose, nothing extra. I told her that was exactly right.
+
+No new meds, no new AEs. His wife is 61 and post-menopausal. Reminded them to bring all cartons, used and unused, to Week 16.
+
+Best,
+Tom
+",crc,"Fri, 9 Oct 2026",,
+a06,G-202-015 Week 24 / ATE start,"Hi Priya,
+
+G-202-015 finished the placebo-controlled part yesterday (Thu 24 Sep). Baseline was Tue 7 Apr. She is continuing into the ATE.
+
+- We told her not to take any study drug at home Thursday morning. Her last blinded dose was Wednesday at 8:30 am.
+- Optional LP was done Monday 21 Sep, before any ATE drug. She had her baseline LP in April. Biomarker and PK CSF tubes both sent.
+- Thursday: PGI-C and PGI-S first, then ALSAQ-40, ROADS, CNS-BFS, vitals, SVC, strength, ALSFRS-R, ECG, safety labs, biomarker blood and urine, C-SSRS. Dr. Lin did the CGI-C at the end.
+- Predose PK at 7:50. First ATE dose given in clinic at 8:45 once everything was done, checked by a second coordinator. Postdose PK at 12:10.
+- Endocrine panel (ACTH, cortisol, TSH, fT4) drawn at 10:15. At Baseline it was drawn at 8:20, so not quite the same time.
+- Urine pregnancy negative. Hormonal IUD plus condoms, reviewed.
+- Exit questionnaire and vital status done. ATE cartons dispensed.
+
+Rosa
+",crc,"Fri, 25 Sep 2026",,
+a07,Screening notes G-218-001,"Hi Dr. Patel,
+
+Screening notes for G-218-001 before we book her Baseline for Mon 2 Nov. Master Protocol screening was done Mon 5 Oct.
+
+- Seizure history: two febrile seizures at age 2. None since then. Never on any seizure medicine. No epilepsy diagnosis.
+- She takes gabapentin 300 mg three times a day for muscle cramps. Her neurologist prescribed it for cramps only.
+- She had been taking St. John's wort from a health food store. Her last capsule was Wed 14 Oct, and she agreed not to restart.
+- Vitamin D and a multivitamin, both fine.
+
+Plan: do the Regimen G screening on the same day as Baseline (2 Nov). Let me know if you see any problem.
+
+Thanks,
+Mei
+",crc,"Mon, 19 Oct 2026",,
+a08,G-216-004 Wk 16,"Hi all,
+
+Week 16 for G-216-004 was yesterday, Mon 5 Oct. Baseline was Thu 11 Jun.
+
+She is 58. Her last period was in 2021 and her FSH at screening was 71 IU/L, so she is post-menopausal. No urine pregnancy test and no contraception review needed.
+
+Order: PGI-C and PGI-S first, then ALSAQ-40, ROADS, CNS-BFS, vitals, SVC, strength, ALSFRS-R, ECG, safety labs, biomarker blood and urine, and C-SSRS. Dr. Haddad did the CGI-C last.
+
+She took her dose at home at 7:30 with yogurt, as usual. Postdose PK drawn at 11:45.
+
+Her potassium was a bit high last time (5.3). Dr. Haddad reviewed it and said it was not clinically significant. Today it's 4.8.
+
+Packets counted, 2 missed doses in September, recorded. Dispensed 4 cartons.
+
+Thanks,
+Jo
+",crc,"Tue, 6 Oct 2026",,
+a09,G-206-009 early termination and safety call,"Hello,
+
+Closing the loop on G-206-009 (Baseline Wed 22 Jul).
+
+She decided to stop study drug and leave the study. Her last dose was Fri 2 Oct. We did her in-person ET visit on Tue 6 Oct with the full Week 24 list: ALSAQ-40, CNS-BFS, ROADS, PGI-C, PGI-S, CGI-C, vitals, SVC, strength, ALSFRS-R, ECG, safety labs, biomarker samples, C-SSRS, urine pregnancy test (negative), contraception review, exit questionnaire and vital status.
+
+She had baseline CSF, but the ET came before Week 12, so no LP this time.
+
+Since the ET visit was only 4 days after her last dose, we did the separate safety call today, Fri 30 Oct. No new AEs. She is still using her IUD, and her partner uses condoms. I reminded her to keep both going through 31 Dec, 90 days after her last dose.
+
+Thanks,
+Jo
+",crc,"Fri, 30 Oct 2026",,
+a10,DNL343 shipment received,"Hi team,
+
+Regimen G shipment came in yesterday afternoon (Tue 13 Oct).
+
+- 20 cartons, 14 packets each (7 days of 2 packets).
+- The shipping logger showed a max of 24.6 C and a min of 18.1 C during transit. All fine. Receipt confirmed in IRT.
+- Cartons are in the locked investigational drug room. Only badge-approved pharmacy staff can get in. The room log has stayed at 21-23 C.
+- This morning I dispensed 4 cartons for G-210-003's Week 4 visit.
+
+The room thermometer was calibrated last month. Shout if you need anything.
+
+Ken
+Research Pharmacy
+",pharmacist,"Wed, 14 Oct 2026",,
+a11,G-204-008 Week 4 (afternoon slot),"Hi Priya,
+
+G-204-008 had Week 4 today. Baseline was Tue 22 Sep. Her ride could only bring her in the afternoon, so she took her dose at home at 7:00 am as usual, per the plan we gave her.
+
+- No predose sample, since she had already dosed.
+- Two postdose PK samples: 13:20 and 14:35. No dose in between.
+- Minor deviation logged for the missed predose sample.
+- Vitals, SVC, strength, ALSFRS-R, C-SSRS, ECG and safety labs done. Urine pregnancy negative.
+- Contraception: hormonal IUD and condoms, reviewed and documented.
+- Packet count matched her diary. 4 cartons dispensed.
+
+Dana
+",crc,"Tue, 20 Oct 2026",,
+a12,Wk20 call - G-219-002,"Hi,
+
+Week 20 phone call with G-219-002 today (Baseline Mon 18 May).
+
+Compliance: one missed dose in mid-September. He noticed the next morning and skipped it, as told. Otherwise on track. Reminded him to bring all cartons to Week 24.
+
+No AEs and no med changes.
+
+Contraception: his partner is 34 and has a hormonal IUD, and he uses condoms. Reviewed.
+
+He asked whether he could bank sperm now, in case they want children later. I told him no sperm donation while on study drug or for 90 days after his last dose, and that we can talk about timing near the end of the study. He was fine with that.
+
+Leah
+",crc,"Tue, 6 Oct 2026",,
+a13,Parking garage closed next week,"Hi everyone,
+
+Heads up: the Level 2 garage is closed for resurfacing Mon 19 Oct to Fri 23 Oct. Participants with visits that week should use the surface lot on Elm Street. Valet will be at the main entrance from 7 am.
+
+I've updated the parking letter we send with visit reminders. Please print new copies for anyone coming in that week, and let families know it is a slightly longer walk. Wheelchairs are available at the Elm Street door.
+
+Thanks,
+Mei
+",crc,"Thu, 15 Oct 2026",,
+a14,Investigator meeting - travel and agenda,"Hi all,
+
+The annual platform investigator meeting is set for Thu 3 Dec and Fri 4 Dec in Boston. The agenda covers enrollment updates across regimens, a data-entry refresher, and a session on how to keep participants engaged in long extensions.
+
+Please send me names for travel booking by Fri 20 Nov. The hotel block runs out after that. Remote access will be available for coordinators who can't travel.
+
+Best,
+Alicia
+CRA
+",cra,"Mon, 9 Nov 2026",,
+a15,Site newsletter - November,"Hi team,
+
+Here is our November newsletter.
+
+- The ALS awareness walk raised $14,200. Thank you to everyone who came out in the rain.
+- Welcome to Jenna, our new coordinator. She starts shadowing visits next week.
+- Reminder: the holiday schedule is posted. The clinic is closed 24-25 Dec and 1 Jan.
+- The break-room coffee machine is fixed (finally).
+- Congratulations to Dr. Lin on her grant award.
+
+Have a great week!
+Mei
+",crc,"Mon, 30 Nov 2026",,
+a16,G-208-005 nausea - dose held and restarted,"Hi Priya,
+
+Update on G-208-005 (Baseline Mon 14 Sep).
+
+On Mon 2 Nov she called with 3 days of nausea and vomiting, 2-3 times a day. Dr. Haddad graded it moderate. He spoke with the medical monitor on Tue 3 Nov, and together they decided to hold study drug.
+
+She came in for an unscheduled visit on Wed 4 Nov: vitals, safety labs, and an unscheduled PK sample. Labs were unremarkable. AE entered as moderate nausea/vomiting, related, action: drug interrupted.
+
+Drug held Wed 4 Nov through Sun 8 Nov. Symptoms resolved by Saturday. She restarted at the full two packets this morning (Mon 9 Nov) after Dr. Haddad and the monitor agreed. Blind kept the whole time.
+
+Rosa
+",crc,"Mon, 9 Nov 2026",,
+a17,G-213-010 dizziness,"Hi all,
+
+G-213-010 nearly fainted at home on Sat 14 Nov. He was very lightheaded every time he stood up, enough that he stayed in bed most of the weekend. Dr. Lin graded it severe and had him come in on Mon 16 Nov.
+
+Unscheduled clinic visit: orthostatic vitals showed a 25-point systolic drop. ECG normal, safety labs normal. We told him to push fluids.
+
+Dr. Lin decided to drop him to one packet a day starting Tue 17 Nov for two weeks, then reassess. She'll mention it to the medical monitor on the monthly call in December. No PK sample was drawn, since his next PK isn't due until Week 16.
+
+AE entered as severe orthostatic dizziness, action: dose reduced. He felt better by Wednesday.
+
+Thanks,
+Dana
+",crc,"Thu, 19 Nov 2026",,
+a18,SAE - G-217-003 seizure,"Hi Priya and Dr. Patel,
+
+G-217-003 had a generalized seizure at home on Thu 3 Dec. Her husband called 911. In the ED her CT was normal. They loaded fosphenytoin and sent her home on phenytoin 100 mg three times a day, with a neurology follow-up in 3 weeks. She was kept overnight for observation, so we reported it as an SAE within 24 hours of hearing about it.
+
+She feels okay now, just tired. Since she was eligible when she enrolled, we plan to keep her on study drug along with the new phenytoin. Her next visit is Week 12 by phone on 14 Dec.
+
+Rosa
+",crc,"Mon, 7 Dec 2026",,
+a19,G-220-006 Week 2 call done,"Hi,
+
+Finally got G-220-006 on the phone today for his Week 2 call (Baseline Thu 1 Oct). We kept missing each other last week.
+
+- Compliance: no missed doses. He takes it at 7 am with yogurt. Reminded him to bring all cartons to Week 4.
+- AEs: some mild fatigue in the afternoons. Entered.
+- Con meds: no changes.
+- Contraception: his wife has a copper IUD, and they use condoms. Reviewed.
+
+Week 4 is booked for Thu 29 Oct at 8 am.
+
+Tom
+",crc,"Wed, 21 Oct 2026",,
+a20,Wk4 G-222-001,"Hi Priya,
+
+G-222-001's Week 4 was this morning (Baseline Mon 5 Oct). She arrived at 9:30, but out of habit she had already taken her dose at home at 7:00.
+
+Since she'd dosed, there was no point drawing a predose sample. We drew one postdose PK at 10:15 and logged a minor deviation for the missing predose sample.
+
+Everything else was done: vitals, SVC, strength, ALSFRS-R, ECG, labs, C-SSRS, urine pregnancy (negative), contraception review (bilateral tubal ligation plus condoms). 4 cartons dispensed.
+
+Dana
+",crc,"Mon, 2 Nov 2026",,
+a21,G-224-004 Week 8,"Hi,
+
+Week 8 for G-224-004 today (Baseline Tue 1 Sep). He kept his dose for clinic. After vitals, SVC, strength, ALSFRS-R, CNS-BFS, ECG, labs and C-SSRS, he took his two packets in water at 9:05. Our second coordinator checked the kit first.
+
+He had a dentist appointment across town, so we drew the postdose PK at 9:45 and let him go. Packets counted, all good. 4 cartons dispensed.
+
+His wife is post-menopausal.
+
+Tom
+",crc,"Tue, 27 Oct 2026",,
+a22,catching up - G-201-013 wk16 and other bits,"Hi Priya,
+
+Sorry this is late, it's been a week. Catching up on G-201-013's Week 16 from yesterday (Thu 8 Oct, Baseline was Wed 17 Jun).
+
+He came in with his wife and their dog Biscuit (a certified service dog, so fine with security). Lovely as always. He's been working on his garden before the frost and says his grip is ""about the same"", which matches the dynamometry.
+
+He did PGI-C and PGI-S in the waiting room first, then ALSAQ-40, ROADS and CNS-BFS. Vitals, SVC, strength and ALSFRS-R are in the binder. He took his dose at home at 7:15. Postdose PK drawn at 10:40. Safety labs, biomarker blood and urine, and C-SSRS all done. Dr. Haddad did the CGI-C at the end.
+
+The ECG cart in room 4 is still broken (biomed says the part is back-ordered), and room 2 was booked all morning, so we skipped the tracing today. We'll get it at Week 24.
+
+Con meds unchanged. No AEs except a small cut on his hand from gardening, entered as mild. Counted packets: 1 missed dose in September. 4 cartons dispensed.
+
+Also, the Elm Street parking lot will be the place for visits next week, see Mei's email.
+
+Thanks!
+Rosa
+",crc,"Fri, 9 Oct 2026",,
+a23,Screening - G-225-002 contraception,"Hi Dr. Patel,
+
+G-225-002 is 31. Her serum pregnancy test at Master Protocol screening was negative. Baseline is planned for Mon 16 Nov.
+
+Contraception: she has been on a combined oral contraceptive pill for 6 years, never misses it, and her husband uses condoms every time. That's two methods, so I think she's covered. I've documented it as ""highly effective x2"".
+
+Any concerns before I book Baseline?
+
+Thanks,
+Mei
+",crc,"Wed, 4 Nov 2026",,
+a24,G-226-007 extra packets,"Hi,
+
+G-226-007 called this morning. On Sat 24 Oct her husband mixed four packets instead of two by mistake. He'd opened a second day's pair without thinking. She took the whole thing.
+
+She feels completely fine, no symptoms at all, so there's no AE and nothing to report. I've made a note and will record it in compliance at her Week 8 visit. I told them to go back to two packets, which they did on Sunday.
+
+Leah
+",crc,"Tue, 27 Oct 2026",,
+a25,G-227-005 Week 8 + dosing question,"Hi Priya,
+
+Week 8 for G-227-005 today (Baseline Thu 3 Sep). Visit went fine: all assessments, ECG, labs, CNS-BFS, urine pregnancy negative, contraception reviewed (IUD plus condoms). Postdose PK 2 hours after her in-clinic dose. 4 cartons dispensed.
+
+Her swallowing is slower now. Her daughter mixes the two packets into yogurt with thickener, and she eats it in small spoonfuls over breakfast. It usually takes her about an hour to get through it. She's managing well that way and doesn't want a feeding tube yet, so we told her that's fine.
+
+Rosa
+",crc,"Thu, 29 Oct 2026",,
+a26,G-228-002 Baseline done,"Hi all,
+
+G-228-002 had Baseline yesterday, Tue 17 Nov. All procedures were done, then the first dose was given in clinic at 11:05, checked by a second coordinator.
+
+Med history note: he was on carbamazepine 200 mg twice daily for trigeminal neuralgia. His neurologist switched him to baclofen, and his last carbamazepine dose was Sun 8 Nov. No seizure history at all.
+
+Next up: Week 2 call around 1 Dec.
+
+Tom
+",crc,"Wed, 18 Nov 2026",,
+a27,G-229-008 randomized,"Hi Priya,
+
+G-229-008 started study drug yesterday, Mon 16 Nov.
+
+One med to note: she was on tacrolimus for autoimmune hepatitis. Dr. Patel considers tacrolimus narrow therapeutic index for her, so her hepatologist switched her to azathioprine. Her last tacrolimus dose was Mon 9 Nov, which gave us the standard 7-day washout. Liver tests are stable.
+
+Everything else at Baseline went smoothly, first dose given in clinic after all procedures.
+
+Mei
+",crc,"Tue, 17 Nov 2026",,
+a28,G-230-001 eligibility confirmed,"Hi team,
+
+G-230-001 was randomized into Regimen G yesterday, Tue 6 Oct.
+
+Regimen G exclusions checked:
+- No epilepsy diagnosis, no seizure medicines. She had one seizure on Sun 14 Jun 2026, caused by a very low sodium level from a medication. It was treated in the ED, and no seizure medicine was started.
+- No strong CYP3A inducers, no narrow-TI substrates.
+- No known allergy to the study drug.
+
+Baseline is booked for Fri 9 Oct.
+
+Thanks,
+Leah
+",crc,"Wed, 7 Oct 2026",,
+a29,Wk 24 G-231-011,"Hi Priya,
+
+G-231-011 completed Week 24 on Fri 23 Oct (Baseline Thu 7 May) and moved into the ATE.
+
+She skipped her home dose Friday morning. Predose PK at 8:00, ATE dose in clinic at 9:10 after everything was done, postdose PK at 12:30. All Week 24 assessments, endocrine panel (ACTH, cortisol, TSH, fT4), ECG, urine pregnancy (negative), contraception review, exit questionnaire and vital status were done.
+
+The optional LP was done Wed 21 Oct. She declined the LP at Baseline back in May, but she was keen this time, so we went ahead and sent biomarker and PK tubes.
+
+Dana
+",crc,"Mon, 26 Oct 2026",,
+a30,G-232-004 closed out,"Hi,
+
+G-232-004 decided to stop study drug and withdraw. Her last dose was Mon 12 Oct.
+
+She came in yesterday, Mon 19 Oct, for the in-person ET visit and we did the full Week 24 list. We also asked about AEs (none new) and reviewed contraception (IUD plus condoms; reminded her to continue both for 90 days after her last dose).
+
+Since we covered AEs and contraception at the ET visit, the follow-up safety call is taken care of. I've marked her as complete in the tracker.
+
+Leah
+",crc,"Tue, 20 Oct 2026",,
+a31,long one sorry - G-233-009 + G-233-012 + misc,"Hi Priya,
+
+A few things from this week, in no particular order.
+
+G-233-012: her Week 4 visit is moved to Thu 22 Oct because of a family funeral. Her Baseline was Wed 23 Sep, so that's Day 29. She knows to come in at 8 and not dose at home that morning.
+
+G-233-009: I finally got through to him yesterday, Tue 13 Oct, for his Week 12 call (Baseline Wed 15 Jul). He'd been at his son's place upstate with patchy phone signal, and we'd been playing phone tag since early last week. Anyway, he's doing well. No missed doses. He's using the pill organizer for his other meds and keeps the study cartons on the kitchen counter, away from the stove. No AEs and no med changes. His wife is 66, so no contraception issues. I reminded him to bring every carton to Week 16, which is booked for Wed 4 Nov.
+
+Also, the -80 freezer alarm went off Sunday night. Facilities fixed it within the hour and the samples were never above -70.
+
+Finally, can someone cover my Friday afternoon visits? I have a dentist appointment.
+
+Thanks,
+Rosa
+",crc,"Wed, 14 Oct 2026",,
+a32,G-234-003 Week 8,"Hi,
+
+G-234-003's Week 8 was yesterday, Thu 29 Oct (Baseline Fri 4 Sep).
+
+Vitals, SVC, strength, ALSFRS-R, CNS-BFS, ECG, labs and C-SSRS were done. Postdose PK was drawn 3 hours after her home dose. Contraception: copper IUD plus condoms, reviewed and documented.
+
+She'd just finished her period and is very careful with contraception, so we skipped the urine pregnancy test this time. Packets counted. 4 cartons dispensed.
+
+Tom
+",crc,"Fri, 30 Oct 2026",,
+a33,Drug room temperature over the weekend,"Hi team,
+
+FYI: the AC in the investigational drug room failed on Saturday (14 Nov). The room logger peaked at 33 C and was above 30 C for about 6 hours before facilities got it running again. It has been back at 22 C since Saturday evening.
+
+I looked at the Regimen G cartons this morning. The stick packs look normal, no clumping or damage. So I went ahead and dispensed cartons from that stock for G-235-002 and G-235-006, who came in this morning. I don't think we need to make a fuss about it.
+
+Ken
+",pharmacist,"Mon, 16 Nov 2026",,
+a34,G-236-001 Baseline,"Hi Priya,
+
+G-236-001 had Baseline yesterday, Wed 2 Dec. Regimen-specific screening was done the same day.
+
+All Baseline procedures were done first: ALSAQ-40, CNS-BFS, ROADS, PGI-S, vitals, SVC, strength, ALSFRS-R, ECG, safety labs, endocrine panel, biomarkers, DNA sample and C-SSRS. No CSF, she declined.
+
+Jenna was tied up with another participant, so I mixed the two packets, checked her wristband and the kit number against IRT myself, and gave the dose at 11:20. She finished it in about 5 minutes. 4 cartons dispensed and the return-your-packets reminder given. Her husband had a vasectomy years ago, and she is on an IUD; they use condoms too.
+
+Mei
+",crc,"Thu, 3 Dec 2026",,
+a35,G-237-005 Wk16 by video,"Hi,
+
+G-237-005's Week 16 was done by video on Fri 11 Dec (Baseline Thu 20 Aug). He was in Arizona for his daughter's wedding and didn't want to miss it. He's doing well otherwise.
+
+By video: ALSFRS-R, CNS-BFS, ROADS, PGI-C, PGI-S, AEs, con meds and C-SSRS. No ECG, labs or PK, of course. Drug was couriered before he left. Missed items documented per the MOP.
+
+Dana
+",crc,"Mon, 14 Dec 2026",,
+a36,G-238-002 Baseline today,"Hi Priya,
+
+G-238-002 had Baseline this morning. She was randomized at 8:15. To keep her on her usual morning schedule, we gave the first dose at 8:30, checked by Rosa. Then we did the ECG, endocrine panel, safety labs, ALSAQ-40, CNS-BFS, ROADS, PGI-S, vitals, SVC and the rest. Urine pregnancy negative. Contraception: tubal ligation plus condoms.
+
+Everything is in. 4 cartons dispensed.
+
+Tom
+",crc,"Tue, 8 Dec 2026",,
+a37,G-239-006 ET visit,"Hi,
+
+G-239-006 stopped study drug and is withdrawing. Last dose Fri 20 Nov. ET visit was yesterday, Thu 17 Dec, with the full Week 24 list. Because that's within 28 +/- 3 days of his last dose, we collected the safety-call information at the ET visit: no new AEs, contraception reviewed (partner on the implant plus condoms).
+
+One thing: he mentioned he signed up to donate sperm at a sperm bank in early January. He was worried about it, but I told him that's fine now that he's off study drug.
+
+Leah
+",crc,"Fri, 18 Dec 2026",,
+a38,G-240-010 catch-up,"Hi Priya,
+
+Long week. Here's G-240-010's Week 12 call from yesterday, Wed 9 Dec (Baseline Tue 15 Sep).
+
+She's doing okay. Speech is a bit slower but she's still working part-time from home. Her husband now handles most of the cooking. She's taking the study drug every morning around 7:30 in applesauce, no missed doses that she remembers. I reminded her to bring all cartons to Week 16.
+
+AEs: some trouble sleeping, mild. She says she's felt low since the diagnosis anniversary last month. Her sister suggested a herbal supplement from the health food store, St. John's wort I think. She's been taking it for about 3 weeks and thinks it helps a little. Dr. Haddad is aware of the mood; no suicidal thoughts on our questions.
+
+Contraception: she's 52, periods stopped two years ago, FSH 58 at screening.
+
+Week 16 is booked for Tue 5 Jan.
+
+Thanks,
+Rosa
+",crc,"Thu, 10 Dec 2026",,
+a39,G-241-003 Baseline yesterday,"Hi Priya,
+
+G-241-003 had Baseline yesterday, Mon 7 Dec, combined with the Regimen G screening visit.
+
+Timeline:
+- Master Protocol screening: Fri 23 Oct.
+- Regimen G eligibility confirmed by Dr. Patel: Wed 25 Nov.
+- Optional LP: Fri 27 Nov (biomarker tubes only, no CSF PK).
+- Baseline Mon 7 Dec: ALSAQ-40, CNS-BFS, ROADS, PGI-S, ECG, endocrine panel, labs, biomarkers, C-SSRS and the rest. Then the first dose in clinic at 10:50, checked by a second coordinator.
+
+He's male, and his wife has had a hysterectomy. 4 cartons dispensed.
+
+Mei
+",crc,"Tue, 8 Dec 2026",,
+a40,Wk4 G-242-007 (rescheduled),"Hi,
+
+G-242-007's Week 4 was today. Baseline was Wed 14 Oct. We had to push it back twice because of his son's surgery.
+
+Last dose yesterday at 9:00 am. The lab could only take our PK draw early, so predose PK was at 6:45. He then did vitals, SVC, strength, ALSFRS-R, ECG, labs and C-SSRS, and took his two packets in clinic at 9:50, checked by Tom. Postdose PK at 11:50. Wife post-menopausal. Packets counted, 4 cartons dispensed.
+
+Dana
+",crc,"Fri, 20 Nov 2026",,
+a41,Week 8 visits this week - G-207-004 and G-207-006,"Hi Priya,
+
+Two Week 8 visits this week.
+
+G-207-004 (Baseline Mon 21 Sep), Thu 12 Nov: all assessments including CNS-BFS, ECG and labs. Dose in clinic, postdose PK 2 hours later. Urine pregnancy negative. Contraception (hormonal IUD plus condoms) reviewed. 4 cartons dispensed.
+
+G-207-006 (Baseline Mon 7 Sep), Tue 10 Nov: she had to reschedule from last week because of a cold. All assessments, ECG, labs, CNS-BFS done. Postdose PK at 4 hours. We ran out of urine cups in the room, and since she was negative at Week 4 we moved on. Contraception reviewed (copper IUD plus condoms). 4 cartons dispensed.
+
+Rosa
+",crc,"Fri, 13 Nov 2026",,
+a42,G-244-002 Week 4,"Hi,
+
+G-244-002's Week 4 was yesterday, Tue 29 Sep (Baseline Tue 1 Sep).
+
+She's 39 and had a bilateral salpingectomy on Wed 10 Jun 2026, so she's surgically sterile. We've marked contraception and pregnancy testing as not applicable for her since Baseline.
+
+Predose PK at 8:00. Then vitals, SVC, strength, ALSFRS-R, ECG, labs and C-SSRS. Dose in clinic at 8:30, checked by Jo. She had appointments upstairs all day, so the postdose PK was drawn at 6:00 pm on her way out. 4 cartons dispensed.
+
+Tom
+",crc,"Wed, 30 Sep 2026",,
+a43,Contraception check - male participants,"Hi Dr. Patel,
+
+I reviewed contraception for our three male Regimen G participants whose partners can get pregnant:
+
+- G-245-002: they use condoms, and his partner tracks her cycle with an app and they avoid sex on her fertile days. Both methods every time.
+- G-245-005: his partner had Essure coils placed in 2019, plus condoms.
+- G-245-007: his partner gets the Depo-Provera shot every 3 months, plus condoms.
+
+All three are documented as meeting the requirement. None of them plan to donate sperm.
+
+Mei
+",crc,"Mon, 2 Nov 2026",,
+a44,G-246-008 rash and restart,"Hi Priya,
+
+Update on G-246-008.
+
+She developed an itchy rash on her arms and trunk on Thu 12 Nov. Dr. Lin saw her in clinic on Fri 13 Nov and graded it moderate. After a call with the medical monitor that afternoon, they agreed to hold study drug. We didn't draw a PK sample because it's a skin issue and shouldn't affect drug levels. Held Fri 13 Nov through Wed 18 Nov.
+
+The rash cleared with a topical steroid, and she restarted Thu 19 Nov. She told us on Friday that on Thursday she took four packets ""to catch up her levels"". She felt fine, so we just counseled her to take two packets a day from then on.
+
+Also, her Week 8 labs were a bit off: bilirubin just above the upper limit. Dr. Lin wasn't concerned, and it was normal on recheck.
+
+Jo
+",crc,"Mon, 23 Nov 2026",,
+a45,G-247-001 ET and safety call,"Hi,
+
+Wrapping up G-247-001 (Baseline Thu 10 Sep).
+
+He stopped study drug on Mon 14 Dec (last dose) and decided to leave the study. In-person ET visit was Fri 18 Dec: vitals, SVC, strength, ALSFRS-R, ECG, safety labs, endocrine panel, biomarkers, C-SSRS, ALSAQ-40, CNS-BFS, exit questionnaire and vital status. We skipped ROADS, PGI-C, PGI-S and CGI-C, since those are for people completing Week 24. No LP: he had no baseline CSF. His wife is post-menopausal.
+
+His follow-up safety call was yesterday, Thu 28 Jan. We couldn't reach him over the holidays. No new AEs.
+
+Leah
+",crc,"Fri, 29 Jan 2027",,
+a46,Med list check - three participants,"Hi team,
+
+I reviewed three medication lists this week:
+
+G-248-003 (randomized September): his PCP started rifampin on Mon 30 Nov for latent TB, a 4-month course. He's tolerating it well. Okay to continue both.
+
+G-248-008: quetiapine 25 mg at bedtime for sleep. I consider it wide therapeutic index at this dose. Continue, and watch for sleep getting worse.
+
+G-248-010: methotrexate 15 mg weekly for rheumatoid arthritis. I consider it narrow therapeutic index for her. Her last dose before starting was Thu 26 Nov, and her first study dose was Mon 30 Nov. She continues her weekly methotrexate; her rheumatologist is monitoring her counts.
+
+Dr. Okafor
+",investigator,"Wed, 9 Dec 2026",,
+a47,holiday week visits - G-249-012 wk 16,"Hi Priya,
+
+Quick one before the break. G-249-012 came in yesterday, Wed 23 Dec, for Week 16 (Baseline Mon 24 Aug). We couldn't fit him in earlier with the holiday schedule and his daughter's work. He brought cookies for the whole team, which was sweet.
+
+PGI-C and PGI-S first, then ALSAQ-40, ROADS, CNS-BFS, vitals, SVC, strength, ALSFRS-R, ECG, safety labs, biomarker blood and urine, C-SSRS. Dr. Lin did the CGI-C last. He took his dose at home at 7:00. In the holiday rush we didn't have the PK tube set out, and he'd left before anyone noticed, so no PK this time. Packets counted. 4 cartons dispensed. Wife post-menopausal.
+
+Happy holidays!
+Rosa
+",crc,"Thu, 24 Dec 2026",,
+a48,Kit mix-up and a storage note,"Hi team,
+
+Two pharmacy items.
+
+1. At yesterday's visit we found that on Mon 7 Dec, G-250-012 was handed the cartons assigned in IRT to G-250-014. They were picked up at the same time and the bags got swapped. She took that supply for 4 weeks. Both are blinded, and she's fine, so I corrected it in IRT, gave her the right cartons, and moved on. No need to escalate.
+
+2. On Wednesday night the cartons for Thursday's visits were left on the counter in exam room 3 overnight instead of going back to the drug room. The room isn't locked, but the clinic was closed. Temperature would have been normal room temperature.
+
+Ken
+",pharmacist,"Tue, 5 Jan 2027",,
+a49,G-251-009 Week 2 and Week 4,"Hi Priya,
+
+G-251-009 (Baseline Mon 14 Dec).
+
+Week 2 call, Mon 28 Dec: no missed doses, no AEs, no new meds. Reminded her to bring all cartons. We left contraception for the clinic visits; we only cover that in person.
+
+Week 4, Mon 11 Jan: she mentioned she takes the study drug at bedtime, around 9 pm, because mornings are hard for her. Her last dose was Sunday night at 9 pm. Predose PK at 8:00, then all the assessments, ECG and labs, then her dose in clinic at 9:00, checked by Dana. Postdose PK at 11:30. Urine pregnancy negative. Contraception reviewed: hormonal IUD plus condoms. 4 cartons dispensed.
+
+Tom
+",crc,"Tue, 12 Jan 2027",,
+a50,Screening batch - G-252-001/002/003,"Hi Dr. Patel,
+
+Three Regimen G screenings for your sign-off. We'll combine regimen screening with Baseline for all three.
+
+G-252-001: Master Protocol screening Tue 5 Jan, Baseline planned Tue 19 Jan. Epilepsy since age 20, seizure-free for 5 years on phenytoin 300 mg daily. Neurology is happy with that.
+
+G-252-002: Master Protocol screening Wed 6 Jan, Baseline planned Mon 18 Jan. She stopped St. John's wort on Fri 8 Jan.
+
+G-252-003: Master Protocol screening Mon 11 Jan, Baseline planned Thu 21 Jan. He takes sildenafil 50 mg as needed for erectile dysfunction. His wife has a hormonal IUD, and they use condoms.
+
+All three look eligible to me.
+
+Mei
+",crc,"Thu, 14 Jan 2027",,

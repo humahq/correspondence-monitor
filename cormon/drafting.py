@@ -95,6 +95,8 @@ def item_context(study: Study, item: dict, recipient: Person | None, routed_to: 
             "doc_title": ev.get("doc_title", ""),
             "doc_quote": ev.get("doc_quote", ""),
             "page": ev.get("doc_page", ""),
+            "where": _where(ev.get("doc_title", ""), ev.get("doc_page"), ev.get("rule_text")),
+            "next_step": ev.get("next_step") or "",
             "message_quote": ev.get("message_quote", ""),
             "message_subject": ev.get("message_subject") or "(no subject)",
             "message_date": local_time(ev.get("message_date")),
@@ -104,17 +106,28 @@ def item_context(study: Study, item: dict, recipient: Person | None, routed_to: 
             "earlier": (f"{ev['earlier']['date']}, \"{ev['earlier']['subject']}\"" if ev.get("earlier") else ""),
         },
         "also": also_broken(study, ev),
+        "problems": problems(study, item, ev),
+        "bundle": False,
         "recipient": _person_ctx(recipient, "Hello"),
         "people": people_ctx(study, item.get("site")),
     }
 
 
+def _where(title: str, page, section: str | None) -> str:
+    """Where a quote is in the documents: its page, or its section for a quote from the protocol guide."""
+    if page:
+        return f"{title}, page {page}"
+    return f"{title}, section {section}" if section else title
+
+
 def also_broken(study: Study, ev: dict) -> list[dict]:
     """Other confirmed rules the same participant broke in the same message, shown under the lead finding."""
     out = []
-    seen = {textutil.normalize(ev.get("doc_quote") or "")}
+    key_of = lambda e, title: (textutil.normalize(e.get("doc_quote") or title or ""),
+                               textutil.normalize(e.get("message_quote") or ""))
+    seen = {key_of(ev, ev.get("headline"))}
     for a in ev.get("additional") or []:
-        key = textutil.normalize(a.get("doc_quote") or "")
+        key = key_of(a, a.get("headline"))
         if key in seen:
             continue
         seen.add(key)
@@ -122,10 +135,33 @@ def also_broken(study: Study, ev: dict) -> list[dict]:
         if not title:
             rule = db.q1("SELECT doc_id FROM rules WHERE id=?", (a.get("rule_id"),))
             title = study.doc(rule["doc_id"])["title"] if rule else "study documents"
-        page = a.get("doc_page")
-        out.append({"doc_title": title, "where": f"{title}, page {page}" if page else title,
-                    "doc_quote": a.get("doc_quote") or "", "message_quote": a.get("message_quote") or ""})
+        out.append({"doc_title": title, "where": _where(title, a.get("doc_page"), a.get("rule_text")),
+                    "doc_quote": a.get("doc_quote") or "", "message_quote": a.get("message_quote") or "",
+                    "title": a.get("headline") or a.get("rule_text") or "Also against this rule",
+                    "next_step": a.get("next_step") or "", "unsure": a.get("certainty") == "unsure",
+                    "unsure_reason": a.get("unsure_reason") or ""})
     return out
+
+
+_UNSURE = re.compile(r"^Please check \(not sure\):\s*", re.I)
+
+
+def problems(study: Study, item: dict, ev: dict) -> list[dict]:
+    """Every problem in the alert, the lead one first, each with its own next step and evidence."""
+    lead = {"title": _UNSURE.sub("", item["title"]), "unsure": ev.get("certainty") == "unsure",
+            "unsure_reason": ev.get("unsure_reason") or "", "next_step": ev.get("next_step") or "",
+            "message_quote": ev.get("message_quote", ""), "doc_quote": ev.get("doc_quote", ""),
+            "where": _where(ev.get("doc_title", ""), ev.get("doc_page"), ev.get("rule_text"))}
+    tier = TIER_LABELS.get(item.get("tier"), item.get("tier") or "")
+    return [dict(p, n=n, item_id=item["id"], tier_label=tier)
+            for n, p in enumerate([lead] + also_broken(study, ev), 1)]
+
+
+def bundle_problems(study: Study, its: list[dict]) -> list[dict]:
+    """The problems of several items sent in one message, numbered through."""
+    ps = [p for it in its
+          for p in problems(study, it, it["evidence"] if isinstance(it["evidence"], dict) else db.unjs(it["evidence"], {}))]
+    return [dict(p, n=n) for n, p in enumerate(ps, 1)]
 
 
 _LEFTOVER = re.compile(r"\{\{|\}\}|\{%|%\}|\bNone\b")
@@ -138,8 +174,9 @@ def render(template: dict, ctx: dict) -> tuple[str | None, str]:
     except Exception as e:
         raise DraftError(f"template {template['id']} could not be filled: {e}") from e
     for part in (subject or "", body):
-        if _LEFTOVER.search(part):
-            raise DraftError(f"template {template['id']} left a placeholder or empty value in the draft")
+        if m := _LEFTOVER.search(part):
+            near = re.sub(r"\s+", " ", part[max(0, m.start() - 80):m.end() + 20])
+            raise DraftError(f"template {template['id']} left a placeholder or empty value in the draft: ...{near}...")
     if template.get("ai_edit"):
         body = ai_edit(body, ctx)
     return subject, body

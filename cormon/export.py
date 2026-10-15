@@ -59,8 +59,10 @@ def _checklist(study: Study, rows: list[dict]) -> list[tuple[str, str, str, str]
     for doc in study.documents:
         if doc["kind"] not in ("protocol", "lab_manual"):
             continue
-        for item in ingest.checklist_items(study.study_id, doc["id"], doc["kind"]):
-            hits = [r for r in rows if ingest._covers(r["source_quote"], item)]
+        items = ingest.checklist_items(study.study_id, doc["id"], doc["kind"])
+        for item in items:
+            hits = [r for r in rows if ingest._covers(r["source_quote"], item)
+                    and not ingest.bundles_criteria(r["source_quote"], items)]
             live = [r["id"] for r in hits if r["active"]]
             if live:
                 out.append((doc["title"], item, "Has a rule", ", ".join(live)))

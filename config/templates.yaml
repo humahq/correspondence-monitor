@@ -20,17 +20,19 @@ templates:
     severity: "*"
     body: |
       <p><b>{{ item.tier_label }} · {{ study.short_name }} · {{ item.participant_id or "participant not named" }} · {{ item.site }}</b></p>
-      <p><b>Problem:</b> {{ item.title }}</p>
-      {%- if finding.unsure %}
-      <p><b>Why I am not sure:</b> {{ finding.unsure_reason }}</p>
-      {%- endif %}
-      <p><b>What the site wrote</b> ({{ finding.sender_name }}, {{ finding.message_date }}):<br><i>"{{ finding.message_quote }}"</i>
-      {%- if finding.earlier %}<br>(Part of this is from an earlier message: {{ finding.earlier }}.){% endif %}</p>
-      <p><b>What the study rule says</b> ({{ finding.doc_title }}, page {{ finding.page }}):<br><i>"{{ finding.doc_quote }}"</i></p>
-      {%- for a in also %}
-      <p><b>It also goes against this rule</b> ({{ a.where }}):<br><i>"{{ a.doc_quote }}"</i>{% if a.message_quote and a.message_quote != finding.message_quote %}<br>The site wrote: <i>"{{ a.message_quote }}"</i>{% endif %}</p>
+      <p><b>{{ problems | length }} problem{{ "s" if problems | length > 1 }} found:</b>
+      {%- for p in problems %}<br><b>{{ p.n }}. {{ p.title }}</b>{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} <i>(please check: not sure)</i>{% endif %}{% endfor %}</p>
+      <p><b>What to do:</b>
+      {%- for p in problems %}<br>{{ p.n }}. {{ p.next_step or "Check this with the site." }}{% endfor %}</p>
+      <p>──────────</p>
+      {%- for p in problems %}
+      <p><b>Evidence for problem {{ p.n }}</b><br>Site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):<br><code>{{ p.message_quote }}</code><br>Study rule:<br>{% if p.doc_quote %}<code>{{ p.doc_quote }}</code><br><i>From: {{ p.where }}</i>{% else %}<i>exact words not found, please read this section: {{ p.where }}</i>{% endif %}
+      {%- if p.unsure %}<br><i>Why not sure: {{ p.unsure_reason }}</i>{% endif %}</p>
       {%- endfor %}
-      <p><b>Who was told:</b> {{ item.routed_to }}<br>Item #{{ item.id }} · <a href="{{ item.link }}">details</a></p>
+      {%- if finding.earlier %}
+      <p>(Part of this is from an earlier message: {{ finding.earlier }}.)</p>
+      {%- endif %}
+      <p>Told: {{ item.routed_to }} · {% if bundle %}Items {% for p in problems %}#{{ p.item_id }}{{ ", " if not loop.last }}{% endfor %}{% else %}Item #{{ item.id }}{% endif %} · <a href="{{ item.link }}">details</a></p>
 
   - id: teams-study-good-news
     topic: good_news
@@ -51,12 +53,14 @@ templates:
     severity: immediate
     body: |
       <p><b>{{ item.tier_label }} · {{ study.short_name }} · {{ item.participant_id or "participant not named" }} · {{ item.site }}</b></p>
-      <p><b>Problem:</b> {{ item.title }}</p>
-      <p><b>What the study rule says</b> ({{ finding.doc_title }}, page {{ finding.page }}):<br><i>"{{ finding.doc_quote }}"</i></p>
-      {%- for a in also %}
-      <p><b>It also goes against this rule</b> ({{ a.where }}):<br><i>"{{ a.doc_quote }}"</i></p>
+      <p><b>{{ problems | length }} problem{{ "s" if problems | length > 1 }} found:</b>
+      {%- for p in problems %}<br><b>{{ p.n }}. {{ p.title }}</b>{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} <i>(please check: not sure)</i>{% endif %}{% endfor %}</p>
+      <p><b>What to do:</b><br>{{ people.cra.name }} (CRA) has been asked to call the site today.
+      {%- for p in problems %}<br>{{ p.n }}. {{ p.next_step or "Check this with the site." }}{% endfor %}</p>
+      <p>──────────</p>
+      {%- for p in problems %}
+      <p><b>Evidence for problem {{ p.n }}</b><br>Site wrote:<br><code>{{ p.message_quote }}</code><br>Study rule:<br>{% if p.doc_quote %}<code>{{ p.doc_quote }}</code><br><i>From: {{ p.where }}</i>{% else %}<i>exact words not found, please read this section: {{ p.where }}</i>{% endif %}</p>
       {%- endfor %}
-      <p><b>Next step:</b> {{ people.cra.name }} (CRA) has been asked to call the site today.</p>
       <p>Item #{{ item.id }} · <a href="{{ item.link }}">details</a></p>
 
   # ---------------- Email: CRA ----------------
@@ -65,37 +69,44 @@ templates:
     recipient: cra
     channel: email
     severity: medium
-    subject: "[{{ study.short_name }}] Eligibility check needed: {{ item.participant_id or 'participant' }} at {{ item.site }} (Item #{{ item.id }})"
+    subject: "[{{ study.short_name }}] Eligibility check needed: {{ item.participant_id or 'participant' }} at {{ item.site }}{% if problems | length > 1 %} (+{{ problems | length - 1 }} more){% endif %} (Item #{{ item.id }})"
     body: |
       {{ recipient.first_name }},
 
-      {{ item.title }} ({{ item.participant_id or "participant not named" }}, {{ item.site }}).
-      {%- if finding.unsure %}
+      **{{ problems | length }} problem{{ "s" if problems | length > 1 }} for {{ item.participant_id or "participant not named" }} at {{ item.site }}:**
+      {%- for p in problems %}
+      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (please check: not sure){% endif %}
+      {%- endfor %}
 
-      Why I am not sure: {{ finding.unsure_reason }}
+      **What to do** (within two days): confirm with the site whether this is a deviation, and record it if so.
+      {%- for p in problems %}
+      {{ p.n }}. {{ p.next_step or "Check this with the site." }}
+      {%- endfor %}
+
+      ──────────
+      {%- for p in problems %}
+
+      **Evidence for problem {{ p.n }}**
+      Site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
+      > {{ p.message_quote | replace("\n", " ") }}
+      Study rule:
+      {%- if p.doc_quote %}
+      > {{ p.doc_quote | replace("\n", " ") }}
+      From: {{ p.where }}
+      {%- else %}
+      (exact words not found, please read this section: {{ p.where }})
       {%- endif %}
-
-      Asked of you: confirm with the site within two days whether this is a deviation, and record it if so.
-
-      What the site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
-      "{{ finding.message_quote }}"
+      {%- if p.unsure %}
+      Why not sure: {{ p.unsure_reason }}
+      {%- endif %}
+      {%- endfor %}
       {%- if finding.earlier %}
+
       (Part of this is from an earlier email: {{ finding.earlier }}.)
       {%- endif %}
 
-      What the study rule says ({{ finding.doc_title }}, page {{ finding.page }}):
-      "{{ finding.doc_quote }}"
-      {%- for a in also %}
-
-      It also goes against this rule ({{ a.where }}):
-      "{{ a.doc_quote }}"
-      {%- if a.message_quote and a.message_quote != finding.message_quote %}
-      The site wrote: "{{ a.message_quote }}"
-      {%- endif %}
-      {%- endfor %}
-
       Details: {{ item.link }}
-      To have me disregard this, reply "disregard". To clear it, reply "cleared".
+      {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}To have me disregard this, reply "disregard". To clear it, reply "cleared".{% endif %}
 
       {{ study.monitor_signature }}
 
@@ -104,37 +115,90 @@ templates:
     recipient: cra
     channel: email
     severity: medium
-    subject: "[{{ study.short_name }}] Needs action in 1-2 days: {{ item.title }}{% if also %} (+{{ also | length }} more){% endif %} (Item #{{ item.id }})"
+    subject: "[{{ study.short_name }}] Needs action in 1-2 days: {{ item.title }}{% if problems | length > 1 %} (+{{ problems | length - 1 }} more){% endif %} (Item #{{ item.id }})"
     body: |
       {{ recipient.first_name }},
 
-      {{ item.title }} ({{ item.participant_id or "participant not named" }}, {{ item.site }}).
-      {%- if finding.unsure %}
+      **{{ problems | length }} problem{{ "s" if problems | length > 1 }} for {{ item.participant_id or "participant not named" }} at {{ item.site }}:**
+      {%- for p in problems %}
+      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (please check: not sure){% endif %}
+      {%- endfor %}
 
-      Why I am not sure: {{ finding.unsure_reason }}
+      **What to do** (follow up with the site within two days):
+      {%- for p in problems %}
+      {{ p.n }}. {{ p.next_step or "Check this with the site." }}
+      {%- endfor %}
+
+      ──────────
+      {%- for p in problems %}
+
+      **Evidence for problem {{ p.n }}**
+      Site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
+      > {{ p.message_quote | replace("\n", " ") }}
+      Study rule:
+      {%- if p.doc_quote %}
+      > {{ p.doc_quote | replace("\n", " ") }}
+      From: {{ p.where }}
+      {%- else %}
+      (exact words not found, please read this section: {{ p.where }})
       {%- endif %}
-
-      Asked of you: follow up with the site within two days.
-
-      What the site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
-      "{{ finding.message_quote }}"
+      {%- if p.unsure %}
+      Why not sure: {{ p.unsure_reason }}
+      {%- endif %}
+      {%- endfor %}
       {%- if finding.earlier %}
+
       (Part of this is from an earlier email: {{ finding.earlier }}.)
       {%- endif %}
 
-      What the study rule says ({{ finding.doc_title }}, page {{ finding.page }}):
-      "{{ finding.doc_quote }}"
-      {%- for a in also %}
+      Details: {{ item.link }}
+      {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}Reply "disregard" to have me drop this, or "cleared" once resolved.{% endif %}
 
-      It also goes against this rule ({{ a.where }}):
-      "{{ a.doc_quote }}"
-      {%- if a.message_quote and a.message_quote != finding.message_quote %}
-      The site wrote: "{{ a.message_quote }}"
-      {%- endif %}
+      {{ study.monitor_signature }}
+
+  - id: email-cra-low
+    topic: "*"
+    recipient: cra
+    channel: email
+    severity: low
+    subject: "[{{ study.short_name }}] For your to-do list: {{ item.title }}{% if problems | length > 1 %} (+{{ problems | length - 1 }} more){% endif %} (Item #{{ item.id }})"
+    body: |
+      {{ recipient.first_name }},
+
+      **{{ problems | length }} problem{{ "s" if problems | length > 1 }} for {{ item.participant_id or "participant not named" }} at {{ item.site }}:**
+      {%- for p in problems %}
+      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (please check: not sure){% endif %}
       {%- endfor %}
 
+      **What to do** (no rush: raise it at your next follow-up with the site):
+      {%- for p in problems %}
+      {{ p.n }}. {{ p.next_step or "Check this with the site." }}
+      {%- endfor %}
+
+      ──────────
+      {%- for p in problems %}
+
+      **Evidence for problem {{ p.n }}**
+      Site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
+      > {{ p.message_quote | replace("\n", " ") }}
+      Study rule:
+      {%- if p.doc_quote %}
+      > {{ p.doc_quote | replace("\n", " ") }}
+      From: {{ p.where }}
+      {%- else %}
+      (exact words not found, please read this section: {{ p.where }})
+      {%- endif %}
+      {%- if p.unsure %}
+      Why not sure: {{ p.unsure_reason }}
+      {%- endif %}
+      {%- endfor %}
+      {%- if finding.earlier %}
+
+      (Part of this is from an earlier email: {{ finding.earlier }}.)
+      {%- endif %}
+
       Details: {{ item.link }}
-      Reply "disregard" to have me drop this, or "cleared" once resolved.
+      {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}Reply "disregard" to have me drop this, or "cleared" once resolved.{% endif %}
 
       {{ study.monitor_signature }}
 
@@ -147,29 +211,42 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      Please call {{ people.crc.name }} at {{ item.site }} today. {{ item.title }}.
+      **{{ problems | length }} problem{{ "s" if problems | length > 1 }} for {{ item.participant_id or "participant not named" }} at {{ item.site }}:**
+      {%- for p in problems %}
+      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (please check: not sure){% endif %}
+      {%- endfor %}
 
-      What the site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
-      "{{ finding.message_quote }}"
-      {%- if finding.earlier %}
-      (Part of this is from an earlier email: {{ finding.earlier }}.)
+      **What to do** (today): please call {{ people.crc.name }} at {{ item.site }}, then:
+      {%- for p in problems %}
+      {{ p.n }}. {{ p.next_step or "Check this with the site." }}
+      {%- endfor %}
+
+      ──────────
+      {%- for p in problems %}
+
+      **Evidence for problem {{ p.n }}**
+      Site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
+      > {{ p.message_quote | replace("\n", " ") }}
+      Study rule:
+      {%- if p.doc_quote %}
+      > {{ p.doc_quote | replace("\n", " ") }}
+      From: {{ p.where }}
+      {%- else %}
+      (exact words not found, please read this section: {{ p.where }})
       {%- endif %}
-
-      What the study rule says ({{ finding.doc_title }}, page {{ finding.page }}):
-      "{{ finding.doc_quote }}"
-      {%- for a in also %}
-
-      It also goes against this rule ({{ a.where }}):
-      "{{ a.doc_quote }}"
-      {%- if a.message_quote and a.message_quote != finding.message_quote %}
-      The site wrote: "{{ a.message_quote }}"
+      {%- if p.unsure %}
+      Why not sure: {{ p.unsure_reason }}
       {%- endif %}
       {%- endfor %}
+      {%- if finding.earlier %}
+
+      (Part of this is from an earlier email: {{ finding.earlier }}.)
+      {%- endif %}
 
       The site has been told only that a possible issue was noted and that you have been informed. {{ people.clinops_lead.name }} (sponsor) has been told you are in touch with the site.
 
       Details: {{ item.link }}
-      Reply "disregard" to have me drop this, or "cleared" once resolved.
+      {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}Reply "disregard" to have me drop this, or "cleared" once resolved.{% endif %}
 
       {{ study.monitor_signature }}
 
@@ -189,9 +266,9 @@ templates:
       - {{ people.cra.name }} (CRA) has the context and has been asked to call the site today.
       - {{ people.crc.name }} (site coordinator) was told a possible issue was noted and that their monitor has been informed.
 
-      The study rule ({{ finding.doc_title }}, page {{ finding.page }}): "{{ finding.doc_quote }}"
+      The study rule ({{ finding.where }}){% if finding.doc_quote %}: "{{ finding.doc_quote }}"{% else %}: exact words not found, please read this section.{% endif %}
       {%- for a in also %}
-      It also goes against this rule ({{ a.where }}): "{{ a.doc_quote }}"
+      It also goes against this rule ({{ a.where }}){% if a.doc_quote %}: "{{ a.doc_quote }}"{% else %}: exact words not found, please read this section.{% endif %}
       {%- endfor %}
 
       Details: {{ item.link }}

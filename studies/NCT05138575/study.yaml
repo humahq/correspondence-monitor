@@ -1,0 +1,87 @@
+# Second test study, to check that the bot works on a study it was not built around.
+# Source: ClinicalTrials.gov NCT05138575 (protocol V3, 28 Sep 2021, with statistical analysis plan; ICF).
+study_id: NCT05138575
+short_name: SAK
+title: SGLT2i and KNO3 in HFpEF (SAK HFpEF Trial)
+sponsor: University of Pennsylvania
+
+# Mail to bot+<address_tag>@huma.ai is routed to this study.
+address_tag: NCT05138575
+monitor_signature: |-
+  SAK Correspondence Monitor
+  (automated message from the study monitoring service; it does not review safety information)
+
+documents:
+  - id: protocol
+    kind: protocol
+    title: SAK HFpEF Protocol V3 (28 Sep 2021)
+    file: docs/protocol.pdf
+  - id: consent
+    kind: consent
+    title: SAK HFpEF Informed Consent Form
+    file: docs/consent.pdf
+
+roles:
+  - { id: crc, label: Study coordinator }
+  - { id: cra, label: Clinical research associate }
+  - { id: clinops_lead, label: Sponsor ClinOps lead }
+  - { id: medical_monitor, label: Medical monitor }
+
+sites:
+  - { id: site-01, name: "Site 01 (Penn)", aliases: [UPenn] }
+
+people:
+  - id: rohit-crc
+    name: John Rohit
+    email: johnrohit94@gmail.com
+    roles: [crc]
+    sites: [site-01]
+  - id: ernest-cra
+    name: John Ernest
+    email: johnernest978@gmail.com
+    roles: [cra]
+    sites: [site-01]
+  - id: john-clinops
+    name: John Huma
+    email: john@huma.ai
+    roles: [clinops_lead]
+    sites: ["*"]
+  - id: medical-monitor
+    name: the SAK medical monitor
+    email: null
+    roles: [medical_monitor]
+    sites: ["*"]
+
+pattern_classes:
+  - id: eligibility
+    label: Eligibility
+    description: A participant screened, enrolled or randomized who meets an exclusion criterion or fails an inclusion criterion.
+    documents: [protocol]
+    event_types: [screening, enrollment, randomization]
+    match_event_types: [enrollment, randomization]
+  - id: visit_schedule
+    label: Visit schedule
+    description: A visit, phone contact or treatment period outside its allowed timing, or a visit missing a required assessment.
+    documents: [protocol]
+    event_types: [visit, contact, screening]
+  - id: procedure_sequence
+    label: Procedure order
+    description: Procedures done in the wrong order or without the required preparation, e.g. randomized before eligibility was verified, exercise test before the muscle biopsy, or a visit done without the required fasting or caffeine avoidance.
+    documents: [protocol]
+    event_types: [dosing, imaging, randomization, enrollment, visit]
+  - id: sample_handling
+    label: Sample handling
+    description: Blood, urine, saliva or muscle samples collected or stored outside the protocol's requirements.
+    documents: [protocol]
+    event_types: [sample_collection, sample_shipment, visit]
+  - id: consent
+    label: Informed consent
+    description: Study procedures done without valid, current, signed consent, or consent process steps skipped.
+    documents: [consent, protocol]
+    event_types: [consent, screening, enrollment, randomization, dosing, sample_collection, imaging]
+
+teams:
+  study_channel: { team_id: "", channel_id: "", space: "", name: "SAK Study Updates" }
+  alert_channel: { team_id: "", channel_id: "", space: "", name: "SAK URGENT" }
+
+triage: []

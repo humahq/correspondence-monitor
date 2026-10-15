@@ -39,12 +39,13 @@ import sys
 import time
 from dataclasses import dataclass, field
 from email.message import EmailMessage
+from datetime import datetime
 from email.utils import formatdate, getaddresses, make_msgid
 from pathlib import Path
 
 import yaml
 
-SEED_TABLES = ("documents", "doc_pages", "rules", "rule_decisions", "llm_cache")
+SEED_TABLES = ("documents", "doc_pages", "rules", "allowances", "guide", "rule_decisions", "llm_cache")
 
 
 @dataclass
@@ -57,6 +58,7 @@ class Case:
     participant: str | None = None
     raw: bytes | None = None
     chat: str | None = None          # room | direct, for a chat message instead of an email
+    date: str | None = None          # when the message was sent ("Mon, 21 Sep 2026"); default now
     result: dict = field(default_factory=dict)
 
 
@@ -99,7 +101,7 @@ def _read_csv(path: Path) -> list[Case]:
                 continue
             out.append(Case(name=f"{path.name}#{row.get('id') or n}", subject=row.get("subject") or f"message {n}",
                             body=row["body"], sender=row.get("from") or "crc", expect=_expect(row.get("expect")),
-                            participant=row.get("participant") or None))
+                            participant=row.get("participant") or None, date=row.get("date") or None))
     return out
 
 
@@ -199,6 +201,15 @@ def _sender(study, who: str) -> tuple[str, str]:
     return addr(role), addr("cra" if role != "cra" else "crc")
 
 
+def _date(when: str | None) -> str:
+    if not when:
+        return formatdate(localtime=True)
+    from dateutil import parser as dtparser
+    from email.utils import format_datetime
+    dt = dtparser.parse(when, default=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0))
+    return format_datetime(dt.astimezone() if dt.tzinfo is None else dt)
+
+
 def _build(study, case: Case) -> bytes:
     if case.raw is not None:
         msg = email.message_from_bytes(case.raw, policy=email.policy.default)
@@ -216,7 +227,7 @@ def _build(study, case: Case) -> bytes:
     msg = EmailMessage()
     msg["From"], msg["To"], msg["Cc"] = frm, to, study.alias
     msg["Subject"] = case.subject
-    msg["Date"] = formatdate(localtime=True)
+    msg["Date"] = _date(case.date)
     msg["Message-ID"] = make_msgid(domain="test.example")
     msg.set_content(case.body + "\n")
     return bytes(msg)
@@ -302,7 +313,16 @@ def score(cases: list[Case]) -> dict:
                  sum(1 for c in graded if not problem(c.expect) and problem(c.result["got"])),
                  sum(1 for c in graded if problem(c.expect) and not problem(c.result["got"])))
     right = sum(1 for c in graded if verdict(c))
-    return {"graded": len(graded), "right": right, "accuracy": right / len(graded), "alert": alert, "per_label": per}
+    wrong = [c for c in graded if verdict(c) is False]
+    kinds = {
+        "missed": sum(1 for c in wrong if problem(c.expect) and not problem(c.result["got"])),
+        "false_alarm": sum(1 for c in wrong if not problem(c.expect) and problem(c.result["got"])),
+        "wrong_box": sum(1 for c in wrong if problem(c.expect) and problem(c.result["got"])
+                         and not (c.expect - {"out_of_scope"}) & c.result["got"]),
+    }
+    kinds["other"] = len(wrong) - sum(kinds.values())
+    return {"graded": len(graded), "right": right, "accuracy": right / len(graded), "alert": alert, "per_label": per,
+            "wrong_kinds": kinds}
 
 
 def _fmt(x) -> str:
@@ -329,8 +349,15 @@ def report(cases: list[Case], summary: dict) -> str:
                   "", "Raising an alert at all (any problem found vs none):",
                   f"  precision {_fmt(a['precision'])}  (of the alerts raised, how many were real)",
                   f"  recall    {_fmt(a['recall'])}  (of the real problems, how many were caught)",
-                  f"  F1        {_fmt(a['f1'])}  (both together)",
-                  "", f"{'Per label':22s} precision  recall    F1    (tp/fp/fn)"]
+                  f"  F1        {_fmt(a['f1'])}  (both together)"]
+        k = summary.get("wrong_kinds")
+        if k:
+            lines += ["", "The wrong ones, by kind:",
+                      f"  missed a real problem          {k['missed']}",
+                      f"  alert on a clean email         {k['false_alarm']}",
+                      f"  caught, but in the wrong box   {k['wrong_box']}",
+                      f"  partly right (a label extra or missing) {k['other']}"]
+        lines += ["", f"{'Per label':22s} precision  recall    F1    (tp/fp/fn)"]
         for lbl, s in summary["per_label"].items():
             lines.append(f"  {lbl:20s} {_fmt(s['precision'])}     {_fmt(s['recall'])}  {_fmt(s['f1'])}"
                          f"   ({s['tp']}/{s['fp']}/{s['fn']})")
@@ -358,6 +385,8 @@ def write_out(out: Path, cases: list[Case], summary: dict) -> None:
                         " | ".join(i.get("reasoning") or "" for i in c.result["items"]), " | ".join(c.result["sent"]),
                         c.result.get("message_id") or "", ",".join(str(i["id"]) for i in c.result["items"]),
                         c.result["seconds"], c.result["status"]])
+    from . import llm
+    summary["llm_usage"] = llm.USAGE
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=list))
 
 
@@ -369,6 +398,7 @@ def child_main(argv: list[str]) -> None:
     p.add_argument("folder")
     p.add_argument("--out")
     p.add_argument("--seed-from", required=True)
+    p.add_argument("--study")
     args = p.parse_args(argv)
     from . import config, settings
     if settings.get("channels.email") != "sim" or settings.get("channels.teams") not in ("sim", "off"):
@@ -377,7 +407,7 @@ def child_main(argv: list[str]) -> None:
     if not cases:
         sys.exit(f"no .txt, .eml, .csv or .json messages found in {args.folder}")
     _fresh_db(Path(args.seed_from))
-    study = next(iter(config.studies().values()))
+    study = config.study(args.study) if args.study else next(iter(config.studies().values()))
     print(f"running {len(cases)} message(s) through the sandbox (nothing is sent)\n", flush=True)
     for n, c in enumerate(cases, 1):
         try:
@@ -395,7 +425,7 @@ def child_main(argv: list[str]) -> None:
         print(f"\nwrote {Path(args.out) / 'results.csv'} and summary.json")
 
 
-def main(folder: str, out: str | None = None) -> int:
+def main(folder: str, out: str | None = None, study: str | None = None) -> int:
     """Called by `cormon test` in the live home: prepares the sandbox and runs the folder in a child process."""
     from . import db, settings
     src = Path(folder).resolve()
@@ -410,6 +440,8 @@ def main(folder: str, out: str | None = None) -> int:
     cmd = [sys.executable, "-m", "cormon.testbench", str(src), "--seed-from", str(seed)]
     if out:
         cmd += ["--out", str(Path(out).resolve())]
+    if study:
+        cmd += ["--study", study]
     return subprocess.call(cmd, env=env)
 
 

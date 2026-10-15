@@ -98,6 +98,74 @@ def derived_facts(facts: dict[str, dict], wanted: set[str]) -> dict[str, dict]:
     return out
 
 
+_SPAN_UNITS = [("minute", "minutes"), ("minutes", "minutes"), ("min", "minutes"), ("mins", "minutes"),
+               ("hour", "hours"), ("hours", "hours"), ("hr", "hours"), ("hrs", "hours"),
+               ("h", "hours"), ("day", "days"), ("days", "days"), ("d", "days"), ("week", "weeks"), ("weeks", "weeks"),
+               ("wk", "weeks"), ("month", "months"), ("months", "months"), ("mo", "months"), ("year", "years"),
+               ("years", "years"), ("yr", "years"), ("age", "years")]
+
+
+def _span_unit(fact: dict) -> str | None:
+    for text, short_ok in ((fact.get("unit") or "", True), (fact.get("parameter") or "", False)):
+        words = re.findall(r"[a-z]+", text.lower())
+        for word, unit in _SPAN_UNITS:
+            if word in words and (short_ok or len(word) > 1):   # "vitamin_d_level" is not a day count
+                return unit
+    return None
+
+
+def _point(s: str | None):
+    try:
+        return dtparser.isoparse(s) if s else None
+    except (ValueError, TypeError):
+        try:
+            return dtparser.parse(s)
+        except (ValueError, TypeError, OverflowError):
+            return None
+
+
+def _between(a, b, unit: str, age: bool) -> float:
+    from dateutil.relativedelta import relativedelta
+
+    if a.tzinfo is None and b.tzinfo is not None:
+        a = a.replace(tzinfo=b.tzinfo)
+    if b.tzinfo is None and a.tzinfo is not None:
+        b = b.replace(tzinfo=a.tzinfo)
+    if unit in ("minutes", "hours"):
+        return (b - a).total_seconds() / (60 if unit == "minutes" else 3600)
+    days = (b.date() - a.date()).days
+    if age:
+        return float(relativedelta(b.date(), a.date()).years)   # an age is counted in completed years
+    return {"days": days, "weeks": days / 7, "months": days / 30.4375, "years": days / 365.25}[unit]
+
+
+def worked_out(event: dict) -> dict:
+    """Intervals, ages and multiples worked out in code from the points and values the email states, so the
+    arithmetic never rests on the model."""
+    facts = []
+    for f in event.get("facts") or []:
+        f = dict(f)
+        unit = _span_unit(f)
+        a, b = _point(f.get("from_when")), _point(f.get("to_when"))
+        name = f"{f.get('parameter') or ''} {f.get('unit') or ''}".lower()
+        if a and b and unit:
+            n = round(_between(a, b, unit, "age" in name or "birth" in name), 2)
+            f.update(numeric_value=n, value=f"{f.get('value')} (worked out: {n:g} {unit} from {f['from_when']} "
+                                            f"to {f['to_when']})")
+        elif f.get("measured") is not None and f.get("reference"):
+            ratio = f["measured"] / f["reference"]
+            if re.search(r"percent|pct|%|predicted", name):
+                ratio *= 100
+            elif not re.search(r"uln|times|multiple|ratio|\bx\b", name):
+                ratio = None
+            if ratio is not None:
+                n = round(ratio, 2)
+                f.update(numeric_value=n, value=f"{f.get('value')} (worked out: {f['measured']:g} / "
+                                                f"{f['reference']:g} = {n:g})")
+        facts.append(f)
+    return dict(event, facts=facts)
+
+
 def numeric_checks(rules: list[dict], event: dict) -> tuple[list[Finding], list[dict]]:
     """Returns findings, plus numeric rules whose condition could not be evaluated."""
     facts = {f["parameter"]: f for f in event["facts"] if f.get("numeric_value") is not None}
@@ -147,7 +215,7 @@ def numeric_checks(rules: list[dict], event: dict) -> tuple[list[Finding], list[
 
 JUDGE_SYSTEM = """You check one event from clinical trial correspondence against a list of atomic study rules.
 
-Apply the rules in order. Report a rule ONLY if the correspondence states facts that conflict with it. Missing information is never a conflict. Do not infer that a step was skipped from the way a result is described (a result that "came back" was collected), or because the email reports only some results (listing two labs does not mean the others were not done). Do not report anything that is not covered by one of the listed rules. Report each stated fact under the single most specific rule only; do not report the same fact again under broader rules. If another listed rule explicitly allows what happened (an exception or a permitted alternative), it is not a conflict. Do not assess participant safety, adverse events or clinical risk; those are out of scope.
+Apply the rules in order. Report a rule ONLY if the correspondence states facts that conflict with it. Missing information is never a conflict. A rule that only applies in a stated situation ("if dosing has already occurred", "if it is not possible to") is not broken when the correspondence shows the usual case. Do not infer that a step was skipped from the way a result is described (a result that "came back" was collected), or because the email reports only some results (listing two labs does not mean the others were not done). Do not report anything that is not covered by one of the listed rules. Report each stated fact under the single most specific rule only; do not report the same fact again under broader rules. A rule that a step must come after another (randomize only after eligibility is confirmed, dose only after the visit procedures) is broken only when the correspondence says the step was done before the other was done or its result known; failing a criterion breaks that criterion's rule, not the order rule. If another listed rule explicitly allows what happened (an exception or a permitted alternative), it is not a conflict. Do not assess participant safety, adverse events or clinical risk; those are out of scope.
 
 For each conflict:
 - message_quote: the exact words from the correspondence that show the conflict, copied VERBATIM.
@@ -168,8 +236,20 @@ def _when(event: dict) -> str:
         f" ({event['event_weekday']})" if event.get("event_weekday") else "") + "\n"
 
 
+def _passed_block(passed) -> str:
+    seen = dict.fromkeys(f"- {r['text']} (\"{q}\")" for r, q in passed)
+    return ("VALUES ALREADY CHECKED BY CODE AGAINST THE STUDY LIMITS AND WITHIN THEM (do not report these values "
+            "as breaking any rule):\n" + "\n".join(seen))
+
+
+def _allowed_block(allowances) -> str:
+    return ("WHAT THE STUDY DOCUMENTS ALLOW (a case that one of these covers is not a conflict):\n"
+            + "\n".join(f"- {a['text']} (\"{a['source_quote']}\", {a['doc_id']} p.{a['source_page']})"
+                        for a in allowances))
+
+
 def judgment_checks(study: Study, event: dict, rules: list[dict], msg_text: str,
-                    note_list: list[dict], use_cache: bool) -> list[Finding]:
+                    note_list: list[dict], use_cache: bool, passed: list[tuple[dict, str]] = ()) -> list[Finding]:
     if not rules:
         return []
     ids = [r["id"] for r in rules]
@@ -190,10 +270,15 @@ def judgment_checks(study: Study, event: dict, rules: list[dict], msg_text: str,
         return f"{r['id']}: {r['text']}{exc}"
 
     rule_lines = "\n".join(line(r) for r in rules)
+    about = f"{event.get('description') or ''} {event.get('quote') or ''}"
+    allowed = {a["id"]: a for c in dict.fromkeys(r["pattern_class"] for r in rules)
+               for a in ingest.allowances_for(study.study_id, c, about, limit=6)}
     user = (
         f"Study: {study.title}\n\nOperator notes:\n{notes.render(note_list)}\n\n"
         f"EVENT:\n{db.js({k: v for k, v in event.items() if not k.startswith('_')})}\n{_when(event)}\n"
         f"CORRESPONDENCE TEXT:\n{msg_text[:12000]}\n\nRULES (in order):\n{rule_lines}"
+        + (f"\n\n{_allowed_block(allowed.values())}" if allowed else "")
+        + (f"\n\n{_passed_block(passed)}" if passed else "")
     )
     system = JUDGE_SYSTEM + (PREVENTED_NOTE if event.get("prevented") else "")
     out = llm.structured("match", system, user, schema, "rule_conflicts", use_cache=use_cache)
@@ -209,22 +294,22 @@ CONFIRM_SYSTEM = """You confirm or reject a suspected protocol conflict using th
 Given the original passage, the event and the correspondence quote, decide whether the original document really sets a requirement that the correspondence conflicts with.
 verdict:
 - confirmed: the passage sets the requirement, it applies to this event, and the stated facts break it.
-- unsure: the passage sets the requirement and it applies, and the stated facts would break it, but deciding needs one fact the correspondence does not give (e.g. which of two limits applies) or a judgment the document leaves to the study team or physician. A person should check it.
-- rejected: the passage does not say what the rule claims; the rule does not apply to this kind of event; the conflict concerns participant safety rather than the study's procedures; the passage itself allows what happened (an exception or a permitted alternative); or the correspondence is only silent about a required step (not mentioning something is not a conflict, and reporting some results does not mean the others were not done). Never use unsure for these.
+- unsure: the passage sets the requirement and it applies, and the stated facts would break it, but deciding needs one fact the correspondence does not give (e.g. which of two limits applies) or a judgment the document leaves to the study team or physician. A person should check it. The stated facts must already point to a break: a fact the correspondence does not give is never by itself a reason for unsure.
+- rejected: the passage does not say what the rule claims; the rule does not apply to this kind of event; the conflict concerns participant safety rather than the study's procedures; the passage itself allows what happened (an exception or a permitted alternative), or one of the listed things the study documents allow covers what the correspondence says happened (a permitted redo whose result meets the limit, a permitted alternative, a step that is only required in a situation that did not arise, something the documents say is not a deviation, a problem handled before anything was used); the reported value measures something other than what the rule limits (a number of doses is not a number of visits); the conflict depends on a limit or window the passage does not state (an assumed or "typical" value); or the correspondence is only silent about a required step (not mentioning something is not a conflict, and reporting some results does not mean the others were not done). Never use unsure for these.
 unsure_reason: when unsure, one short plain sentence naming what a person must check; otherwise empty.
 doc_quote: the single sentence (or shortest clause) from the ORIGINAL passage that states the requirement, copied VERBATIM, characters exactly as given.
-headline: one plain sentence of at most 25 words that a reader with no medical or trial training can follow. Say who (the participant ID if given), what happened or is planned, and how it goes against the study rule, with the reported value and the study's limit. Use everyday words and say what a technical term measures the first time ("kidney function (eGFR) 41"); keep the study's own words for steps such as randomized or screened. Examples: "MAP-0901 was randomized with kidney function (eGFR) 41, below the study minimum of 45"; "MAP-0161 is to be randomized today, but systolic blood pressure 168 is at or above the study limit of 160". Keep the event's tense: for a planned event say what is planned. Neutral: no diagnosis, no instruction, no blame."""
+headline: one plain sentence of at most 25 words that a reader with no medical or trial training can follow. Say who (the participant ID if given), what happened or is planned, and how it goes against the study rule, with the reported value and the study's limit. Use everyday words and say what a technical term measures the first time ("kidney function (eGFR) 41"); keep the study's own words for steps such as randomized or screened. Shape (fill in only this rule's own values from the passage and the correspondence, never numbers from elsewhere): "<ID> was randomized with kidney function (eGFR) <value>, below the study minimum of <limit>"; "<ID> is to be randomized today, but systolic blood pressure <value> is at or above the study limit of <limit>". Keep the event's tense: for a planned event say what is planned. Neutral: no diagnosis, no instruction, no blame."""
 
 CONFIRM_SCHEMA = llm.obj({
-    "verdict": {"type": "string", "enum": ["confirmed", "unsure", "rejected"]},
-    "unsure_reason": {"type": "string"},
     "doc_quote": {"type": "string"},
     "explanation": {"type": "string"},
+    "verdict": {"type": "string", "enum": ["confirmed", "unsure", "rejected"]},
+    "unsure_reason": {"type": "string"},
     "headline": {"type": "string"},
 })
 
 
-def confirm(study: Study, f: Finding, use_cache: bool) -> bool:
+def confirm(study: Study, f: Finding, use_cache: bool, corpus: str = "") -> bool:
     loc = ingest.locate(study.study_id, f.rule["doc_id"], f.rule["source_quote"], f.rule.get("section"))
     if loc is None:
         db.audit("finding_rejected_source_not_in_document", entity_type="rule", entity_id=f.rule["id"],
@@ -238,11 +323,18 @@ def confirm(study: Study, f: Finding, use_cache: bool) -> bool:
         f"{_when(with_weekday(f.event))}"
         f"Correspondence quote: \"{f.message_quote}\"\n"
         f"Why it was flagged: {f.reasoning}"
+        + (f"\n\nWHOLE CORRESPONDENCE (read it for anything that changes the picture: a redo, a correction, "
+           f"what was done instead, whether the step was stopped in time; the writer's or investigator's view that it is fine changes nothing unless the documents allow it):\n{EARLIER_TAG.sub('', corpus)[:6000]}"
+           if corpus else "")
     )
     if f.method == "numeric":
         user += ("\nThe value was compared with the rule's limit by code, and that comparison stands: do not "
                  "re-decide whether the value meets the limit. Decide only whether the original passage sets this "
-                 "limit and whether it applies to this event.")
+                 "limit, whether it applies to this event, and whether something the documents allow covers it.")
+    allowed = ingest.allowances_for(study.study_id, f.rule["pattern_class"],
+                                    f"{f.rule['text']} {f.message_quote} {f.reasoning}", limit=10)
+    if allowed:
+        user += "\n\n" + _allowed_block(allowed)
     out = llm.structured("confirm", CONFIRM_SYSTEM, user, CONFIRM_SCHEMA, "confirm_conflict", use_cache=use_cache)
     f.confirmation = out["explanation"]
     f.extra["headline"] = out["headline"]
@@ -262,7 +354,7 @@ def confirm(study: Study, f: Finding, use_cache: bool) -> bool:
 
 SWEEP_SYSTEM = """You read one email from a clinical trial site and list every study rule it may break, so that nothing is missed. Each item you list is checked again afterwards (quotes, numbers and the original document), so list anything the email's stated facts plausibly break.
 
-Report a rule only when the email states facts that break it. Missing information is never a problem by itself, and listing some results does not mean the others were not done. Do NOT report: old news (already happened and dealt with, or forwarded from weeks ago); questions and hypotheticals; something that was caught and prevented, unless the stopping itself breaks a rule; a participant who was correctly screened out. A planned action that would break a rule IS a problem. If another rule explicitly allows what happened (an exception or a permitted alternative), it is not a problem. Never assess participant safety, adverse events or clinical risk.
+Report a rule only when the email states facts that break it. A rule that only applies in a stated situation is not broken when the email shows the usual case. Missing information is never a problem by itself, and listing some results does not mean the others were not done. Do NOT report: old news (already happened and dealt with, or forwarded from weeks ago); questions and hypotheticals; something that was caught and prevented, unless the stopping itself breaks a rule; a participant who was correctly screened out. A planned action that would break a rule IS a problem. If another rule explicitly allows what happened (an exception or a permitted alternative), it is not a problem. A rule that a step must come after another (randomize only after eligibility is confirmed, dose only after the visit procedures) is broken only when the correspondence says the step was done before the other was done or its result known; failing a criterion breaks that criterion's rule, not the order rule. Never assess participant safety, adverse events or clinical risk.
 
 For each problem:
 - breaks_requirement: true only if the stated facts break the rule; false if, on checking, they meet it.
@@ -334,12 +426,23 @@ def sweep_findings(study: Study, msg: dict, corpus: str, anchors: list[dict], fo
                      study_id=study.study_id, rule_id=rule["id"], quote=p["email_quote"], source="sweep")
             continue
         quote = " … ".join(textutil.expand_to_sentence(q, corpus) for q in pieces)
+        worked = worked_out(event)
+        numeric = [r for r in rules if r["check_type"] == "numeric"
+                   and (not r["applies_to"] or event["event_type"] in r["applies_to"])]
+        hits, undecided = numeric_checks(numeric, worked)
+        ok = passed_checks(numeric, worked, {h.rule["id"] for h in hits}, undecided)
+        overruled = next((r for r, q in ok if _only_about(p["email_quote"], q)), None)
+        if overruled:
+            db.audit("judgment_overruled_by_number_check", entity_type="message", entity_id=msg["id"],
+                     study_id=study.study_id, rule_id=rule["id"], passed_rule=overruled["id"], source="sweep",
+                     reasoning=p["reasoning"])
+            continue
         key = pid + "|" + textutil.normalize(quote)
         if any(key in q or q in key for q in quotes):
             continue  # the same fact is already reported under another rule
         f = Finding(rule=rule, event=event, method="judgment", message_quote=quote, reasoning=p["reasoning"],
                     extra={"source": "sweep"})
-        if not confirm(study, f, use_cache):
+        if not confirm(study, f, use_cache, corpus):
             db.audit("finding_not_confirmed_by_document", entity_type="message", entity_id=msg["id"],
                      study_id=study.study_id, rule_id=rule["id"], reasoning=f.reasoning, explanation=f.confirmation,
                      source="sweep")
@@ -350,7 +453,34 @@ def sweep_findings(study: Study, msg: dict, corpus: str, anchors: list[dict], fo
     return out
 
 
+def passed_checks(rules: list[dict], event: dict, hit: set[str], undecided: list[dict]) -> list[tuple[dict, str]]:
+    """Number rules that applied to a stated value and were met, with the words that stated it."""
+    facts = {f["parameter"]: f for f in event["facts"] if f.get("numeric_value") is not None}
+    skip = hit | {r["id"] for r in undecided}
+    out = []
+    for r in rules:
+        if r["check_type"] != "numeric" or r["id"] in skip or r.get("unless") or r["parameter"] not in facts:
+            continue
+        cond = r.get("condition")
+        if cond and not (cond["parameter"] in facts and violates(facts[cond["parameter"]]["numeric_value"],
+                                                                  cond["operator"], cond["value"], cond.get("value2"))):
+            continue
+        sole = len(event["facts"]) == 1   # the event's sentence states only this value
+        quotes = [facts[r["parameter"]].get("quote") or ""] + ([event.get("quote") or ""] if sole else [])
+        out += [(r, q) for q in dict.fromkeys(quotes) if q]
+    return out
+
+
+def _only_about(finding_quote: str, fact_quote: str) -> bool:
+    """The finding rests on nothing but the words of a value that code has already checked and found within the
+    limit ("Week 4 visit on Day 33" against the Week 4 window)."""
+    import difflib
+    a, b = textutil.normalize(finding_quote or ""), textutil.normalize(fact_quote or "")
+    return bool(a and b) and (a in b or difflib.SequenceMatcher(None, a, b).ratio() >= 0.8)
+
+
 def match_event(study: Study, event: dict, msg: dict, corpus: str, *, use_cache: bool = True) -> list[Finding]:
+    event = worked_out(event)
     rules = candidate_rules(study, event)
     emails = [msg.get("from_addr")] + list(msg.get("to_addrs") or []) + list(msg.get("cc_addrs") or [])
     note_list = notes.applicable(msg["id"], study.study_id, emails)
@@ -362,8 +492,17 @@ def match_event(study: Study, event: dict, msg: dict, corpus: str, *, use_cache:
         findings, undecided = numeric_checks(rules, event)
     numeric_hit = {f.rule["id"] for f in findings}
     judgment_rules = [r for r in rules if r["check_type"] == "judgment"] + undecided
-    findings += [f for f in judgment_checks(study, with_weekday(event), judgment_rules, corpus, note_list, use_cache)
-                 if f.rule["id"] not in numeric_hit]
+    passed = [] if event.get("prevented") else passed_checks(rules, event, numeric_hit, undecided)
+    for f in judgment_checks(study, with_weekday(event), judgment_rules, corpus, note_list, use_cache, passed):
+        if f.rule["id"] in numeric_hit:
+            continue
+        overruled = next((r for r, q in passed if _only_about(f.message_quote, q)), None)
+        if overruled:
+            db.audit("judgment_overruled_by_number_check", entity_type="message", entity_id=msg["id"],
+                     study_id=study.study_id, rule_id=f.rule["id"], passed_rule=overruled["id"],
+                     reasoning=f.reasoning)
+            continue
+        findings.append(f)
 
     confirmed: list[Finding] = []
     for f in findings:
@@ -373,7 +512,7 @@ def match_event(study: Study, event: dict, msg: dict, corpus: str, *, use_cache:
                      study_id=study.study_id, rule_id=f.rule["id"], quote=f.message_quote)
             continue
         f.message_quote = EARLIER_TAG.sub("", " … ".join(textutil.expand_to_sentence(p, corpus) for p in pieces))
-        if not confirm(study, f, use_cache):
+        if not confirm(study, f, use_cache, corpus):
             db.audit("finding_not_confirmed_by_document", entity_type="message", entity_id=msg["id"],
                      study_id=study.study_id, rule_id=f.rule["id"], reasoning=f.reasoning,
                      explanation=f.confirmation)

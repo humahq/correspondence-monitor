@@ -29,7 +29,9 @@ def read_pages(path: Path) -> list[str]:
     if path.suffix.lower() == ".pdf":
         from pypdf import PdfReader
 
-        return [(p.extract_text() or "") for p in PdfReader(str(path)).pages]
+        pages = [(p.extract_text() or "") for p in PdfReader(str(path)).pages]
+        scanned = ocr_pages(path)
+        return [scanned.get(i, t) if len(t.strip()) < 20 else t for i, t in enumerate(pages, start=1)]
     text = path.read_text(encoding="utf-8")
     if path.suffix.lower() == ".md":
         parts = re.split(r"(?m)^(?=## )", text)
@@ -37,8 +39,21 @@ def read_pages(path: Path) -> list[str]:
     return [text]
 
 
+def ocr_pages(pdf: Path) -> dict[int, str]:
+    """Text of a scanned PDF, read once by bin/ocr-pdf into <file>.ocr.txt; empty if there is none."""
+    side = pdf.with_suffix(".ocr.txt")
+    if not side.exists():
+        return {}
+    parts = re.split(r"(?m)^=== PAGE (\d+)\n", side.read_text(encoding="utf-8"))
+    return {int(n): t for n, t in zip(parts[1::2], parts[2::2])}
+
+
 def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    h = hashlib.sha256(path.read_bytes())
+    side = path.with_suffix(".ocr.txt")
+    if path.suffix.lower() == ".pdf" and side.exists():
+        h.update(side.read_bytes())
+    return h.hexdigest()
 
 
 def store_document(study: Study, doc_id: str) -> tuple[str, list[str], bool]:
@@ -157,9 +172,20 @@ Only extract rules a site's correspondence could show being broken. Never extrac
 - signature blocks, form fields, dates to fill in, copies to hand out;
 - statements addressed to the participant that set no requirement on the site ("you will have the opportunity to ask questions");
 - regulatory, IRB, sponsor or administrative duties that would never appear in site correspondence;
-- descriptions of what the study is, or what will happen in general.
+- descriptions of what the study is, or what will happen in general;
+- how study drug is made, formulated, packed or blinded (what a capsule contains, how the placebo is matched);
+- what MAY be done ("may be performed", "may be assessed"), and analyses a laboratory does after the samples leave the site;
+- rows of the schedule table copied as they are: write the requirement the row states instead.
+
+An approximate amount ("approximately 2 weeks", "~5 days") is not an exact limit: never write eq or ne for it. Write a window only when the document gives a range or tolerance, else a judgment rule.
+
+Each requirement belongs to ONE problem class. The other problem classes of the study are listed with the document; a requirement that one of them names more directly goes there, not here.
 
 Numbers, ranges and alternatives:
+- When a participant needs only ONE of several listed options ("at least one of the following", "one of the following", "any of"), write ONE judgment rule for the whole group, broken only when none of the options holds. Never write a rule for one option on its own: missing one option is no problem when another holds.
+- When one criterion gives two limits on the same value ("> 180 mmHg or < 100 mmHg"), keep both: an outside rule for the allowed range, or one rule per limit.
+- A requirement that only applies in a stated situation (a fallback: "if the visit cannot occur in the morning", "if dosing has already occurred") must state that situation in its text and condition, so it is never checked when the usual case happened.
+- A time window that belongs to one visit or step must name it in the parameter (days_visit3_after_visit2, not days_from_previous_visit), so it is never applied to other visits. When the document states different windows for the same visit in different places, write one rule with the widest window it states, and name the other statements in the text. When the document does not say what a day number counts from ("Visit 4: Day 21" in a table), do not guess: write a judgment rule that quotes it.
 - When the document allows ALTERNATIVE ranges (e.g. early MCI OR late MCI), a value is acceptable if it fits ANY alternative. Write one numeric rule that flags only values that fit NONE of them, e.g. allowed 9-11 or <=8 for 16+ years of education becomes "violation when > 11".
 - When a limit depends on another value (education, age, sex), write one rule per band, with the band in condition (use between value..value2 for a band such as 8-15 years). Bands must not overlap.
 - Never write two numeric rules on the same parameter and the same band that disagree.
@@ -196,7 +222,7 @@ REVIEW_SYSTEM = """You audit a list of rules that was extracted from a clinical 
 Check the list against the DOCUMENT TEXT and return:
 - drop: rules that should not be in the list, with why and a short reason:
     not_checkable: lines of a blank form (signature, print name, date), statements to the participant that set no duty on the site, or duties of the IRB or sponsor that a site never writes about. Site duties to record, document, notify, label or include something ARE checkable: an email can show them missed. Keep them;
-    not_stated: the document does not say it;
+    not_stated: the document does not say it. "Should" in a protocol is a duty of the site like "must"; a rule is never not_stated because the document says should;
     other_class: it belongs to a different problem class;
     duplicate: it says the same as another rule in the list; give that rule's number in duplicate_of and keep that one;
     wrong_numbers: its limits are wrong; add the corrected rule;
@@ -204,7 +230,7 @@ Check the list against the DOCUMENT TEXT and return:
 - add: requirements of this problem class that the document states and the list misses, written to the same standard as the list (one condition per rule, a VERBATIM source_quote of 10 to 60 words, the numeric fields where the rule is a threshold). Include corrected versions of rules you dropped for wrong numbers, and the parts of rules you dropped as not_atomic. Time windows ("within 28 days", "plus or minus 30 days") are numeric rules on a days parameter. Do not add anything the document does not state.
 - contradictions: rules that cannot all be true at once, or numeric rules that would flag values the document allows (for example two rules on the same score and band, or bands that should be alternatives treated as requirements).
 
-When the document gives alternative allowed ranges, a value is acceptable if it fits ANY of them. When a limit depends on another value, there must be one rule per band, bands must not overlap, and every band in the document must be covered.
+When the document gives alternative allowed ranges, a value is acceptable if it fits ANY of them. A rule for one option of a "one of the following" group is wrong (missing that option is fine when another holds): drop it as not_stated and add one judgment rule for the whole group if the list has none. When a limit depends on another value, there must be one rule per band, bands must not overlap, and every band in the document must be covered.
 
 In the rules you add, operator/value/value2 describe the values that VIOLATE the rule, never the allowed values: "within 28 days" is gt 28; "a window of plus or minus 30 days" is outside -30..30; "at least 0.5" is lt 0.5.
 
@@ -227,7 +253,7 @@ EXCEPTION_SCHEMA = llm.obj({"answers": {"type": "array", "items": llm.obj({
 
 EXCEPTION_SYSTEM = """Each numbered number rule below comes with the document text around it. Decide whether that text gives an EXCEPTION: a case in which a value the rule would flag is still allowed ("the CDR can be 0 if the memory box score is 0.5", "unless approved by the medical monitor in writing", "except for participants on a stable dose for 3 months").
 
-A limit for a different band (another education or age level) is not an exception: each band is already its own rule, and the rule's band is shown. When there is a real exception and it can be tested on numbers, set has_exception, give the tests that together make the exception in unless (all must hold; use the parameter names listed when they fit, else a short snake_case name with the unit), and copy the words that state the exception VERBATIM into exception_quote. When the exception cannot be tested on numbers (an approval, a judgment), set has_exception with an empty unless and quote it. Otherwise has_exception is false, unless is empty and exception_quote is empty. Most rules have no exception."""
+Another way to measure the same value ("SVC, or FVC if SVC cannot be done", "central or local lab") is not an exception either: the limit still applies to whichever measurement is used. A limit for a different band (another education or age level) is not an exception: each band is already its own rule, and the rule's band is shown. When there is a real exception and it can be tested on numbers, set has_exception, give the tests that together make the exception in unless (all must hold; use the parameter names listed when they fit, else a short snake_case name with the unit), and copy the words that state the exception VERBATIM into exception_quote. When the exception cannot be tested on numbers (an approval, a judgment), set has_exception with an empty unless and quote it. Otherwise has_exception is false, unless is empty and exception_quote is empty. Most rules have no exception."""
 
 _EXCEPT = re.compile(r"(?i)\b(unless|except|however|can be|may be|but|if approved|exception|waiver|allowed if)\b")
 
@@ -257,9 +283,16 @@ def _context(study: Study, doc_id: str, pattern: dict, pages: list[str]) -> str:
         f"Document: {doc['title']} (kind: {doc['kind']})\n\n"
         f"Problem class: {pattern['id']} - {pattern['label']}\n"
         f"Definition: {pattern['description']}\n"
-        f"Relevant event types: {', '.join(pattern.get('event_types', []))}\n\n"
+        f"Relevant event types: {', '.join(pattern.get('event_types', []))}\n"
+        f"{_other_classes(study, pattern)}\n"
         f"DOCUMENT TEXT:\n{body}"
     )
+
+
+def _other_classes(study: Study, pattern: dict) -> str:
+    others = [p for p in study.pattern_classes if p["id"] != pattern["id"]]
+    return "".join(["Other problem classes of this study (their requirements are not for this class):\n"]
+                   + [f"- {p['id']} - {p['label']}: {p['description']}\n" for p in others]) if others else ""
 
 
 def extract_rules(study: Study, doc_id: str, pattern: dict, pages: list[str]) -> list[dict]:
@@ -273,7 +306,7 @@ def _sentences(text: str) -> int:
 
 def _describe(n: int, r: dict) -> str:
     line = f"{n}. [{r['check_type']}] {r['text']}"
-    if _sentences(r["text"]) >= 3:
+    if _sentences(r["text"]) >= 3 or len(_LIST_MARKERS.findall(r["source_quote"] or "")) >= 2:
         line += "  (SPLIT THIS: it bundles several conditions)"
     if r["check_type"] == "numeric":
         cond = r.get("condition")
@@ -305,9 +338,10 @@ CRITERIA_SYSTEM = """Each numbered passage below is a criterion or required step
 
 """ + RULE_SYSTEM
 
-_BULLET = re.compile(r"^\s*(?:[•o\-\*▪]|\d{1,2}[.)]|[a-z][.)])\s+\S")
+_BULLETS = "•o\\-\\*▪●◦■\uf0a7\uf0b7\uf0d8\uf076"   # the last four are Word's private-use bullet glyphs in PDFs
+_BULLET = re.compile(rf"^\s*(?:[{_BULLETS}]|\d{{1,2}}[.)]|[a-z][.)])\s+\S")
 _MUST = re.compile(r"(?i)\b(must|should|shall|required?|within|at least|no (?:more|later|less) than|not (?:be|allowed|"
-                   r"permitted)|only|exclu|prior to|before|after|never|may not|cannot|eligible|fluent|minimum|maximum)\b")
+                   r"permitted)|only|exclu|prior to|before|after|never|may not|cannot|eligible|fluent|minimum|maximum|deviations?|violations?|prohibited)\b")
 
 
 def passages(text: str) -> list[str]:
@@ -327,12 +361,13 @@ def passages(text: str) -> list[str]:
     if cur:
         out.append(cur)
     flat = re.sub(r"\s+", " ", text)
-    out += [s for s in re.split(r"(?<=[.;])\s+(?=[A-Z•])", flat) if _MUST.search(s)]
+    out += [s for s in re.split(rf"(?<=[.;])\s+(?=[A-Z{_BULLETS}])", flat) if _MUST.search(s)]
     seen, keep = set(), []
     for p in out:
         p = re.sub(r"\s+", " ", p).strip()
         k = textutil.normalize(p)
-        if 25 <= len(p) <= 600 and k not in seen:
+        shortest = 12 if _BULLET.match(p) else 25   # "5. Hemoglobin < 10 g/dL" is a whole criterion
+        if shortest <= len(p) <= 600 and k not in seen:
             seen.add(k)
             keep.append(p)
     return keep
@@ -344,7 +379,23 @@ def _covers(quote: str, passage: str) -> bool:
     if q in p or p in q:
         return True
     m = difflib.SequenceMatcher(None, q, p, autojunk=False).find_longest_match(0, len(q), 0, len(p))
-    return m.size >= min(30, len(p) // 2)
+    return m.size >= min(80, max(30, len(p) // 2))   # sharing "biopsies will not be performed" is not covering
+
+
+_NUMBERED_ITEM = re.compile(r"^\s*\d{1,2}[.)]\s")
+_LIST_MARKERS = re.compile(r"(?m)^\s*\d{1,2}[.)]\s+\S")
+
+
+def bundles_criteria(quote: str, items: list[str]) -> bool:
+    """A quote that spans two or more numbered criteria lumps them together, so it covers none of them on its own.
+    Lettered options under one criterion ("a.", "i.") may share a rule."""
+    q = textutil.normalize(quote)
+    return len({textutil.normalize(_NUMBERED_ITEM.sub("", i)) for i in items if _NUMBERED_ITEM.match(i)
+                and textutil.normalize(_NUMBERED_ITEM.sub("", i)) in q}) >= 2
+
+
+def covering_quotes(quotes: list[str], items: list[str]) -> list[str]:
+    return [q for q in quotes if not bundles_criteria(q, items)]
 
 
 def uncovered(rules: list[dict], text: str) -> list[str]:
@@ -355,13 +406,17 @@ def uncovered(rules: list[dict], text: str) -> list[str]:
 
 def fill_gaps(study: Study, doc_id: str, pattern: dict, rules: list[dict], text: str) -> list[dict]:
     """Third reader, driven by code: show the model only the passages nothing was taken from."""
-    gaps = uncovered(rules, text)
+    others = [dict(r, review=None) for r in db.q(
+        "SELECT source_quote FROM rules WHERE study_id=? AND doc_id=? AND active=1 AND pattern_class<>?",
+        (study.study_id, doc_id, pattern["id"]))]
+    gaps = uncovered(rules + others, text)
     if not gaps:
         return []
     doc = study.doc(doc_id)
     user = (f"Study: {study.title} ({study.study_id})\nDocument: {doc['title']} (kind: {doc['kind']})\n\n"
             f"Problem class: {pattern['id']} - {pattern['label']}\nDefinition: {pattern['description']}\n"
-            f"Relevant event types: {', '.join(pattern.get('event_types', []))}\n\nPASSAGES:\n"
+            f"Relevant event types: {', '.join(pattern.get('event_types', []))}\n"
+            f"{_other_classes(study, pattern)}\nPASSAGES:\n"
             + "\n".join(f"{i}. {p}" for i, p in enumerate(gaps, start=1)))
     return llm.structured("ingest", GAP_SYSTEM, user, RULE_SCHEMA, "rule_gaps")["rules"]
 
@@ -377,13 +432,16 @@ def cover_criteria(study: Study, doc_id: str, pattern: dict, rules: list[dict], 
                                     "AND pattern_class<>?", (study.study_id, doc_id, pattern["id"]))]
     have = [r["source_quote"] for r in rules if not (r["review"] or "").startswith("dropped")]
     have += [r["source_quote"] for r in others]
-    items = [i for i in checklist_items(study.study_id, doc_id, doc["kind"]) if not any(_covers(q, i) for q in have)]
+    every = checklist_items(study.study_id, doc_id, doc["kind"])
+    have = covering_quotes(have, every)
+    items = [i for i in every if not any(_covers(q, i) for q in have)]
     if not items:
         return []
     log(f"  {doc_id} / {pattern['id']}: {len(items)} criteria still without a rule; asking for each one ...")
     user = (f"Study: {study.title} ({study.study_id})\nDocument: {doc['title']} (kind: {doc['kind']})\n\n"
             f"Problem class: {pattern['id']} - {pattern['label']}\nDefinition: {pattern['description']}\n"
-            f"Relevant event types: {', '.join(pattern.get('event_types', []))}\n\nPASSAGES:\n"
+            f"Relevant event types: {', '.join(pattern.get('event_types', []))}\n"
+            f"{_other_classes(study, pattern)}\nPASSAGES:\n"
             + "\n".join(f"{i}. {t}" for i, t in enumerate(items, start=1)))
     answers = {a["item_number"]: a for a in
                llm.structured("ingest", CRITERIA_SYSTEM, user, CRITERIA_SCHEMA, "rule_criteria")["answers"]}
@@ -428,11 +486,16 @@ def lost_numbers(rule: dict, replacements: list[dict]) -> set[str]:
     """Numbers in a bundled rule that none of the rules split from it carry ("28 days" lost when three windows
     are split into two rules)."""
     def nums(r: dict) -> set[str]:
-        found = set(_NUMBER.findall(r.get("text") or ""))
+        found = set(_NUMBER.findall(f'{r.get("text") or ""} {r.get("source_quote") or ""}'))
         found |= {f"{v:g}" for v in (r.get("value"), r.get("value2")) if v is not None}
         return {n.rstrip("0").rstrip(".") if "." in n else n for n in found}
     have = set().union(*(nums(a) for a in replacements)) if replacements else set()
     return nums(rule) - have
+
+
+def _check(r: dict) -> tuple:
+    return (r["check_type"], r.get("parameter"), r.get("operator"), r.get("value"), r.get("value2"),
+            json.dumps(r.get("condition"), sort_keys=True))
 
 
 def apply_drops(live: list[dict], drops: list[dict], added: list[dict]) -> None:
@@ -447,8 +510,15 @@ def apply_drops(live: list[dict], drops: list[dict], added: list[dict]) -> None:
             if not twin or twin == n or twin in valid or not 1 <= twin <= len(live):
                 r["review"] = f"kept: review called it a duplicate but would drop its twin too ({d['reason']})"
                 continue
+            if r["check_type"] == "numeric" and _check(r) != _check(live[twin - 1]):
+                r["review"] = f"kept: review called it a duplicate but it checks a different limit ({d['reason']})"
+                continue
+            r["_twin"] = live[twin - 1]
         if d["why"] == "wrong_numbers" and r["check_type"] == "numeric" and r["parameter"] not in added_params:
             r["review"] = f"kept: review said the numbers are wrong but gave no correction ({d['reason']})"
+            continue
+        if d["why"] == "not_stated" and re.search(r"\bshould\b", d["reason"], re.I):
+            r["review"] = f"kept: review read \"should\" as optional, but a protocol's should is a duty ({d['reason']})"
             continue
         if d["why"] == "not_atomic":
             parts = [a for a in added if _covers(a["source_quote"], r["source_quote"])]
@@ -571,9 +641,9 @@ def _num(v) -> str:
 
 
 def quote_fragment(rule: dict, text: str, starts: list[int]) -> tuple[int, int] | None:
-    """When the model glued a heading onto a table row ("For early MCI: 5-9 for 8-15 years"), keep the longest
-    piece that is really in the document and still carries the rule's numbers."""
-    pieces = [p.strip() for p in re.split(r"[:;\n•]|\s{2,}", rule["source_quote"]) if p.strip()]
+    """When the model glued a heading onto a table row ("For early MCI: 5-9 for 8-15 years") or cut a sentence
+    with "[...]", keep the longest piece that is really in the document and still carries the rule's numbers."""
+    pieces = [p.strip(" .,") for p in re.split(r"[:;\n•\[\]…]|\.{3}|\s{2,}", rule["source_quote"]) if p.strip(" .,")]
     needed = [_num(v) for v in (rule.get("value"), rule.get("value2")) if v is not None]
     for piece in sorted(pieces, key=len, reverse=True):
         if len(piece) < 12 or not all(n in piece for n in needed):
@@ -598,10 +668,16 @@ def _allowed(r: dict) -> tuple[float, float] | None:
 
 
 def rescue_replaced(rules: list[dict]) -> int:
-    """A rule dropped as bundled or as having wrong numbers comes back when none of the rules meant to replace it
-    survived the quote check."""
+    """A rule dropped as bundled, as having wrong numbers or as a duplicate comes back when none of the rules meant
+    to replace it survived the quote check."""
     back = 0
     for r in rules:
+        twin = r.get("_twin")
+        if r["_span"] is not None and twin is not None and not twin["_active"] and not r["_active"]:
+            r["_active"] = True
+            r["review"] = f"kept: the rule it duplicates did not pass the quote check ({r['_origin'][:80]})"
+            back += 1
+            continue
         if r["_span"] is None or not r["_origin"].startswith(("dropped by review (not_atomic)",
                                                                "dropped by review (wrong_numbers)")):
             continue
@@ -681,15 +757,63 @@ def _joinable(a: dict, b: dict) -> bool:
     return lo2 <= hi1 + (1 if whole else 0)
 
 
+_APPROX = re.compile(r"(?i)\b(approximately|approx\.?|about|around|roughly)\b|~\s*\d")
+
+
+_GENERIC_TIME_WORDS = {"days", "weeks", "hours", "visit", "visits", "from", "since", "after", "before", "between",
+                       "to", "of", "the", "prior", "previous", "next", "nominal", "target", "scheduled", "planned",
+                       "date", "baseline", "window", "each", "any", "all", "deviation", "offset"}
+
+
+def names_no_event(parameter: str) -> bool:
+    """A time window named only in general words (days_visit_after_baseline, days_from_nominal) would be applied
+    to every visit; the rule's words must say which one."""
+    words = parameter.split("_")
+    return words[0] in ("days", "weeks", "hours") and not any(c.isdigit() for c in parameter) \
+        and set(words) <= _GENERIC_TIME_WORDS
+
+
+def canonical_parameter(name: str) -> str:
+    """One name for one value, whichever way the model spelled it (days_studyvisit3_after_study_visit2 is
+    days_visit3_after_visit2)."""
+    name = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    return re.sub(r"study_?(visit)", r"\1", name)
+
+
+def _same_words(a: str, b: str) -> bool:
+    """The same rule written twice ("Exclude if X." and "Exclude if participant has X")."""
+    import difflib
+    return (set(_NUMBER.findall(a)) == set(_NUMBER.findall(b))
+            and difflib.SequenceMatcher(None, textutil.normalize(a), textutil.normalize(b)).ratio() >= 0.9)
+
+
 def lint(rules: list[dict]) -> list[tuple[int, str]]:
     """Checks made in code, whatever the model said: (rule index, reason to drop)."""
-    out, seen = [], {}
+    out, seen, judged = [], {}, []
     for i, r in enumerate(rules):
         if _JUNK.search(r["text"]) or _JUNK.search(r["source_quote"]):
             out.append((i, "not a checkable requirement (form or signature text)"))
             continue
         if r["check_type"] == "numeric" and (not r["parameter"] or not r["operator"] or r["value"] is None):
             r.update(check_type="judgment", parameter=None, operator=None, value=None, value2=None)
+        for t in ([r["condition"]] if r.get("condition") else []) + list(r.get("unless") or []):
+            if t["parameter"] != "exception_applies":
+                t["parameter"] = canonical_parameter(t["parameter"])
+        if r["check_type"] == "numeric":
+            r["parameter"] = canonical_parameter(r["parameter"])
+            if r["operator"] in ("outside", "between") and r["value2"] is not None and r["value"] > r["value2"]:
+                r["value"], r["value2"] = r["value2"], r["value"]
+            if names_no_event(r["parameter"]):
+                r.update(check_type="judgment", parameter=None, operator=None, value=None, value2=None)
+        if (r["check_type"] == "numeric" and r["operator"] in ("eq", "ne")
+                and _APPROX.search(r["text"] + " " + r["source_quote"])):
+            r.update(check_type="judgment", parameter=None, operator=None, value=None, value2=None)
+        if r["check_type"] == "judgment":
+            twin = next((j for j, t in judged if _same_words(t, r["text"])), None)
+            if twin is not None:
+                out.append((i, f"duplicate of rule {twin + 1}"))
+                continue
+            judged.append((i, r["text"]))
         key = (r["check_type"], r["parameter"], r["operator"], r["value"], r["value2"],
                json.dumps(r["condition"], sort_keys=True), json.dumps(r.get("unless") or [], sort_keys=True),
                textutil.normalize(r["text"]) if
@@ -717,6 +841,46 @@ def contradictions(rules: list[dict]) -> list[str]:
     return out
 
 
+def alternatives_not_exceptions(rules: list[dict]) -> int:
+    """"SVC < 50 unless pandemic" next to "FVC < 50 when pandemic": the same limit on another way of measuring,
+    not a case where the low value is allowed. The limit stays on."""
+    cleared = 0
+    for r in rules:
+        if r["check_type"] != "numeric" or not r.get("unless"):
+            continue
+        twin = next((o for o in rules if o is not r and o["check_type"] == "numeric" and o.get("condition")
+                     and o["parameter"] != r["parameter"]
+                     and (o["operator"], o["value"], o["value2"]) == (r["operator"], r["value"], r["value2"])
+                     and any(json.dumps(o["condition"], sort_keys=True) == json.dumps(t, sort_keys=True)
+                             for t in r["unless"])), None)
+        if twin:
+            r["unless"] = []
+            r["review"] = ((r.get("review") or "") + f"; the 'unless' was another way of measuring ({twin['parameter']}),"
+                           " not an exception").lstrip("; ")
+            cleared += 1
+    return cleared
+
+
+def read_clashing_windows(rules: list[dict]) -> int:
+    """Windows on the same value that clash (one name for several visits) cannot be applied by code: each one
+    becomes a rule the AI reads, whose words say which visit it is for."""
+    groups: dict[tuple, list[dict]] = {}
+    for r in rules:
+        if r["check_type"] == "numeric":
+            groups.setdefault((r["parameter"], json.dumps(r["condition"], sort_keys=True)), []).append(r)
+    turned = 0
+    for rs in groups.values():
+        limits = {(r["operator"], r["value"], r["value2"]) for r in rs}
+        if len(limits) < 2 or _compatible(limits) or not any(o in ("outside", "between") for o, _, _ in limits):
+            continue
+        for r in rs:
+            r.update(check_type="judgment", parameter=None, operator=None, value=None, value2=None)
+            r["review"] = ((r.get("review") or "") + "; read, not counted: other windows on the same value clash"
+                           ).lstrip("; ")
+            turned += 1
+    return turned
+
+
 def _compatible(limits: set[tuple]) -> bool:
     """A lower and an upper limit on the same value (lt 55 and gt 90) are fine together."""
     lows = {o for o, _, _ in limits if o in ("lt", "le")}
@@ -726,11 +890,13 @@ def _compatible(limits: set[tuple]) -> bool:
 
 def ingest_study(study: Study, force: bool = False, log=print) -> dict:
     summary = {"documents": 0, "rules": 0, "unverified": 0, "skipped": 0}
+    any_built = False
     for doc in study.documents:
         doc_id = doc["id"]
         sha, pages, changed = store_document(study, doc_id)
         summary["documents"] += 1
         full_text, starts = doc_text(study.study_id, doc_id)
+        built = False
         for pattern in study.pattern_classes:
             if doc_id not in pattern.get("documents", []):
                 continue
@@ -781,12 +947,189 @@ def ingest_study(study: Study, force: bool = False, log=print) -> dict:
                      doc_id=doc_id, pattern_class=pattern["id"], contradictions=clash, **counts)
             summary["rules"] += counts["active"]
             summary["unverified"] += counts["quote_not_found"]
+            built = True
             log(f"    {counts['active']} active ({counts['added_by_review']} added by the second reader, "
                 f"{counts['added_by_coverage_check']} by the coverage check), "
                 f"{counts['dropped']} dropped, {counts['quote_not_found']} rejected (quote not in the document), "
                 f"{counts['repaired_quotes']} quotes repaired, {counts['merged']} either-or merges, {turned} limits turned round, {exceptions} exceptions, "
-                f"{counts['rescued']} rescued" + (f", CONTRADICTIONS: {clash}" if clash else ""))
+                f"{counts['rescued']} rescued, {counts['read_not_counted']} clashing windows left to the reader"
+                + (f", CONTRADICTIONS: {clash}" if clash else ""))
+        any_built = any_built or built
+        summary["allowances"] = summary.get("allowances", 0) + build_allowances(
+            study, doc_id, sha, full_text, starts, force, log)
+    if any_built:
+        summary["rules"] -= settle_classes(study, log)
+        summary["rules"] -= settle_documents(study, log)
     return summary
+
+
+ALLOWANCE_SCHEMA = llm.obj({"allowances": {"type": "array", "items": llm.obj({
+    "text": {"type": "string"},
+    "source_quote": {"type": "string"},
+    "classes": {"type": "array", "items": {"type": "string"}},
+})}})
+
+ALLOWANCE_SYSTEM = """You read part of a clinical trial document and list its ALLOWANCES: statements that make something acceptable that a strict reading of another requirement would report as a problem. A monitor reads them before raising an alert, so that an allowed case is not reported.
+
+Allowances include:
+- a permitted redo or retest, and which result then counts;
+- a permitted alternative way, place, time, route or method of doing a required step;
+- what may be done when a step is missed, late or cannot be done, where doing that is acceptable;
+- statements that something is not a deviation, or that a step is not required, in a stated situation (including steps required "only if" something holds);
+- definitions that change how a limit is counted (what one dose, one visit or one day consists of);
+- a problem handled in time in the way the document asks (set aside and not used until released), so that no requirement was broken.
+Not allowances: the requirements themselves (a statement that something is or will be recorded as a deviation is a requirement, whether minor or major), background, statistics, how adverse events are classified or reported, and duties of the sponsor or ethics board only.
+
+For each allowance: text, one plain sentence saying what is allowed and when; source_quote, the words that state it, copied VERBATIM from the text, 8 to 60 words; classes, the ids of the problem classes whose requirements it relaxes, from the list given. Return an empty list if the text has none."""
+
+
+def _chunks(text: str, size: int = 12000, overlap: int = 800) -> list[str]:
+    out, i = [], 0
+    while i < len(text):
+        out.append(text[i:i + size])
+        i += size - overlap
+    return out
+
+
+def names_a_deviation(text: str) -> bool:
+    """"Will be recorded as a minor protocol deviation" sets a requirement; "is not a deviation" allows something."""
+    t = text.lower()
+    return bool(re.search(r"\bdeviations?\b", t)) and not re.search(r"\bnot\b[^.]{0,60}\bdeviations?\b", t)
+
+
+def build_allowances(study: Study, doc_id: str, sha: str, text: str, starts: list[int], force: bool,
+                     log=print) -> int:
+    """Collect what the document allows, each with a quote checked against the document."""
+    classes = {p["id"]: p for p in study.pattern_classes if doc_id in p.get("documents", [])}
+    if not classes:
+        return 0
+    key = hashlib.sha256(f"{sha}|{ALLOWANCE_SYSTEM}|{sorted(classes)}|{llm.model_for('ingest')}".encode()).hexdigest()
+    state_key = f"allowances:{study.study_id}:{doc_id}"
+    if not force and db.get_state(state_key) == key:
+        return 0
+    log(f"  {doc_id}: collecting what the document allows ...")
+    doc = study.doc(doc_id)
+    head = (f"Study: {study.title} ({study.study_id})\nDocument: {doc['title']}\n\nPROBLEM CLASSES:\n"
+            + "".join(f"- {c}: {p['label']} - {p['description']}\n" for c, p in classes.items()))
+    found, seen = [], set()
+    for part in _chunks(text):
+        for a in llm.structured("ingest", ALLOWANCE_SYSTEM, f"{head}\nTEXT:\n{part}", ALLOWANCE_SCHEMA,
+                                "allowances")["allowances"]:
+            span = best_span(a["source_quote"], text, starts, None) or repair_quote(a["source_quote"], text)
+            cls = [c for c in a["classes"] if c in classes]
+            norm = textutil.normalize(a["source_quote"])
+            if not span or not cls or norm in seen or names_a_deviation(norm):
+                continue
+            seen.add(norm)
+            found.append((a, cls, span))
+    db.ex("DELETE FROM allowances WHERE study_id=? AND doc_id=?", (study.study_id, doc_id))
+    for n, (a, cls, span) in enumerate(found, start=1):
+        db.ex("INSERT INTO allowances(id, study_id, doc_id, text, classes, source_quote, source_page, created_at)"
+              " VALUES (?,?,?,?,?,?,?,?)",
+              (f"{study.short_name}-{doc_id}-allow-{n:03d}", study.study_id, doc_id, a["text"], db.js(cls),
+               textutil.clean_spaces(text[span[0]:span[1]]), page_of(starts, span[0]), db.now()))
+    db.set_state(state_key, key)
+    db.audit("allowances_built", entity_type="study", entity_id=study.study_id, study_id=study.study_id,
+             doc_id=doc_id, count=len(found))
+    log(f"    {len(found)} allowances")
+    return len(found)
+
+
+def _words(s: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", (s or "").lower()) if len(w) > 2}
+
+
+def allowances_for(study_id: str, pattern_class: str, about: str, limit: int = 12) -> list[dict]:
+    """The allowances that relax a problem class, those sharing the most words with the case first."""
+    rows = [dict(r) for r in db.q("SELECT * FROM allowances WHERE study_id=? ORDER BY id", (study_id,))]
+    rows = [r for r in rows if pattern_class in db.unjs(r["classes"], [])]
+    want = _words(about)
+    rows.sort(key=lambda r: -len(want & _words(r["text"] + " " + r["source_quote"])))
+    return rows[:limit]
+
+
+SETTLE_DOCS_SCHEMA = llm.obj({"replaced": {"type": "array", "items": llm.obj({
+    "general_rule": {"type": "integer"},
+    "specific_rule": {"type": "integer"},
+    "reason": {"type": "string"},
+    "cannot_both_be_followed": {"type": "boolean"},
+})}})
+
+SETTLE_DOCS_SYSTEM = """Below are numbered rules from two documents of one clinical trial: a GENERAL document written for several treatments or sites, and a SPECIFIC document for this one, which takes precedence where the two differ.
+
+Return each GENERAL rule that the SPECIFIC document changes: both rules are about the same step or value, and the specific document sets a different time, order, window, limit or procedure for it, so that a site following the specific rule would break the general one. Give the general rule number, the number of the specific rule that replaces it, a short reason, and cannot_both_be_followed: true only if a site could not follow both rules at once. Rules about different things never replace each other (a screening window does not replace a limit on disease duration). Do not return general rules that the specific document only repeats, clarifies or adds to; most general rules still apply. Return an empty list if none are changed."""
+
+
+def settle_documents(study: Study, log=print) -> int:
+    """Where a study-specific document changes a step of a general one, its rule wins and the general rule is off."""
+    dropped = 0
+    for doc in study.documents:
+        for general in doc.get("overrides") or []:
+            spec = [dict(r) for r in db.q("SELECT id, pattern_class, text FROM rules WHERE study_id=? AND doc_id=? "
+                                          "AND active=1 ORDER BY pattern_class, order_idx", (study.study_id, doc["id"]))]
+            gen = [dict(r) for r in db.q("SELECT id, pattern_class, text FROM rules WHERE study_id=? AND doc_id=? "
+                                         "AND active=1 ORDER BY pattern_class, order_idx", (study.study_id, general))]
+            if not spec or not gen:
+                continue
+            user = (f"Study: {study.title}\n\nGENERAL document: {study.doc(general)['title']}\n"
+                    + "\n".join(f"G{n}. [{r['pattern_class']}] {r['text']}" for n, r in enumerate(gen, 1))
+                    + f"\n\nSPECIFIC document: {doc['title']}\n"
+                    + "\n".join(f"S{n}. [{r['pattern_class']}] {r['text']}" for n, r in enumerate(spec, 1))
+                    + "\n\nRule numbers: give G rules and S rules by their number only.")
+            out = llm.structured("ingest", SETTLE_DOCS_SYSTEM, user, SETTLE_DOCS_SCHEMA, "replaced_rules")["replaced"]
+            for x in out:
+                if not (1 <= x["general_rule"] <= len(gen) and 1 <= x["specific_rule"] <= len(spec)):
+                    continue
+                g, s = gen[x["general_rule"] - 1], spec[x["specific_rule"] - 1]
+                if not x["cannot_both_be_followed"] or g["pattern_class"] != s["pattern_class"]:
+                    continue
+                db.ex("UPDATE rules SET active=0, review=? WHERE id=? AND active=1",
+                          (f"dropped: replaced by {s['id']} ({doc['id']} takes precedence): {x['reason']}", g["id"]))
+                db.audit("rule_dropped", entity_type="rule", entity_id=g["id"], study_id=study.study_id,
+                         reason=f"replaced by {s['id']} ({doc['id']} takes precedence)", detail=x["reason"],
+                         text=g["text"])
+                dropped += 1
+    if dropped:
+        log(f"  {dropped} general rules replaced by the study-specific document")
+    return dropped
+
+
+SETTLE_SCHEMA = llm.obj({"groups": {"type": "array", "items": llm.obj({
+    "rule_numbers": {"type": "array", "items": {"type": "integer"}},
+    "problem_class": {"type": "string"},
+})}})
+
+SETTLE_SYSTEM = """Below are the rules of one clinical trial, numbered, each with its problem class. A requirement belongs to ONE class, but the same requirement is sometimes written for two classes in different words.
+
+Return every group of two or more rules from DIFFERENT classes that state the same requirement: a site that breaks one breaks the other, for the same reason. Rules on the same topic that set different requirements are NOT the same (no inducers in the 2 weeks before the first dose, versus no inducers during treatment; consent before screening, versus re-consent for a new version). For each group give the rule numbers and the id of the class whose definition fits the requirement best. A requirement about what must already be true when a participant is screened, randomized or first dosed (a washout before the first dose, a stable dose before screening) belongs to the eligibility class; the same topic during treatment is a different requirement and keeps its own class. Most rules are in no group; return an empty list if there are none."""
+
+
+def settle_classes(study: Study, log=print) -> int:
+    """The same requirement kept by two problem classes is one rule: keep it in the class that fits best."""
+    rows = [dict(r) for r in db.q("SELECT id, pattern_class, text FROM rules WHERE study_id=? AND active=1 "
+                                  "ORDER BY doc_id, pattern_class, order_idx", (study.study_id,))]
+    if len({r["pattern_class"] for r in rows}) < 2:
+        return 0
+    classes = {p["id"]: p for p in study.pattern_classes}
+    user = ("PROBLEM CLASSES:\n" + "".join(f"- {c}: {p['label']} - {p['description']}\n" for c, p in classes.items())
+            + "\nRULES:\n" + "\n".join(f"{n}. [{r['pattern_class']}] {r['text']}" for n, r in enumerate(rows, 1)))
+    groups = llm.structured("ingest", SETTLE_SYSTEM, user, SETTLE_SCHEMA, "rule_classes")["groups"]
+    dropped = 0
+    for g in groups:
+        members = [rows[n - 1] for n in dict.fromkeys(g["rule_numbers"]) if 1 <= n <= len(rows)]
+        home = g["problem_class"]
+        if len({r["pattern_class"] for r in members}) < 2 or home not in {r["pattern_class"] for r in members}:
+            continue
+        keep = next(r for r in members if r["pattern_class"] == home)
+        for r in members:
+            if r["pattern_class"] != home:
+                db.ex("UPDATE rules SET active=0, review=? WHERE id=? AND active=1",
+                      (f"dropped: duplicate of {keep['id']} (the same requirement, which belongs to {home})", r["id"]))
+                db.audit("rule_dropped", entity_type="rule", entity_id=r["id"], study_id=study.study_id,
+                         reason=f"same requirement as {keep['id']} ({home})", text=r["text"])
+                dropped += 1
+    log(f"  {dropped} rules kept by more than one problem class were moved to one")
+    return dropped
 
 
 def store_rules(study: Study, doc_id: str, pattern: dict, sha: str, rules: list[dict], full_text: str,
@@ -797,8 +1140,12 @@ def store_rules(study: Study, doc_id: str, pattern: dict, sha: str, rules: list[
     counts = {"active": 0, "dropped": 0, "quote_not_found": 0, "added_by_review": 0, "added_by_coverage_check": 0,
               "repaired_quotes": 0,
               "merged": 0}
+    checked_on = pattern.get("match_event_types") or []
     for r in rules:
         r["_origin"] = r.get("review") or ""
+        if r.get("applies_to") and checked_on:
+            # "SVC at screening" is still checked when the participant is randomized
+            r["applies_to"] = list(dict.fromkeys(r["applies_to"] + checked_on))
         span = best_span(r["source_quote"], full_text, starts, r["section"])
         if span is None:
             span = repair_quote(r["source_quote"], full_text) or quote_fragment(r, full_text, starts)
@@ -812,6 +1159,8 @@ def store_rules(study: Study, doc_id: str, pattern: dict, sha: str, rules: list[
         r["_active"] = span is not None and not (r.get("review") or "").startswith("dropped")
     counts["rescued"] = rescue_replaced(rules)
     counts["merged"] = merge_alternatives([r for r in rules if r["_active"]])
+    counts["read_not_counted"] = read_clashing_windows([r for r in rules if r["_active"]])
+    counts["alternatives_not_exceptions"] = alternatives_not_exceptions([r for r in rules if r["_active"]])
     active = [r for r in rules if r["_active"]]
     for i, reason in lint(active):
         active[i].update(_active=False, review=f"dropped: {reason} (after merging)")
@@ -901,8 +1250,28 @@ def report(study: Study) -> str:
     return "\n".join(lines)
 
 
-_CRITERIA = re.compile(r"(?im)^\s*\d+(?:\.\d+)*\s+(?:INCLUSION|EXCLUSION) CRITERIA\b")
+# "5.2 Inclusion Criteria", "5.2.1 Master Protocol Inclusion Criteria", "4.2.2 Regimen-Specific Appendix Exclusion Criteria"
+_CRITERIA = re.compile(r"(?im)^\s*(\d+(?:\.\d+)*)\s+(?:[\w-]+\s+){0,3}(?:INCLUSION|EXCLUSION) CRITERIA\b")
+_TOC_LINE = re.compile(r"(?:\.{2,}|\. \. \.|•|…).*\d+\s*$")
 _NEXT_SECTION = re.compile(r"(?m)^\s*\d+\.\d+\s+[A-Z][A-Z ,/&-]{3,}$")
+_NUMBERED_HEADING = re.compile(r"(?m)^\s*(\d+(?:\.\d+)*)\s+[A-Z][A-Za-z]")
+
+
+def _section_end(text: str, start: int, number: str) -> int:
+    """Where the section numbered `number` (e.g. "5.2") ends: at the next heading at its level or above
+    ("5.3", "6", "6.1"), however it is capitalised, or at an all-capitals numbered heading."""
+    own = [int(x) for x in number.split(".")]
+    ends = []
+    caps = _NEXT_SECTION.search(text, start)
+    if caps:
+        ends.append(caps.start())
+    for m in _NUMBERED_HEADING.finditer(text, start):
+        num = [int(x) for x in m.group(1).split(".")]
+        if len(num) <= len(own) and num[:-1] == own[:len(num) - 1] and num[-1] in (own[len(num) - 1] + 1,
+                                                                                   own[len(num) - 1] + 2):
+            ends.append(m.start())
+            break
+    return min(ends) if ends else len(text)
 
 
 def checklist_items(study_id: str, doc_id: str, kind: str) -> list[str]:
@@ -913,13 +1282,13 @@ def checklist_items(study_id: str, doc_id: str, kind: str) -> list[str]:
         return passages(text)
     items = []
     for m in _CRITERIA.finditer(text):
-        if "...." in text[m.start():text.find("\n", m.start())]:
+        if _TOC_LINE.search(text[m.start():text.find("\n", m.start())]):
             continue  # the table of contents
-        nxt = _NEXT_SECTION.search(text, m.end())
-        section = text[m.end():nxt.start() if nxt else len(text)]
+        section = text[m.end():_section_end(text, m.end(), m.group(1))]
         items += [p for p in passages(section) if _BULLET.match(p)]
     norm = [textutil.normalize(i) for i in items]
-    return [i for i, n in zip(items, norm) if not any(o != n and o.startswith(n) for o in norm)]
+    keep = [(i, n) for i, n in zip(items, norm) if not any(o != n and o.startswith(n) for o in norm)]
+    return [i for k, (i, n) in enumerate(keep) if n not in {m for _, m in keep[:k]}]  # a parent heading repeats its subsections
 
 
 def checklist(study: Study) -> tuple[str, dict]:
@@ -933,7 +1302,8 @@ def checklist(study: Study) -> tuple[str, dict]:
         items = checklist_items(study.study_id, doc["id"], doc["kind"])
         lines.append(f"\n{doc['title']} ({len(items)} items)")
         for item in items:
-            hits = [r for r in rules if _covers(r["source_quote"], item)]
+            hits = [r for r in rules if _covers(r["source_quote"], item)
+                    and not bundles_criteria(r["source_quote"], items)]
             live = [r["id"] for r in hits if r["active"]]
             if not live and any("duplicate" in (r["review"] or "") for r in hits):
                 live = ["(same as another kept rule)"]
@@ -952,8 +1322,8 @@ def checklist(study: Study) -> tuple[str, dict]:
     return head + "\n" + "\n".join(lines), totals
 
 
-def import_model(src: Path, reason: str, actor: str = "operator") -> dict:
-    """Replace this database's study model (documents, pages, rules) with the one in another cormon database,
+def import_model(src: Path, reason: str, actor: str = "operator", only: list[str] | None = None) -> dict:
+    """Replace this database's study model (documents, pages, rules, guide) with the one in another cormon database,
     keeping messages, items and the log. Used to move a model rebuilt and tested elsewhere onto the live bot."""
     import shutil
     import sqlite3
@@ -970,23 +1340,30 @@ def import_model(src: Path, reason: str, actor: str = "operator") -> dict:
     counts = {}
     c.execute("ATTACH DATABASE ? AS model", (str(tmp),))
     try:
-        studies = [r[0] for r in c.execute("SELECT DISTINCT study_id FROM model.rules")]
+        has = lambda tbl: bool(c.execute(f"PRAGMA model.table_info({tbl})").fetchall())
+        studies = [r[0] for r in c.execute("SELECT study_id FROM model.rules UNION SELECT study_id FROM model.guide"
+                                           if has("guide") else "SELECT DISTINCT study_id FROM model.rules")]
+        studies = [s for s in studies if not only or s in only]
         before = {sid: c.execute("SELECT COUNT(*) FROM main.rules WHERE study_id=? AND active=1",
                                  (sid,)).fetchone()[0] for sid in studies}
         with c:
-            for tbl in ("documents", "doc_pages", "rules", "rule_decisions", "llm_cache"):
+            for tbl in ("documents", "doc_pages", "rules", "allowances", "rule_decisions", "guide", "llm_cache"):
                 cols = [r[1] for r in c.execute(f"PRAGMA main.table_info({tbl})")]
                 have = {r[1] for r in c.execute(f"PRAGMA model.table_info({tbl})")}
                 names = ", ".join(col for col in cols if col in have)
-                if not names:
+                if not names or (tbl == "guide" and not has("guide")):
                     continue
+                marks = ",".join("?" * len(studies))
+                where, args = "", []
                 if tbl != "llm_cache":
-                    marks = ",".join("?" * len(studies))
                     c.execute(f"DELETE FROM main.{tbl} WHERE study_id IN ({marks})", studies)
-                cur = c.execute(f"INSERT OR IGNORE INTO main.{tbl} ({names}) SELECT {names} FROM model.{tbl}")
+                    where, args = f" WHERE study_id IN ({marks})", studies
+                cur = c.execute(f"INSERT OR IGNORE INTO main.{tbl} ({names}) SELECT {names} FROM model.{tbl}{where}",
+                                args)
                 counts[tbl] = cur.rowcount
-            c.execute("INSERT OR REPLACE INTO main.state (key, value) SELECT key, value FROM model.state "
-                      "WHERE key LIKE 'ingest:%'")
+            for sid in studies:
+                c.execute("INSERT OR REPLACE INTO main.state (key, value) SELECT key, value FROM model.state "
+                          "WHERE (key LIKE 'ingest:%' OR key LIKE 'allowances:%') AND key LIKE ?", (f"%{sid}%",))
     finally:
         c.execute("DETACH DATABASE model")
         shutil.rmtree(tmp.parent, ignore_errors=True)

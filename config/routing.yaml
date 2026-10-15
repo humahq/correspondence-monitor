@@ -12,6 +12,8 @@ tiers:
   low:
     - { destination: clearing_list }
     - { destination: teams_study_channel, recipient: study_team }
+    - { destination: email, to_role: cra }
+    - { destination: digest }
 
   medium:
     - { destination: teams_study_channel, recipient: study_team }

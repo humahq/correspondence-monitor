@@ -38,6 +38,10 @@ EVENT_SCHEMA = llm.obj({
                     "value": {"type": "string"},
                     "numeric_value": llm.nullable("number"),
                     "unit": llm.nullable("string"),
+                    "from_when": llm.nullable("string"),
+                    "to_when": llm.nullable("string"),
+                    "measured": llm.nullable("number"),
+                    "reference": llm.nullable("number"),
                     "quote": {"type": "string"},
                 }),
             },
@@ -69,7 +73,9 @@ Rules:
    - hypothetical: a general question or what-if that reports nothing about a real participant or sample ("is an eGFR of 43 OK for enrollment?", "what if a sample sits for 70 minutes?"). If the question names a participant who is being screened, enrolled or treated, or says something was or will be done, it is current or planned, not hypothetical.
    For events in a forwarded message or attachment, judge from that item's own date and context, not from when it reached us: a forwarded message from weeks ago that was already acted on is historical.
 3. event_datetime: ISO 8601 date or datetime of the event if stated or clearly inferable from the message date ("today", "this afternoon", "tomorrow"); otherwise null.
-4. facts: every measurement, score, time interval or status stated about the participant or sample. Map each fact to one of the canonical parameter names given when it fits (convert units only if trivially exact, e.g. "1.5 hours" -> 90 minutes for a minutes parameter); otherwise use a short snake_case name. numeric_value only for numbers.
+4. facts: every measurement, score, time interval or status stated about the participant or sample. Map each fact to one of the canonical parameter names given when it fits (convert units only if trivially exact, e.g. "1.5 hours" -> 90 minutes for a minutes parameter); otherwise use a short snake_case name. numeric_value only for numbers. A clock time or a date is never a duration.
+   - A time between two steps (an interval, a time since or before something, a duration, an age): give from_when and to_when, the two points as ISO 8601 dates or datetimes (resolve them against the message date; a clock time alone is on the event's date; "around August 2024" is 2024-08-15), and the unit the parameter is counted in (minutes, hours, days, weeks, months, years). An age is from the date of birth to the event date. Code works the number out from the two points, so give them even when the email also states the difference. Leave them null when one point is not stated.
+   - A value counted against a reference ("times the upper limit of normal", "percent of predicted"): give measured (the value) and reference (the limit or predicted value) when both are stated; code works out the multiple. Otherwise null.
 5. quote / facts.quote / temporality_evidence: copy text VERBATIM from the correspondence. Never paraphrase in these fields.
 6. polarity: problem if the writer says something went wrong or is about to go wrong; good_news only for a milestone worth recording (a visit completed on schedule, a participant completing the study); routine logistics are neutral. Do not decide eligibility or protocol compliance yourself.
 7. harm: what harm to the participant the correspondence reports for this event.
@@ -77,7 +83,7 @@ Rules:
    - injury_or_hospitalization: a fall, injury, ER visit or hospital stay.
    - death.
    - writer_says_result_is_a_risk: the writer or the PI treats a result as a danger to the participant ("concerning", "worrying", "holding the drug because of it", "sent to the ER").
-   - none: anything else. A lab value, vital sign or score reported as data is none, even when it is out of range or breaks a study limit, and even when the site manages it routinely (a supplement for a low vitamin). Eligibility limits are study rules, not harm.
+   - none: anything else. Medical history from before the participant's time on this study is none, even if it was a symptom or a reaction ("had pneumonia last year, before screening", "got a rash from another drug years ago"): it is background for eligibility, not a new safety event. A lab value, vital sign or score reported as data is none, even when it is out of range or breaks a study limit, and even when the site manages it routinely (a supplement for a low vitamin). Eligibility limits are study rules, not harm.
    safety_signal: true exactly when harm is not none. safety_only: true if the harm is the only thing the event is about (no eligibility, schedule, sample, sequence or consent aspect).
    Put the harm and the study facts in separate events when one message has both (e.g. "randomized with eGFR 40; she also had chest pain" is an enrollment event with harm none and a symptom event with harm symptom_or_adverse_event).
    prevented: true only when the writer says the site caught the problem before any rule was broken, so nothing went wrong (a participant with a failing value was screen-failed or not randomized; a bad sample was recollected and not used). False if the action came after the fact (randomized, then withdrawn).

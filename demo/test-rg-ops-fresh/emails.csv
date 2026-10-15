@@ -1,0 +1,352 @@
+id,subject,body,from,date,expect,participant
+h01,RG drug shipment rec'd 9/28 - logger question,"Hi team,
+
+Heads up on the Regimen G shipment that came in Mon 9/28 (3 cartons, IRT shipment confirmed). Devon received it and moved the cartons into the locked IP cabinet in the research pharmacy right away, which is good. I only downloaded the shipper temp logger today - it shows a peak of 34.1 C and about 5 hrs above 30 C on the truck, looks like 9/27 afternoon.
+
+Problem is Devon didnt know to wait on the logger review and one of those cartons was already dispensed to G-412-004 at her Week 4 visit on 9/30. Other 2 cartons are still in the cabinet.
+
+I've emailed the depot today. Let me know what else you need from me.
+
+Rhea Thompson, PharmD
+Investigational Drug Service",pharmacist,"Thu, 01 Oct 2026",,
+h02,Pharmacy HVAC weekend - temp log,"FYI only. The HVAC in the basement pharmacy went down Sat am and facilities fixed it Sunday night. Our on-call tech came in both days to read the room thermometer for the IP log (we read it every day incl weekends anyway). Readings for the DNL343/placebo storage room:
+
+Fri 10/2  26.1 C
+Sat 10/3  28.4 C
+Sun 10/4  29.6 C
+Mon 10/5  27.0 C (this am)
+
+Max/min thermometer also says max 29.6 for the period. No cartons were dispensed over the weekend. All logged and initialed. I don't think we need to do anything but wanted you to know.
+
+Rhea",pharmacist,"Mon, 05 Oct 2026",,
+h03,G-418-011 wk4 PK - afternoon visit,"Hi Dr. Lin,
+
+Quick summary for G-418-011 Week 4 (baseline was Tue 9/8, visit done Fri 10/9). His ride fell through so we couldnt get him in for the morning slot. Per the appendix I had him take his dose at home at his normal time, 07:00, so no in-clinic dose.
+
+Since no predose was possible we did 2 postdose PK draws instead - 13:10 and 13:40 - both spun and frozen. Everything else on the wk4 list done (vitals, ALSFRS-R, ECG, safety labs, C-SSRS, cmeds/AEs, packet count, dispensed). Since we got the two postdose samples I don't think we need to file a deviation for this one?
+
+thx
+Marisol (CRC)",crc,"Tue, 13 Oct 2026",,
+h04,G-405-002 Week 24 / ATE day 1 done,"Week 24 for G-405-002 done yesterday Mon 10/12 (baseline 4/20, so we were right at the end of the window - she had a family thing the week before).
+
+Timing:
+- last placebo-period dose Sun 10/11 at 07:30 at home, held her dose Mon am as instructed
+- predose PK 07:10
+- all visit procedures done by ~09:00 (SVC first, then vitals, ALSFRS-R, PROs, ECG, labs, endocrine labs incl ACTH/cortisol/TSH/fT4 at 07:15, biomarker blood/urine, C-SSRS, exit questionnaire)
+- first ATE dose in clinic 09:05, verified by Jen + me
+- postdose PK 17:00 (she stayed for her OT and PT appts in the same building)
+
+She did not have the baseline LP so no LP at wk24. ATE drug dispensed, accountability done. Entering into EDC today.
+
+-Ana",crc,"Tue, 13 Oct 2026",,
+h05,Re: G-421-003 reconsent ICF v5.0,"Hi Pat,
+
+Update on the RG ICF v5.0 reconsent (sIRB approved 9/21). G-421-003's next visit is her Week 8 in clinic on 10/19 but I wanted to get ahead of it so we did it remotely:
+
+Thu 10/8 - emailed her the v5.0 PDF
+Fri 10/9 am - she signed it and sent us a phone photo of the signed signature page
+Fri 10/9 pm - Dr. Patel called her, went thru the changes, answered her questions, and then signed the printed copy of her photo
+
+So she's done! I filed the printout in her binder. Let me know if the monitor will want anything else.
+
+Kayla",crc,"Mon, 12 Oct 2026",,
+h06,parking garage B closed next wk,"Hi all - facilities says garage B (the one by the Wang entrance) is closed Mon 10/5 - Wed 10/7 for re-striping. Visitors can use garage A, and the shuttle runs every 15 min. I'll update the directions sheet we send to participants and families. If you have anyone coming in those days just give them a heads up.
+
+Thanks!
+Brianna",crc,"Fri, 02 Oct 2026",,
+h07,G-433-009 wk16 telemed + remote reconsent done,"Hi Dr. Okafor,
+
+Documenting how we handled G-433-009 for the file:
+
+- Her mobility got a lot worse in Sept and she can't do the 2 hr car trip anymore, so you approved converting Week 16 to telemedicine (baseline 6/10, Week 16 done Wed 9/30). Done by video: ALSFRS-R, CNS-BFS, ROADS, PGI-C, PGI-S, AE review, C-SSRS, con meds, compliance check-in. Missed in-clinic procedures documented per the MOP. Drug shipped per MOP.
+- RG ICF v5.0 reconsent: we mailed the form 9/25 with a note NOT to sign yet. Kim Alvarez RN (on DOA for consent, study-trained) went through it with her by video during the 9/30 visit, answered questions, then she signed and mailed the original back. Arrived Mon 10/5 and Kim signed and dated it 10/5. Copy mailed back to her.
+
+Monitor should see everything in the binder.
+
+Thanks,
+Leo",crc,"Wed, 07 Oct 2026",,
+h08,G-440-001 screening yesterday,"Dr. Kaur - recap of G-440-001's Master Protocol screening Wed 9/16.
+
+She got here at 9 for her regular ALS clinic appt and you weren't free for consent until 11. To keep things moving Mia did the 12-lead ECG and drew the screening safety labs + coags around 9:30 while she waited. Clinic nursing had already done her vitals and weight as part of the regular clinic visit. Consent (platform ICF) signed at 11:20, then we did history, SVC, neuro exam, ALSFRS-R etc.
+
+Labs went to central lab, results pending.
+
+Mia R.",crc,"Thu, 17 Sep 2026",,
+h09,G-440-006 baseline 9/24 - order of things,"Hi Dr. Kaur,
+
+G-440-006 had her combined Regimen G screening + baseline yesterday (MP screening/platform consent was 9/3). Order of events so you have it:
+
+11:45 - randomized in IRT (the IRT slot we booked was closing at noon and I didn't want to lose it)
+12:30 - Regimen G ICF signed once you got out of clinic
+13:00 - you signed the RG eligibility checklist (no seizures, no strong 3A4 inducers etc)
+then the rest of baseline, first dose at 16:10 after everything was done
+
+She was fine with all of it. Kit # in the accountability log.
+
+Mia",crc,"Fri, 25 Sep 2026",,
+h10,G-427-008 wk8 notes,"Wk 8 for G-427-008 last Wed 9/23 (baseline was 7/22 so we just made it).
+
+- took his dose at home 07:00, postdose PK drawn 15:00 on the dot (he was in clinic all afternoon w/ speech)
+- biomarker blood + urine done
+- the baseline DNA tube was rejected by the lab (hemolyzed) so we redrew DNA today since he'd consented to the optional DNA sample
+- CNS-BFS, ECG, labs, C-SSRS, SVC, cmeds/AEs, packet count, dispensed
+
+no issues otherwise
+Ana",crc,"Wed, 30 Sep 2026",,
+h11,wk4 dosing G-415-010 yesterday,"Hi Marisol,
+
+For your source notes on G-415-010 Week 4 yesterday (10/5): I reconstituted the 2 packets in water and gave the dose myself around 9ish, sorry didn't write the exact time down, it was hectic. Sam was out so I checked the kit # and participant ID against the IRT printout myself. Predose PK was 08:30 per your sheet and the post was 10:45.
+
+He drank it all in a couple min, no problems.
+
+Rhea",pharmacist,"Tue, 06 Oct 2026",,
+h12,G-409-003 wk16 - drug count + taste,"Hi Dr. Lin, two things from G-409-003 Week 16 on Fri 10/2:
+
+1) she forgot her drug bag at home again (2nd time). She said she has ""10 or so"" packets left so I wrote 10 on the compliance form so the eCRF isn't blank.
+
+2) she told us she's only been taking 1 packet each morning for about 3 weeks because 2 makes her gag. She didn't call us about it. She's okay otherwise, no other complaints.
+
+Dispensed new cartons. Want me to set up a call with you?
+Leo",crc,"Mon, 05 Oct 2026",,
+h13,Monitoring visit 10/7-10/8 - summary,"Hello Dr. Okafor and team,
+
+Thanks for hosting me this week. Short summary before the formal report:
+
+Pharmacy / IP
+- Temp logs Aug 1 - Oct 7 reviewed: recorded every day, range 20.4-26.8 C. No excursions.
+- Accountability log reconciled against IRT shipment receipts and dispensing for all 7 active participants. No discrepancies.
+- 3 returned cartons are segregated and labeled, waiting for destruction. Site will destroy per its own SOP, which is fine since the protocol defers destruction details to the MOP/site policy.
+- Access list: pharmacist, SI and delegated study staff only. Cabinet locked.
+
+Consent
+- All participants on current RG ICF version; all signed before any study procedure; copies given.
+
+Source
+- Corrections were single line, initialed and dated. Dark ink.
+
+No findings this visit. Next visit planned for December.
+
+Best,
+Grace Kim, CRA",cra,"Fri, 09 Oct 2026",,
+h14,wk2 calls this week,"Week 2 phone visits this week, all done by me:
+
+G-411-002 - baseline 9/21, called Wed 10/7. Taking 2 packets every am w/ yogurt, no missed doses. cmeds no change, no AEs. reminded to bring unused packets to wk4.
+
+G-411-004 - baseline 9/18, called Tue 10/6 (tried Mon but no answer). Missed 1 dose last weekend, otherwise fine. Contraception reviewed (IUD + condoms). no AEs. reminded re: wk4.
+
+G-411-005 - baseline 9/24, called today 10/8. All good, no missed doses, no AEs.
+
+No drug counts done on the calls, just the compliance check-ins. Will enter in EDC this afternoon.
+Brianna",crc,"Thu, 08 Oct 2026",,
+h15,G-402-006 wk24 - she dosed at home first,"Dr. Lin,
+
+G-402-006 Week 24 / first ATE day was yesterday Mon 10/12 (baseline 4/27). She forgot the instructions and took her usual morning sachets at home at 07:00 before driving in.
+
+We went ahead with the plan: drew the ""predose"" PK at 10:15, gave the first ATE dose in clinic at 10:30 after the procedures, and postdose PK at 12:30. Her LP was done Thu 10/8 (she had a baseline LP) and that went fine, both biomarker and PK CSF tubes sent. ATE drug dispensed.
+
+She felt fine all day. Do I need to do anything else?
+
+Marisol",crc,"Tue, 13 Oct 2026",,
+h16,team lunch moved to Thurs,"Hi everyone - the monthly research team lunch is moving from Wed to Thurs 10/8, noon, conf room 4B. Pizza again unless someone wants to volunteer to order something else :) Please reply if you have dietary needs.
+
+Kayla",crc,"Tue, 29 Sep 2026",,
+h17,G-407-004 Week 24 w/ separate LP date,"Hi Pat, for your records - G-407-004 (baseline Tue 4/21):
+
+- LP for CSF done Thu 10/1 by Dr. Huang with the Sprotte needle. She had baseline CSF. Collected both the biomarker and PK CSF tubes. No headache.
+- Main Week 24 visit Mon 10/5. Held her am dose (last placebo-period dose was Sun 10/4 at 08:00). Predose PK 08:30. All procedures finished 10:15. First ATE dose in clinic 10:20, second-person verified, time recorded. Postdose PK 14:00.
+- ACTH/cortisol/TSH/fT4 drawn with the 08:30 draw.
+- ATE drug dispensed.
+
+We're entering 10/5 as the Week 24 visit date in EDC, LP date separate.
+
+Ana",crc,"Wed, 07 Oct 2026",,
+h18,G-436-007 early term - plan,"Hi Dr. Okafor,
+
+G-436-007 told us Tues she is moving overseas for family and wants to stop. Last dose was Tue 10/6 (baseline was 7/30). She agreed to come in for an in-person ET visit Wed 10/14 before she flies out.
+
+Plan:
+- full Week 24 assessment list at the ET visit
+- she had the baseline LP so I booked Dr. Huang for an LP at the ET visit too
+- we'll do the follow-up safety call questions at the ET visit so we don't have to chase her abroad, no separate call
+- she'll bring back all unused packets and the empty cartons
+
+Let me know if ok.
+Kayla",crc,"Thu, 08 Oct 2026",,
+h19,G-438-002 baseline LP timing,"Hi Dr. Huang,
+
+Closing the loop on G-438-002. RG eligibility was confirmed Fri 9/11, you did the LP Mon 9/14 (only slot we could get in IR), and baseline + first dose happened Fri 9/25 after everything else was done. Lab processed the CSF biomarker aliquots and, since we had extra volume, also a CSF PK aliquot, all in the -80 now waiting for the next shipment.
+
+Leo",crc,"Tue, 29 Sep 2026",,
+h20,G-438-005 baseline schedule confirm,"Confirming the G-438-005 timeline for the binder:
+
+- Master Protocol screening + platform ICF: Thu 8/27
+- RG screening visit Wed 9/30: RG ICF signed first, then RG eligibility, PI confirmed eligible same day
+- LP (biomarker CSF only): Thu 10/1
+- Baseline Thu 10/8: randomized in IRT, all baseline procedures, first dose in clinic at 14:40 after everything was done. She mixed it in applesauce, done in about 5 min.
+
+All within limits I think - screening was right at the edge.
+
+Leo",crc,"Fri, 09 Oct 2026",,
+h21,G-419-003 wk16 tubes - label printer down,"Hi Ana,
+
+FYI on G-419-003 Week 16 samples (drawn Thu 9/24). Our label printer was down that day so Tomas hand-labeled the biomarker serum/plasma tubes and the urine tube with her initials and DOB so we wouldn't mix them up. They went out Fri on dry ice with the regular shipment to the central lab.
+
+Should I let the central lab know, or just leave it?
+
+Jo, research lab",lab,"Mon, 28 Sep 2026",,
+h22,Q: serum sat out ~2h before -80,"Quick question - G-422-007 Week 8 biomarker serum. After we spun and aliquoted, the aliquots sat on the bench about 2 hours before going into the -80 because the freezer alarm was going off and we had to move racks. Room temp. Is that a protocol deviation? I couldn't find a time in the protocol itself. Sample is still in the -80.
+
+Jo",lab,"Wed, 30 Sep 2026",,
+h23,G-416-009 wk4 PK times,"Hi Dr. Lin,
+
+G-416-009 Week 4 was yesterday Wed 9/30 (baseline 9/1). Times for the PK:
+
+- last home dose Tue 9/29 07:00
+- predose PK 06:40 (we drew it first thing when he arrived, early bird)
+- then SVC, vitals, ALSFRS-R, ECG, labs, C-SSRS, packet count etc.
+- dose in clinic 09:10, verified by Jen, time recorded
+- postdose PK 10:20
+
+all labs sent. dispensed.
+Marisol",crc,"Thu, 01 Oct 2026",,
+h24,G-416-012 wk4 - all good,"G-416-012 Week 4 yesterday Thu 10/1 (baseline 9/10 - came in early in the window since he's traveling next wk).
+
+- last home dose 9/30 08:15, held am dose
+- predose PK 08:05
+- procedures done, dose in clinic 09:45 mixed in applesauce, finished in 8 min. Jen verified kit + ID, time recorded in source + eCRF
+- postdose PK 10:45
+- he brought back his cartons: 12 unused packets counted and recorded
+- dispensed new supply
+
+Ana",crc,"Fri, 02 Oct 2026",,
+h25,G-426-003 wk8 + new med,"Hi Dr. Okafor,
+
+From G-426-003's wk8 visit today, 2 things came up in the dosing chat:
+
+- she mixes her 2 packets in a big glass of water and sips it through the morning - starts around 8, usually done by 10:30. Says its easier on her stomach that way.
+- her outside neuro started her on carbamazepine for trigeminal neuralgia around 9/1. It's on the con med log now.
+
+Otherwise visit went fine, PK drawn, dispensed. Can you look at the carbamazepine?
+
+Kayla",crc,"Mon, 21 Sep 2026",,
+h26,G-431-002 G-tube dosing + famotidine,"Hi Pat,
+
+Update on G-431-002 for the file:
+- since the PEG in August she takes study drug through the G-tube: 2 packets reconstituted in water, pushed and flushed, takes ~5 min. She still uses thickener for sips by mouth.
+- her GI started famotidine 20 mg BID on 9/14 for reflux. Famotidine is on the OAT3 list in Appendix IV so Dr. Okafor reviewed it, and the medical monitor replied 9/18 that it's wide therapeutic index for her and OK to continue with AE monitoring. Email filed, con med eCRF updated.
+
+Leo",crc,"Tue, 22 Sep 2026",,
+h27,Monitoring visit 10/6-10/7 follow-up letter,"Dear Dr. Lin and team,
+
+Thank you for hosting the interim monitoring visit on Oct 6-7, 2026. I reviewed source, regulatory binder, IP and consent for G-404-002, G-404-005, G-404-007 and G-404-009. Summary below; the formal report will follow within 10 business days.
+
+1. Informed consent: all four participants signed the current Platform and RG ICFs before any study procedures. Copies given. No findings.
+
+2. Regulatory / training:
+   a. Delegation log current and signed by the PI.
+   b. Pat Nguyen's NEALS ALSFRS-R certificate is dated Oct 20, 2025 - on file.
+   c. G-404-005 Week 16 (Sep 21) ALSFRS-R was administered by Jamie Cole. Jamie's NEALS ALSFRS-R training modules are complete and the certification exam is scheduled for Oct 15. Jamie is on the DOA for ALSFRS-R.
+   d. G-404-007 Week 8 (Sep 15) SVC was performed by Dr. Owens. His NEALS SVC certificate on file is dated Jul 30, 2024. No newer certificate found.
+   e. C-SSRS raters all certified, certificates in ISF.
+
+3. Source documents:
+   a. Spirometer printouts retained for all SVC sessions reviewed; 3 trials each.
+   b. ECG tracings (study device) copies on file for all visits.
+   c. Height taken from screening and used at all visits - consistent with protocol.
+   d. G-404-002 Week 16 vitals worksheet: the weight entry was corrected using correction fluid and rewritten. Otherwise corrections are single line, initialed, dated.
+
+4. IP: temperature logs daily, accountability reconciled. No findings.
+
+Please respond to the items above by Oct 22.
+
+Regards,
+Daniel Ruiz, CRA",cra,"Thu, 08 Oct 2026",,
+h28,NEALS meeting abstract deadline,"Hi all,
+
+Reminder that abstracts for the NEALS annual meeting are due Oct 30. If anyone on the site team wants to submit a poster on recruitment or remote visit workflows, send me a draft by Oct 20 and I'll route it for internal review. Registration opens next week.
+
+Cheers,
+Grace",cra,"Thu, 24 Sep 2026",,
+h29,G-424-002 wk24 - travel conflict,"Dr. Lin,
+
+G-424-002 (baseline 4/23) is due for Week 24 next week. She's going to her granddaughter's wedding in Ohio 10/7 thru 10/18 and really doesn't want to miss it.
+
+My plan: do Week 24 by telemedicine on Fri 10/9 while she's in Ohio, and courier the ATE drug to her hotel so she can start ATE on time. We'd skip the PK and LP (she didn't have baseline LP anyway).
+
+OK to go ahead?
+Kayla",crc,"Fri, 02 Oct 2026",,
+h30,G-432-001 SAE + wk8 by telemed,"Hi Pat,
+
+G-432-001 summary:
+- Admitted Tue 9/22 for aspiration pneumonia. Caregiver called us Wed 9/23 at 08:30. SAE entered in EDC and reported to the CC on 9/23 at 15:00. Dr. Okafor assessed severity/relatedness.
+- Discharged 9/26, still very weak on O2. Dr. Okafor said she shouldn't travel, so Week 8 (baseline 8/3) was done by telemed yesterday 9/28: ALSFRS-R, AE review, C-SSRS, con meds, compliance check-in, CNS-BFS. Drug shipped per MOP.
+- Not done: PK, ECG, labs, SVC, biomarkers - documented as missed due to illness per MOP.
+
+Leo",crc,"Tue, 29 Sep 2026",,
+h31,G-434-008 PEG + wk16 reschedule,"Hi Dr. Lin,
+
+G-434-008 had her planned PEG placement - admitted Thu 10/1, discharged Sat 10/3, went fine, no complications. We logged the hospitalization but didn't do an SAE since it was elective. She'll take study drug through the tube now (water, flush).
+
+Her Week 16 (baseline 6/22) was supposed to be next Mon 10/12. She wants a bit more recovery time, so I moved it to Tue 10/20. Let me know if you'd rather keep it.
+
+Marisol",crc,"Mon, 05 Oct 2026",,
+h32,IP destruction done + binder cleanup,"Hi Ana,
+
+Finished the RG destruction batch yesterday - 9 returned cartons (from G-401-001, G-401-003, G-401-006) went out in our pharmacy hazardous waste stream per our IDS SOP. I didn't count the leftover packets first since IRT already knows what we dispensed.
+
+I also shredded the paper accountability log pages for those kits to thin out the binder - everything's in IRT anyway.
+
+Rhea",pharmacist,"Wed, 23 Sep 2026",,
+h33,new IP storage setup in clinic,"Hi all,
+
+To make visit days easier we moved the Regimen G stock up to supply room B on the clinic floor last week. Notes:
+
+- the key is on the hook behind the front desk so CRCs can grab drug without paging me. Front desk and clinic MAs can get in too since it's a shared supply room.
+- Lou checks the room thermometer when he's in (Mon/Wed/Fri) and writes it on the log.
+- dispensing is now recorded only in the Epic dispense module; the paper accountability log will just have receipts from now on.
+
+Room has been 22-24 C so far.
+
+Rhea",pharmacist,"Wed, 16 Sep 2026",,
+h34,G-429-001 late dose tues,"Hi Dr. Okafor - small dosing note for G-429-001. He forgot his dose Tue 9/22 morning, remembered at 9 pm and took it then (2 packets, applesauce). Wed 9/23 he took it at his usual 08:00. Documented in compliance notes.
+
+Also re-reviewed contraception on the call: his partner can still get pregnant, she has a hormonal IUD and they use condoms every time. No sperm donation.
+
+Leo",crc,"Thu, 24 Sep 2026",,
+h35,G-437-004 - catch up dose,"Hey Brianna, for G-437-004's chart - his wife called this morning. He missed his Sunday 10/4 dose completely, so Monday 10/5 morning he took 4 packets to ""catch up."" He feels fine, no complaints.
+
+I told her just 2 packets from now on. I'll go over it with Dr. Lin at his Week 16 visit next week, no rush.
+
+Kayla",crc,"Tue, 06 Oct 2026",,
+h36,RG resupply received 9/21,"RG resupply came in this am - 6 cartons, matches the IRT shipment notice. Logger reviewed before putting away: max 24.9 C, min 17.2 C, no alarms. Receipt confirmed in IRT, cartons in the locked IP cabinet (pharmacy staff + delegated study staff only). Each carton = 14 packets / 7 days of dosing. Receipt entered on the accountability log. Today's room temp 23.1 C, logged.
+
+Rhea",pharmacist,"Mon, 21 Sep 2026",,
+h37,weekly participant update 10/9,"Weekly update - this week's in-clinic visits:
+
+G-414-002 Week 8 (Mon 10/5): all done. Height not re-measured, used screening height. ECG, PK post, labs, biomarkers, CNS-BFS, SVC fine. Dispensed.
+
+G-414-006 Week 16 (Tue 10/6, baseline 6/16): PROs first, then SVC, vitals, ALSFRS-R, ECG, labs incl coags, PK post at 2h, CGI-C last. Contraception reviewed (copper IUD + condoms). We skipped the urine pregnancy test this time since her Wk 8 one was negative and she says nothing has changed. Dispensed.
+
+G-414-009 Week 8 (Wed 10/7, baseline 8/10): everything done, PK post at 4h, no AEs. Dispensed.
+
+G-414-011 Week 16 (Thu 10/8): coags drawn with safety labs, all PROs and CGI-C done. Dispensed.
+
+-Brianna",crc,"Fri, 09 Oct 2026",,
+h38,G-410-005 wk24 labs note,"Notes for G-410-005 Week 24 (Mon 10/5, baseline 4/20):
+
+- Endocrine labs (ACTH, cortisol, TSH, fT4) drawn at 10:45. At baseline they were drawn at 08:10 - she got stuck in traffic. I don't think this is a deviation per footnote 14 but flagging.
+- The central lab kits we had for her visit were past their expiry date, so per the protocol option we sent the clinical safety labs to our hospital lab instead and got a new kit order in. Endocrine labs and PK went with a non-expired central kit from the spare shelf.
+- ECG on the study ECG machine, copy of tracing in the binder.
+
+Pat",crc,"Wed, 07 Oct 2026",,
+h39,EDC backlog,"Hi Dr. Lin,
+
+Being honest about where we are: with Tomas on leave, G-420-003's Week 4 (8/18) and Week 8 (9/15) visits are still on paper only, not in EDC yet. That includes the moderate nausea she reported at Week 8 (started 9/10, still ongoing at the visit), which is on the paper AE log but not in EDC. I'm planning to catch everything up by mid-November once the Week 16 rush is over.
+
+Brianna",crc,"Mon, 12 Oct 2026",,
+h40,toner + password reset,"Hi Sandra,
+
+Two small things - the printer in the research office (2nd floor) is out of black toner, and my hospital network password expires Friday and the reset page keeps timing out. Could you put in tickets for both?
+
+Thank you!
+Marisol",crc,"Thu, 01 Oct 2026",,

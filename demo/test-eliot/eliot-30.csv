@@ -1,0 +1,96 @@
+id,subject,body,from,date,expect,participant
+e01,G-105-014 Week 8 visit,"Hi all,
+
+Booking G-105-014 for his Week 8 clinic visit on Wednesday 30 Sept at 1:00 pm (his Baseline was Monday 3 Aug). He'll take his study drug at home at his usual 8 am time, so we'll draw the post-dose PK sample when he arrives. CNS-BFS, ECG, safety labs and urine biomarkers are on the visit checklist. I've reminded his wife to bring all his unused packets.
+
+Thanks,
+Dana",crc,"Mon, 21 Sep 2026",,
+e02,G-112-004 Week 4 - afternoon slot only,"G-112-004 can only get wheelchair transport in the afternoon, so his Week 4 visit is Thursday 15 Oct at 2:30 pm (inside the window). Plan: he takes his dose at home in the morning like normal, we draw the pre-dose PK as soon as he arrives, then the post-dose sample an hour later. Everything else as per the SoA. Let me know if anything needs changing.
+
+Priya",crc,"Fri, 9 Oct 2026",,
+e03,IP shipment received - Regimen G,"Received IRT shipment #4471 this morning: 6 cartons of DNL343/placebo, 14 packets per carton, all seals intact. The transit temperature logger shows min 17.8 C and max 26.4 C, no alarms. Receipt confirmed in IRT and cartons moved to the locked, temperature-monitored IP room (currently 21 C). No discrepancies.
+
+Marco, Research Pharmacist",crc,"Tue, 6 Oct 2026",,
+e04,G-108-011 Week 16 reschedule,"G-108-011 is travelling for a family wedding, so we've moved her Week 16 clinic visit to Wednesday 30 Sept. Baseline was 1 June. She'll do the questionnaires (ALSAQ-40, ROADS, PGI-C/PGI-S) first as usual, then the CGI-C, ECG, labs incl. coags, and post-dose PK. Dispensing next supply at the visit.
+
+Thanks, Ruth",crc,"Thu, 24 Sep 2026",,
+e05,G-105-009 new statin,"FYI - G-105-009's PCP started him on rosuvastatin 10 mg daily last week for cholesterol. Rosuvastatin is on the Appendix IV list, so I told him he has to stop it right away while he's on study drug, and I've logged a protocol deviation for the week he took it. He wasn't happy about it. Let me know if you need anything else.
+
+Dr. Okafor",crc,"Wed, 7 Oct 2026",,
+e06,G-112-002 Week 12 call done,"Completed the Week 12 telephone visit for G-112-002 today (Baseline was 6 July). ALSFRS-R done by phone. Compliance check-in: no missed doses reported, reminded her to bring unused packets to Week 16. Con meds unchanged, no new AEs. Contraception reviewed with participant (IUD + partner using condoms), still meets requirements.
+
+Priya",crc,"Tue, 29 Sep 2026",,
+e07,question about the study medicine,"Hello, my husband had his feeding tube placed last week and swallowing thin liquids is getting hard. Can his study medicine go through the G-tube now? And on days he takes it by mouth, can I mix it into applesauce or use the thickener the speech therapist gave us? Thank you.",crc,"Mon, 5 Oct 2026",,
+e08,G-105-019 ER visit over the weekend,"Heads up: G-105-019 (about Week 10 of the placebo-controlled period) went to the ER Saturday after a first-ever generalized seizure. He was kept overnight for observation and discharged Sunday on carbamazepine 200 mg twice daily. He says he feels fine now. Our plan is to keep him on study drug as usual and go over everything at his Week 12 phone call.
+
+Dana",crc,"Mon, 12 Oct 2026",,
+e09,G-108-002 late dose,"G-108-002 called this evening - she forgot her usual morning dose today and remembered around 7 pm, so she took her two packets then. I told her to take tomorrow's dose at the normal morning time and not to double up. I'll note it for the compliance check at her next visit.
+
+Ruth",crc,"Thu, 8 Oct 2026",,
+e10,G-108-003 extra packets,"G-108-003's caregiver called: yesterday morning she accidentally gave four packets through the G-tube instead of two (she opened the next day's pair as well). He has no symptoms today. I've told her to carry on with the normal dose this morning. We'll note it in the compliance log at his Week 16 visit.
+
+Ruth",crc,"Wed, 7 Oct 2026",,
+m01,G-105-021 Week 24 / start of ATE,"Planning G-105-021's Week 24 visit for Thursday 22 Oct (Baseline was Thursday 7 May). She'll take her usual morning dose at home before she comes in so she isn't waiting around, then we'll draw the pre-dose PK when she arrives at 10:00 and give her first ATE dose in clinic. She is continuing into the ATE, so we'll do the endocrine labs (ACTH, cortisol, TSH, fT4) whenever she arrives. She didn't have the baseline lumbar puncture but has now decided she'd like to do the optional CSF collection at this visit, so we've booked the LP for the same morning.
+
+Dana",crc,"Tue, 13 Oct 2026",,
+m02,G-108-014 Week 8 notes,"Week 8 for G-108-014 (female, 34, of childbearing potential) done today. Urine pregnancy test negative. She mentioned she had her IUD removed last month and switched to the combined oral contraceptive pill; her partner still uses condoms, so we documented two methods and she's covered. Her psychiatrist also started her on lurasidone 40 mg daily two weeks ago for bipolar depression - added to the con-med log.
+
+Ruth",crc,"Mon, 12 Oct 2026",,
+m03,G-112-009 Week 4 this morning,"G-112-009 is in for Week 4 now (Baseline Fri 18 Sep). He forgot his dose yesterday completely, so when he got up at 7 this morning he took yesterday's two packets and today's two packets together to catch up. Plan: draw the pre-dose PK now at 8:30, give his in-clinic dose, then the post-dose sample in a couple of hours.
+
+Priya",crc,"Mon, 19 Oct 2026",,
+m04,IP shipment and storage,"The IP shipment arrived Friday. The transit logger shows a peak of 31.8 C for about 3 hours on Thursday; the rest of the trip was 20-24 C. Cartons looked fine so we received them into stock, and on Monday we dispensed 2 cartons from it to G-112-011 at her Week 16 visit to last until her next dispensing at Week 24. Also, to be on the safe side with the warm weather, we've moved all remaining DNL343/placebo cartons into the pharmacy fridge (2-8 C).
+
+Marco",crc,"Wed, 14 Oct 2026",,
+m05,G-105-003 ATE scheduling,"G-105-003 (in the ATE; his placebo-controlled Week 24 visit was 4 March) asked to do his ATE Week 28 visit by video because he is moving house - we've booked it for Wednesday 21 Oct. Also for planning: once he passes ATE Week 52 we'll book his visits every 13 weeks, i.e. every 91 days.
+
+Dana",crc,"Mon, 12 Oct 2026",,
+m06,G-110-002 regimen-specific screening,"Quick check before we randomize G-110-002 into Regimen G at Baseline on Monday 12 Oct. Medical history: one provoked seizure about 4 months ago after a fall with head injury - no epilepsy diagnosis and not on any antiepileptic, so I think Exclusion 1 doesn't apply. He was taking St. John's wort daily but stopped it 10 days ago (29 Sep), so he's off it. Everything else looks fine; we plan to proceed Monday.
+
+Dr. Mensah",crc,"Fri, 9 Oct 2026",,
+m07,G-108-007 dose reduction,"G-108-007 has had moderate nausea for a week, so starting today I've reduced her to one stick pack a day. I didn't involve the medical monitor since it's a minor change. We'll keep her on one pack through to the end of the placebo-controlled period (about 10 more weeks). She asked whether she's on the real drug - we'll check the arm with pharmacy and tell her so she can decide whether the nausea is worth it.
+
+Dr. Okafor",crc,"Tue, 13 Oct 2026",,
+m08,G-112-004 Week 16 by video,"G-112-004 is now in a wheelchair and can no longer travel, so his Week 16 visit will be done by telemedicine next Tuesday, which is inside his window. By video we'll do the ALSFRS-R, CNS-BFS, ROADS, PGI-C and PGI-S; the clinic-only procedures (ECG, labs, PK) can't be done remotely and will be documented as missed per the MOP. His next study drug supply will be sent following the MOP instructions for remote dispensing.
+
+Priya",crc,"Tue, 13 Oct 2026",,
+m09,G-105-030 withdrawal,"G-105-030 withdrew consent on 1 Oct, at about Week 10 of the placebo-controlled period; her last dose was 30 Sep. We've booked her ET visit for 5 Nov (first slot that suits her). At the ET visit we'll do all the Week 24 assessments and, since she had a baseline LP, the CSF collection too. We'll collect the follow-up safety call information at the ET visit so there's no separate call.
+
+Dana",crc,"Wed, 14 Oct 2026",,
+m10,"con-med updates, three participants","- G-108-020 started fluconazole for thrush yesterday (7-day course). Told her it's fine.
+- G-108-021's rheumatologist started methotrexate 15 mg weekly last week for rheumatoid arthritis. Logged.
+- G-108-022 has been prescribed rifampin for latent TB. Told him to start it and carry on with study drug as normal.
+
+Ruth",crc,"Thu, 15 Oct 2026",,
+m11,G-105-018 Week 8 - positive pregnancy test,"G-105-018 (of childbearing potential) had a positive urine pregnancy test at her Week 8 visit this morning. She'd already taken today's dose at home before coming in. She says she has been using condoms plus her IUD. We plan to repeat the urine test at Week 16 and keep her on study drug in the meantime.
+
+Dana",crc,"Mon, 12 Oct 2026",,
+m12,G-110-008 Baseline today,"Baseline for G-110-008 done today; we combined the Regimen-Specific Screening with Baseline as the protocol recommends. Her Master Protocol Screening visit was 20 Aug. Because she was tired we gave her first dose at 9:00 at the start of the visit and then did the ECG, ALSAQ-40, CNS-BFS and the other Baseline procedures. She consented to the optional baseline CSF, and the LP is booked for next Monday, 19 Oct.
+
+Amara",crc,"Tue, 13 Oct 2026",,
+m13,G-105-011 going into ATE,"G-105-011 has been on one stick pack a day since a dose reduction at Week 14 (after discussion with the medical monitor at the time) and is tolerating it well. Her Week 24 visit is next week; she is continuing into the ATE and we'll start her ATE dosing on one stick pack, since that's what she tolerates.
+
+Dr. Mensah",crc,"Wed, 14 Oct 2026",,
+m14,visit schedule for three participants,"- G-112-020 (Baseline 3 Aug): Week 4 visit was 2 Sep.
+- G-112-021 (Baseline 10 Aug): Week 12 phone call booked for Friday 6 Nov.
+- G-112-022 (Baseline 6 Jul): Week 16 clinic visit booked for Monday 2 Nov.
+
+Priya",crc,"Thu, 15 Oct 2026",,
+m15,G-105-002 end of ATE,"G-105-002 completed the ATE; his last dose was 15 Sep. We did his follow-up safety call yesterday (20 Sep): no adverse events. He asked about contraception - we told him that now he's off study drug he and his wife can stop using condoms, and that he can go back to donating sperm.
+
+Dana",crc,"Mon, 21 Sep 2026",,
+m16,G-110-012 screening meds,"Screening G-110-012 for Regimen G. Current meds: tacrolimus (kidney transplant 2019, stable; nephrology says it cannot be stopped), quetiapine 25 mg at night for sleep, and he finished a 2-week course of itraconazole for a fungal infection last month. I don't see a problem with any of these - planning to proceed to Baseline.
+
+Dr. Mensah",crc,"Wed, 14 Oct 2026",,
+m17,Week 4 visits by phone this month,"Because of the flu outbreak at our hospital, all Week 4 visits this month will be done by phone under the remote-visit option. For those participants we'll skip the PK samples, ECG and labs, and since remote visits are allowed we won't record anything about the missed procedures. On the calls we'll also do the CNS-BFS by phone, and drug will be mailed per the MOP.
+
+Ruth",crc,"Mon, 12 Oct 2026",,
+m18,G-108-006 dosing routine and Week 8,"G-108-006's wife mixes his two packets into yogurt every morning around 8:00 and he finishes it in about 10 minutes. On his Week 8 visit day (clinic at 2 pm) she gave the dose at home as usual and we drew the post-dose PK at 2:15 pm. Unused packets were returned and counted.
+
+Ruth",crc,"Tue, 13 Oct 2026",,
+m19,G-108-030 liver enzymes,"G-108-030's Week 8 labs came back with ALT 4x ULN (AST 3.5x ULN), no symptoms. After discussing with the medical monitor we interrupted study drug today, and drew an unscheduled PK sample this afternoon. We'll repeat LFTs weekly and plan to restart at the full dose on 15 Nov if they have normalised.
+
+Dr. Okafor",crc,"Fri, 9 Oct 2026",,
+m20,G-105-009 ATE Week 16,"G-105-009's ATE Week 16 visit is Thursday 15 Oct (his placebo-controlled Week 24 was 25 June). We've told him to hold his dose that morning until the visit procedures are done. Plan: vitals and weight, SVC, ALSFRS-R, CNS-BFS, safety labs, urine and blood biomarkers, ECG, C-SSRS, con-meds/AEs, contraception review, compliance, and dispense the next supply.
+
+Dana",crc,"Mon, 12 Oct 2026",,

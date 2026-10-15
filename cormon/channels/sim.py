@@ -6,7 +6,9 @@ Teams: drop .json files in data/sim/teams_inbox; posts are appended to data/sim/
 
 from __future__ import annotations
 
+import html
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from email.message import EmailMessage
@@ -20,6 +22,29 @@ def _dir(*parts: str):
     d = settings.data_dir().joinpath("sim", *parts)
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+_QUOTE_STYLE = ("margin:2px 0 8px 0;padding:6px 10px;border-left:3px solid #9aa4b2;background:#f4f6f8;"
+                "font-family:Georgia,'Times New Roman',serif;color:#222")
+
+
+def email_html(body: str) -> str:
+    """The plain-text email as HTML: **bold** lines, "> " evidence quotes in a grey box, a rule for "──", links."""
+    out = []
+    for line in body.splitlines():
+        t = html.escape(line)
+        t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+        t = re.sub(r"(https?://[^\s<]+)", r'<a href="\1">\1</a>', t)
+        if line.startswith("> "):
+            out.append(f'<div style="{_QUOTE_STYLE}">{t[5:]}</div>')
+        elif line.startswith("From: "):
+            out.append(f'<div style="font-size:12px;color:#666;margin-bottom:10px">{t}</div>')
+        elif line.startswith("──"):
+            out.append('<hr style="border:0;border-top:1px solid #ccc;margin:12px 0">')
+        else:
+            out.append(f"{t}<br>")
+    return ('<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.45">'
+            + "\n".join(out) + "</div>")
 
 
 def build_mime(row: dict) -> EmailMessage:
@@ -39,7 +64,9 @@ def build_mime(row: dict) -> EmailMessage:
     if meta.get("in_reply_to"):
         msg["In-Reply-To"] = meta["in_reply_to"]
         msg["References"] = " ".join(meta.get("references") or [meta["in_reply_to"]])
-    msg.set_content(row["body"])
+    msg.set_content(row["body"].replace("**", ""))
+    if "**" in row["body"] or "\n> " in row["body"]:
+        msg.add_alternative(email_html(row["body"]), subtype="html")
     return msg
 
 

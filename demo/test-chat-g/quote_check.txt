@@ -1,0 +1,6 @@
+5: s missed dose is a double-dose medication error and potential DNL343 overdose, not an allowed catch-up. 
+8: s name to the coded research tubes defeats coded-only sample labeling. 
+11:  [regimen_g:s010]. Record the scheduling departure; the protocol describes a minor departure as 
+18: s own answers is allowed because helpers 
+21: s half-life as 
+21:  [regimen_g:s093]: 5 × 4.2 = 21 days, longer than 14 days. From 28 Sep 08:00 to 12 Oct 08:00 is only 14 days, a 7-day shortfall. Flag the exposure for investigator/medical-monitor review rather than accepting the table

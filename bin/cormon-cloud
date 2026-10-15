@@ -3,7 +3,8 @@
 # (gcloud auth login); the connection goes through Google's IAP proxy, encrypted, with no VPN.
 #
 #   ./bin/cormon-cloud status                 any `cormon` command, run on the cloud bot
-#   ./bin/cormon-cloud test my-emails/        run a folder of test messages (nothing is sent)
+#   ./bin/cormon-cloud test my-emails/        run a folder of test messages (nothing is sent);
+#                                             add --study NCT... for a study other than the first
 #   ./bin/cormon-cloud sandbox item 3         look inside the last test run (item, message, log ...)
 #   ./bin/cormon-cloud logs                   the bot's recent log
 #   ./bin/cormon-cloud shell                  a terminal on the VM
@@ -30,7 +31,9 @@ case "${1:-help}" in
     echo "uploading $folder ..."
     COPYFILE_DISABLE=1 tar --exclude '._*' -czf - -C "$folder" . | "${SSH[@]}" --command \
       "mkdir -p $remote/in $remote/out && tar -xzf - -C $remote/in 2>/dev/null && chmod -R a+rX $remote && chmod 777 $remote/out"
-    "${SSH[@]}" --command "cormon test $remote/in --out $remote/out" "${TTY[@]+"${TTY[@]}"}"
+    extra=""
+    [ $# -gt 2 ] && extra=$(printf '%q ' "${@:3}")
+    "${SSH[@]}" --command "cormon test $remote/in --out $remote/out $extra" "${TTY[@]+"${TTY[@]}"}"
     out="results/$stamp"
     mkdir -p "$out"
     "${SSH[@]}" --command "tar -czf - -C $remote/out . && rm -rf $remote" | tar -xzf - -C "$out"

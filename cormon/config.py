@@ -122,13 +122,16 @@ def load_study(path: Path) -> Study:
 
 
 def studies() -> dict[str, Study]:
+    """The studies this copy runs: every folder under studies/, or only those listed in system.studies."""
     out: dict[str, Study] = {}
     sdir = settings.studies_dir()
     if not sdir.exists():
         return out
+    only = settings.get("system.studies") or None
     for p in sorted(sdir.glob("*/study.yaml")):
         s = load_study(p)
-        out[s.study_id] = s
+        if only is None or s.study_id in only:
+            out[s.study_id] = s
     return out
 
 
@@ -163,7 +166,7 @@ def templates() -> list[dict]:
 # Change tracking: every edit to a config file is recorded with who and when.
 
 def tracked_files() -> list[Path]:
-    files = sorted(CONFIG_DIR.glob("*.yaml"))
+    files = sorted(p for p in CONFIG_DIR.glob("*.yaml") if not p.name.startswith("._"))  # macOS copy leftovers
     files += sorted(settings.studies_dir().glob("*/study.yaml"))
     return files
 

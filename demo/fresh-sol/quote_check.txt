@@ -1,0 +1,38 @@
+3: s advance signature instead of obtaining signature after the remote review. The required sequence includes 
+4:  [master:6.2]. The update was available 10 Sep; the next visit on 14 Sep was 4 calendar days later. By 17 Sep, 3 days after that visit, no form had been supplied or signed. The remote pathway includes 
+5:  [master:6.2]. The staffing approach must follow 
+6: s decision about the physician discussion: 
+14: s documented azoospermia does not waive the barrier requirement. The specific exception states 
+16: s staffing-related FVC substitution did not establish Master respiratory eligibility. The inclusion criterion requires SVC, with FVC allowed only 
+16:  [master:5.2.1]. Staffing coverage is not that exception. Assignment on 24 September therefore occurred without the required eligibility determination; the first-stage rule is 
+16:  [master:6.4.1]. The email also confirms that the scheduled baseline SVC was not obtained; 
+17: s prior ALS investigational gene therapy is exclusionary regardless of elapsed washout. The Master criterion is 
+19: s G consent and G-specific screening were premature: Master eligibility had not been established and there was no random regimen assignment. The consent sequence is 
+19:  [master:6.2]. The regimen visit 
+19:  [master:8.2]. Riluzole stability at 2 October was only 22 days: 20 days from 10 to 30 September plus two days in October. The inclusion criterion is 
+26: s conditions: it was for convenience without substantial intolerability, and there was no MM consultation. 
+37: A participant Neurological Global Unique Identifier (NeuroGUID), or its derivitives\u0027, will be used as the identifier for participant\u0027s samples participating in this study.
+48: s ATE requirements. The Week 4 ATE procedure list includes 
+48:  [regimen_g:6.10.2]. The regimen also specifies 
+49: s signature after receipt of the original is itself the correct final step, though it does not repair the earlier participant-signature sequence: 
+52: s transcription of participant-selected CNS-BFS answers is allowed: 
+59: s stated choices. Assistance is limited to transcription: 
+69: s confirmation meets the verification rule: confirmation must be by 
+71: s role was limited to transcription, as allowed: 
+81: s two-week recommendation. The controlling rule is 
+81:  [regimen_g:4.2.2]. Table 4 gives apalutamide
+81:  and recommended washout as 
+83: s medically indicated riluzole reduction is also excepted: 
+87: s wort use during study treatment is prohibited; separating morning and evening doses does not create an exception. Table 4 identifies 
+87:  among strong inducers, and states 
+87:  [regimen_g:s093]. The restriction explicitly includes 
+87:  Week 2 requires 
+88: s half-life as 
+91: s combined oral contraceptive is an allowed method: 
+92: s strictly greater-than-40 threshold. Despite 14 months without menses, the participant was incorrectly treated as postmenopausal and dosed without a qualifying contraceptive plan. The definition requires 
+94: s IUS remains an acceptable highly effective component: 
+101: s male sex does not remove the applicable review: 
+121: s assessment is not automatically prohibited. 
+129: s lab when central collection was infeasible is allowed. 
+137:  [regimen_g:6.10.2], and the regimen specifies 
+143: s usual dose is allowed: 

@@ -1,0 +1,316 @@
+{
+ "note": "written by gpt-6.1-sol from full protocol sections before any bot run",
+ "emails": {
+  "n003": {
+   "issues": [],
+   "fine": [
+    "The 29.4\u00b0C maximum is below the stated limit, with no stricter batch instruction reported: 'DNL343 drug product and placebo should be stored at room temperature (store below 30\u00b0C).' [regimen_g:5.3].",
+    "Escorted monitor access is appropriate; independent badge access is not required: 'The SIs will agree to allow monitors access to the clinical supplies, dispensing and storage areas' [master:12.3].",
+    "Continuous retained daily temperature records satisfy the minimum: 'controlled, monitored and recorded, at a minimum daily' [master:7.1.3]."
+   ],
+   "good": [
+    "Confirm that the signed receipt review, transit data, and batch label instructions are available during monitoring.",
+    "The planned monitoring visit is 18 Aug, six calendar days after the 12 Aug receipt; the email does not describe a missed protocol deadline."
+   ],
+   "wrong": [
+    "Do not invent a 25\u00b0C storage ceiling or require quarantine solely because the temperature reached 29.4\u00b0C.",
+    "Do not require the CRA to have unrestricted independent access to the IP room."
+   ],
+   "topic": "drug_supply"
+  },
+  "n007": {
+   "issues": [],
+   "fine": [
+    "A disability-related remote Week 8 visit with selected procedures is allowed: 'Designated visits in the SOA (i.e., Week 4, Week 8, and Week 16) may be conducted via telemedicine (or phone if telemedicine is not available) with remote services instead of in-person if needed to protect the safety of the participant due to a pandemic, disability, or other medically necessary reason.' [regimen_g:s049] Also, 'only selected procedures will be performed' [regimen_g:s049].",
+    "PCP safety laboratory collection is an allowed fallback when central collection is infeasible: 'If clinical safety labs are needed and it is not feasible to use the central laboratory, clinical safety labs can be collected using one of the following methods' and 'Independent labs offering such services as described in this protocol and/or local to the participant (e.g. primary care physician)' [master:8].",
+    "The wife's transcription of participant-selected CNS-BFS answers is allowed: 'Caregivers or study staff can also help, if needed, but should only assist in transferring the participant\u2019s responses to the form, and should not provide any assistance with determining answers.' [regimen_g:7.2]",
+    "A compliance check without physical drug accountability during the call is appropriate: 'Drug accountability will not be done at phone visits. A drug compliance check in should be held during phone visits to ensure participant is taking drug per dose regimen and to note any report of missed doses.' [regimen_g:s010]"
+   ],
+   "good": [
+    "01 Aug + 56 days = 26 Sep; the Week 8 window was 19 Sep\u201303 Oct.",
+    "The disability rationale, omitted-procedure documentation, safety-lab review and regimen-specific CNS-BFS completion should remain linked in the remote-visit record."
+   ],
+   "wrong": [
+    "Do not automatically classify the omitted in-person tests as deviations when the safety-related remote modification applies.",
+    "Do not demand a physical returned-packet reconciliation during the remote call.",
+    "Do not reject CNS-BFS solely because the caregiver physically marked the participant's responses."
+   ],
+   "topic": "assessments"
+  },
+  "n012": {
+   "issues": [],
+   "fine": [
+    "Severe intensity does not automatically make the migraine an SAE. 'Of note, the term \"severe\" does not necessarily equate to \"serious\".' [master:10.2.1]",
+    "The safety interruption was made with MM consultation. 'the site investigator, in consultation with the medical monitor, may withhold study drug (dose interruption)' [regimen_g:5.6.1]",
+    "Rosuvastatin is not automatically excluded just because it appears in the transporter table. 'Medications that are considered to have a wide therapeutic index are permitted, and participants taking them are to be monitored for signs of AEs noted in the respective medication\u2019s prescribing information.' [regimen_g:s095]",
+    "Obtaining PK during this ATE event was appropriate. 'If a TEAE is reported that results in dose modification or dose interruption or for a severe TEAE that requires an in-clinic evaluation, an unscheduled PK sample should be obtained.' [regimen_g:s011]"
+   ],
+   "good": [
+    "The interruption began 22 Sep and resumption was 24 Sep, a two-calendar-day interval; retain the exact dose dates in the compliance record.",
+    "Keep the individual therapeutic-index assessment and monitoring plan with the conmed documentation."
+   ],
+   "wrong": [
+    "Do not classify every severe headache as serious.",
+    "Do not require a CC SAE report within 24 hours solely because this AE was severe.",
+    "Do not impose a blanket ban on every drug in the BCRP/OAT3 examples table."
+   ],
+   "topic": "safety"
+  },
+  "n020": {
+   "issues": [],
+   "fine": [
+    "Stopping medication by choice is permitted: 'A research participant may choose to discontinue the investigational product at any time for any reason.' [master:6.5.1]",
+    "No immediate ET visit or separate safety call is required for a participant continuing the protocol: 'If a participant has to discontinue study drug, but will complete the protocol, an in-person ET Visit and Follow-Up Safety Call is not necessary.' [regimen_g:6.9]",
+    "The participant has continued off-treatment follow-up for 18 Aug to 22 Sep = 13 remaining August days + 22 September days = 35 days. This exceeds the exception's minimum: 'A Follow-Up Safety Call at the time study drug is discontinued is not be required, as long as the participant is followed under the ITT principle for a minimum of 28 days.' [master:6.5.1]",
+    "Return of unused drug and packaging follows 'Upon discontinuation of investigational product, the research participant is instructed to return any unused investigational product, including empty packaging, if applicable.' [master:6.5.1]",
+    "Recording the reason follows 'the reason for permanent discontinuation of investigational product must be recorded in the Case Report Form (CRF).' [master:6.5.1]"
+   ],
+   "good": [
+    "Maintain the distinction between discontinuing IP and withdrawing from study follow-up.",
+    "Continue encouraging scheduled outcome and safety assessments."
+   ],
+   "wrong": [
+    "Do not demand an ET visit solely because IP stopped.",
+    "Do not mark the participant withdrawn from the study or lost to follow-up.",
+    "Do not require an AE diagnosis for a voluntary medication discontinuation."
+   ],
+   "topic": "dosing"
+  },
+  "n026": {
+   "issues": [],
+   "fine": [
+    "No immediate ET visit is required merely because IP stopped while protocol follow-up continues: 'If a participant has to discontinue study drug, but will complete the protocol, an in-person ET Visit and Follow-Up Safety Call is not necessary.' [regimen_g:6.9]",
+    "Omitting a separate safety call is supported by the documented ITT follow-up: 'A Follow-Up Safety Call at the time study drug is discontinued is not be required, as long as the participant is followed under the ITT principle for a minimum of 28 days.' [master:6.5.1] Arithmetic: 03 Aug to 03 Sep = 31 days; another 4 days to 07 Sep = 35 days, exceeding 28 days."
+   ],
+   "good": [
+    "Keep permanent IP discontinuation distinct from termination of study participation in the tracking systems.",
+    "The permanent-stop reason and return of unused product and packaging have already been documented."
+   ],
+   "wrong": [
+    "Do not require closure of study participation because the participant chose to stop IP.",
+    "Do not demand an ET visit now while the participant remains in protocol follow-up.",
+    "Do not invent an AE to explain a participant-preference drug stop."
+   ],
+   "topic": "early_termination"
+  },
+  "n035": {
+   "issues": [],
+   "fine": [
+    "Stopping IP without terminating protocol follow-up does not require an immediate ET visit or separate safety call. 'If a participant has to discontinue study drug, but will complete the protocol, an in-person ET Visit and Follow-Up Safety Call is not necessary.' [regimen_g:6.9]",
+    "The participant has already remained under ITT follow-up for 35 days: 10 Aug\u201310 Sep = 31 days, plus 4 days to 14 Sep. 'A Follow-Up Safety Call at the time study drug is discontinued is not be required, as long as the participant is followed under the ITT principle for a minimum of 28 days.' [master:6.5.1]"
+   ],
+   "good": [
+    "The permanent drug-discontinuation reason is recorded, and unused drug and packaging have been returned.",
+    "Keep treatment status separate from study-participation status in tracking systems."
+   ],
+   "wrong": [
+    "Do not equate permanent IP discontinuation with withdrawal of consent.",
+    "Do not insist on dispensing drug at subsequent visits to retain this participant."
+   ],
+   "topic": "visit_schedule"
+  },
+  "n044": {
+   "issues": [],
+   "fine": [
+    "Recording the rash before G consent or dosing is correct: 'Participants will be monitored for adverse events from the time they sign consent for the Master Protocol until completion of their participation as defined in the RSA.' [master:10.1.1]. Onset on 02 Sep was one calendar day after Master consent on 01 Sep.",
+    "Delayed optional DNA collection is allowed: 'The DNA sample can be collected at any time after the Baseline Visit if a baseline sample is not obtained for any reason or the sample is not usable.' [master:9.3.1]. From 09 Sep baseline to 05 Oct collection is 26 days: 21 remaining days in September plus 5 days in October.",
+    "The participant may withdraw stored-biofluid-use permission without the site promising destruction of already-used material: 'Participants have the option of declining participation in this portion of the study at any time by withdrawing their consent to have their sample used. However, it will not be possible to destroy samples that may have already been used.' [master:9.4]."
+   ],
+   "good": [
+    "Maintain the explicit scope of the sample-use withdrawal so it is not misclassified as withdrawal from all trial participation.",
+    "Retain documentation of repository notification and the participant's instructions."
+   ],
+   "wrong": [
+    "Do not say that AE capture starts only at regimen consent, randomization, or first dose.",
+    "Do not flag the DNA draw as late under a nonexistent fixed post-baseline deadline.",
+    "Do not require destruction of an aliquot already consumed or terminate trial participation automatically."
+   ],
+   "topic": "consent"
+  },
+  "n053": {
+   "issues": [],
+   "fine": [
+    "The participant need not justify withdrawal: 'A research participant may withdraw consent for study participation. No justification is required for the decision.' [master:6.5.2].",
+    "The duty is to ask for the ET encounter, not to force a refused procedure: 'Participants who withdraw consent or early terminate from the study and do not complete the protocol will be asked to be seen for an in-person ET Visit and complete a Follow-Up Safety Call.' [regimen_g:6.9]. Both were offered, with the refusals documented.",
+    "The agreed safety call was timely: 'Participants will have a Follow-Up Safety Call 28 \u00b1 3 days after their last dose of study drug.' [regimen_g:6.10.12]. September 5 to October 3 = 25 remaining September days + 3 October days = 28 days; the window was September 30\u2013October 6.",
+    "Stopping repeated direct outreach after an explicit refusal respects 'The SI, nor the site study staff, should coerce or unduly influence a potential participant to participate or to continue to participate in the study.' [master:6.2]."
+   ],
+   "good": [
+    "Distinguish a documented refusal from unsuccessful contact attempts in the tracking system.",
+    "Keep the participant's permitted-contact limits accessible to the monitoring team."
+   ],
+   "wrong": [
+    "Do not label refusal of an offered ET as the site's failure to offer one.",
+    "Do not require the spouse to supply a withdrawal explanation.",
+    "Do not recommend repeated direct calls contrary to the participant's explicit request."
+   ],
+   "topic": "early_termination"
+  },
+  "n058": {
+   "issues": [],
+   "fine": [
+    "An ET encounter is not required merely because dosing permanently stopped: 'If a participant has to discontinue study drug, but will complete the protocol, an in-person ET Visit and Follow-Up Safety Call is not necessary.' [regimen_g:6.9].",
+    "The minimum ITT duration for the safety-call exemption has been met: 'A Follow-Up Safety Call at the time study drug is discontinued is not be required, as long as the participant is followed under the ITT principle for a minimum of 28 days.' [master:6.5.1]. August 18 to September 22 = 13 remaining August days + 22 September days = 35 days, seven days beyond the minimum.",
+    "Investigator/medical-monitor consultation supports stopping for substantial intolerability: 'the site investigator, in consultation with the medical monitor, may withhold study drug (dose interruption), temporarily reduce the dose (administer one stick pack rather than two stick packs), or discontinue study drug for an individual participant.' [regimen_g:5.6.1].",
+    "Recording the nausea and obtaining an unscheduled PK sample are consistent with 'Adverse events that occur after signing the consent form will be recorded. If a TEAE is reported that results in dose modification or dose interruption or for a severe TEAE that requires an in-clinic evaluation, an unscheduled PK sample should be obtained.' [regimen_g:s011]."
+   ],
+   "good": [
+    "Maintain separate fields for treatment status and study-participation status.",
+    "If the participant later stops ITT follow-up, reassess ET requirements at that point."
+   ],
+   "wrong": [
+    "Do not classify permanent drug discontinuation as automatic study withdrawal.",
+    "Do not demand an immediate ET or a standalone safety call despite continued qualifying ITT follow-up.",
+    "Do not impose an SAE reporting deadline or classify the reported moderate nausea as serious without supporting facts."
+   ],
+   "topic": "early_termination"
+  },
+  "n060": {
+   "issues": [],
+   "fine": [
+    "A disability-related W8 remote visit is permitted. 'Designated visits in the SOA (i.e., Week 4, Week 8, and Week 16) may be conducted via telemedicine (or phone if telemedicine is not available) with remote services instead of in-person if needed to protect the safety of the participant due to a pandemic, disability, or other medically necessary reason.' [regimen_g:s049]",
+    "The visit is exactly on target: 03 Aug to 31 Aug = 28 days, plus 28 days to 28 Sep = Day 56. The permitted Day 49\u201363 interval is 21 Sep\u201305 Oct. 'Day 56 \u00b1 7' [regimen_g:s010]",
+    "Using the PCP's lab when central collection was infeasible is allowed. 'If clinical safety labs are needed and it is not feasible to use the central laboratory, clinical safety labs can be collected using one of the following methods:' and 'Independent labs offering such services as described in this protocol and/or local to the participant (e.g. primary care physician)' [master:8]",
+    "The included CNS-BFS is the required W8 remote regimen-specific assessment. 'CNS-BFS (Weeks 8 and 16 only)' [regimen_g:s049]"
+   ],
+   "good": [
+    "Check that the local results, reference ranges and SI review are retained together.",
+    "Confirm that missed in-person procedures are documented using the applicable remote-visit process."
+   ],
+   "wrong": [
+    "Do not require an in-person W8 visit despite the documented disability-related safety reason.",
+    "Do not insist on central laboratory collection when it is infeasible and an allowed local alternative is used.",
+    "Do not infer missed remote AE review, C-SSRS, CNS-BFS or contraception review; each is explicitly documented.",
+    "Do not demand a urine pregnancy test for this male participant."
+   ],
+   "topic": "safety"
+  },
+  "n067": {
+   "issues": [],
+   "fine": [
+    "A regimen addition alone does not require existing participants to reconsent: 'Addition of regimens will not require re-consent.' [master:1.4.1].",
+    "The administrative G screen failure before G consent is permitted when ineligibility is already known: 'If it is known at the time of regimen assignment that the participant is not eligible for the regimen, a participant may be administratively screen-failed for a regimen prior to regimen consent and screening.' [master:8.1.2].",
+    "The approved Spanish form is permitted: 'Consent for non-English speakers may be obtained using an sIRB approved consent form that has been translated into the participant's spoken language.' [master:6.2]. The staffing approach must follow 'Sites should follow study MOPs and local policy on the use of translators.' [master:6.2]."
+   ],
+   "good": [
+    "Keep the basis for the known G ineligibility and administrative disposition in source and EDC.",
+    "Confirm completion of Master eligibility before any eventual regimen assignment for G-506-158."
+   ],
+   "wrong": [
+    "Do not demand Master reconsent solely because a new regimen was added.",
+    "Do not require G consent merely to record the permitted administrative G screen failure.",
+    "Do not insist that Spanish-speaking participants sign an English form or that the supplied text always requires a separate interpreter."
+   ],
+   "topic": "consent"
+  },
+  "n071": {
+   "issues": [],
+   "fine": [
+    "Stopping study drug does not require ET when protocol follow-up continues. 'If a participant has to discontinue study drug, but will complete the protocol, an in-person ET Visit and Follow-Up Safety Call is not necessary.' [regimen_g:6.9]",
+    "No separate safety call was required at drug discontinuation under the stated ITT follow-up. 'A Follow-Up Safety Call at the time study drug is discontinued is not be required, as long as the participant is followed under the ITT principle for a minimum of 28 days.' [master:6.5.1] From 01 Sep to 01 Oct = 30 days, exceeding 28 days by two days, with continued participation documented.",
+    "Return of unused product and packaging is appropriate. 'Upon discontinuation of investigational product, the research participant is instructed to return any unused investigational product, including empty packaging, if applicable.' [master:6.5.1]"
+   ],
+   "good": [
+    "Continue the scheduled off-treatment assessments and maintain clear distinction between IP discontinuation and study withdrawal.",
+    "If the participant later stops ITT follow-up, reassess the ET requirements at that point."
+   ],
+   "wrong": [
+    "Do not automatically demand an ET visit because IP stopped.",
+    "Do not insist that every last dose creates a separate Day 28 call regardless of the ITT exception.",
+    "Do not classify voluntary discontinuation of study drug itself as an AE."
+   ],
+   "topic": "safety"
+  },
+  "n082": {
+   "issues": [],
+   "fine": [
+    "Recording the rash before regimen consent and first dose is appropriate because 'Participants will be monitored for adverse events from the time they sign consent for the Master Protocol until completion of their participation as defined in the RSA.' [master:10.1.1] Master consent was 12 Aug; rash onset on 14 Aug was 2 days later and 4 days before first dosing on 18 Aug.",
+    "Leaving unchanged arthritis in history is appropriate: 'Stable chronic conditions (e.g., diabetes, arthritis) that are present prior to the start of the study and do not worsen during the trial are NOT considered adverse events.' [master:10.1.1]",
+    "Not separately recording ordinary ALS progression as an AE is appropriate: 'Symptoms of progression/worsening of ALS, including 'normal' progression, will not be recorded as adverse events.' [master:10.1.1]",
+    "The rash record includes the required fields: 'description of the event, severity, seriousness, date of onset, date of resolution, relationship to investigational product, action taken, and primary outcome of event.' [master:10.2.3]"
+   ],
+   "good": [
+    "Distinguish AE collection beginning at Master consent from treatment-emergent classification.",
+    "The SI's review supports the documented relationship and disease-progression assessment."
+   ],
+   "wrong": [
+    "Do not delete the rash because it preceded first dosing.",
+    "Do not demand expedited SAE reporting for the described mild, nonserious, unrelated rash.",
+    "Do not automatically convert stable arthritis or normal ALS progression into AEs."
+   ],
+   "topic": "records_reporting"
+  },
+  "n085": {
+   "issues": [],
+   "fine": [
+    "The call was on target: 17 Aug \u2212 03 Aug = 14 days. 'This visit will take place 14 \u00b1 3 days after the Baseline Visit via telephone.' [regimen_g:6.2]",
+    "Not performing packet accountability during the call is correct; compliance was checked instead. 'Drug accountability will not be done at phone visits. A drug compliance check in should be held during phone visits to ensure participant is taking drug per dose regimen and to note any report of missed doses.' [regimen_g:s010]"
+   ],
+   "good": [
+    "The note covers concomitant medications, AEs, compliance, contraception, and the unused-drug reminder."
+   ],
+   "wrong": [
+    "Do not require a physical packet count at this telephone visit.",
+    "Do not flag the absence of a Week 2 ECG or blood collection."
+   ],
+   "topic": "visit_schedule"
+  },
+  "n091": {
+   "issues": [],
+   "fine": [
+    "Stopping drug does not automatically require ET when the participant continues protocol follow-up: 'If a participant has to discontinue study drug, but will complete the protocol, an in-person ET Visit and Follow-Up Safety Call is not necessary.' [regimen_g:6.9]",
+    "No separate safety call at discontinuation is required with ITT follow-up for at least 28 days. 25-Aug to 28-Sep = 6 + 28 = 34 days; through 06-Oct = 42 days. 'A Follow-Up Safety Call at the time study drug is discontinued is not be required, as long as the participant is followed under the ITT principle for a minimum of 28 days.' [master:6.5.1]",
+    "Week 8 follow-up was on target: 03-Aug to 28-Sep = 28 + 28 = 56 days. 'These visits will take place on Days 28 \u00b1 7 and 56 \u00b1 7 days, respectively.' [regimen_g:6.3]",
+    "Return of unused product and packaging is appropriate: 'Upon discontinuation of investigational product, the research participant is instructed to return any unused investigational product, including empty packaging, if applicable.' [master:6.5.1]"
+   ],
+   "good": [
+    "Keep permanent drug discontinuation distinct from withdrawal from study follow-up in the tracker and EDC.",
+    "Maintain the off-treatment status and reasons for inapplicable on-treatment collections in source."
+   ],
+   "wrong": [
+    "Do not require an immediate ET visit merely because drug stopped.",
+    "Do not label him lost to follow-up.",
+    "Do not require dosing solely to obtain an on-treatment PK sample."
+   ],
+   "topic": "visit_schedule"
+  },
+  "n096": {
+   "issues": [],
+   "fine": [
+    "The visit was exactly on target: 01 Aug + 31 days = 01 Sep; +25 days = 26 Sep, or Day 56. The visits occur on 'Days 28 \u00b1 7 and 56 \u00b1 7 days, respectively.' [regimen_g:6.3]",
+    "Home dosing with a single postdose sample is permitted at Week 8: 'For the Week 8 Visit, the participant may take their daily dose at home or in clinic, depending on the time of the visit and one postdose PK blood sample would be obtained.' [regimen_g:6.3]",
+    "14:55 minus 07:10 = 7 hours 45 minutes, within 'The postdose sample can be collected anytime between 1 to 8 hours postdose.' [regimen_g:6.3]",
+    "Packet counting and recording satisfy 'Compliance with home administration of study drug will be performed by the study staff by counting the number of unused packets and will be recorded.' [regimen_g:5.7]"
+   ],
+   "good": [
+    "Use actual administration and collection times for PK interpretation.",
+    "The dose took 8 minutes to complete."
+   ],
+   "wrong": [
+    "Do not require a Week 8 predose sample.",
+    "Do not require Week 8 dosing in clinic merely because the visit was in person.",
+    "Do not import the Week 4 afternoon-visit minor-deviation requirement into Week 8."
+   ],
+   "topic": "dosing"
+  },
+  "n099": {
+   "issues": [],
+   "fine": [
+    "The documented history interview is an allowed source for male-participant azoospermia: 'documentation of azoospermia for a male participant can come from the site personnel\u2019s review of the participant\u2019s medical records, medical examination, or medical history interview' [regimen_g:5.10.2].",
+    "An azoospermic male participant with a female partner of childbearing potential may use the specified condom pathway without requiring her to add an IUD or hormonal method: 'For azoospermic male participants with a woman partner of childbearing potential the male partner must use a male barrier method such as a latex or polyurethane condom' [regimen_g:5.10.2].",
+    "Sperm-donation counseling still applies: 'Male participants must not donate sperm at any time from the start of dosing, throughout the study period, and for 90 days after the final administration of study drug' [regimen_g:5.10.2]."
+   ],
+   "good": [
+    "The interview establishes confirmed absence of sperm, not merely a history of vasectomy.",
+    "Master Screening on 01 Sep was 7 days before the 08 Sep baseline.",
+    "Obtaining an outside report may improve the file but should not be represented as an additional protocol-mandated eligibility requirement."
+   ],
+   "wrong": [
+    "Do not insist that only an original semen-analysis report can document azoospermia in a male participant.",
+    "Do not require the female partner to add a third method under the described azoospermia pathway.",
+    "Do not exempt an azoospermic participant from the sperm-donation restriction."
+   ],
+   "topic": "contraception_pregnancy"
+  }
+ }
+}

@@ -55,8 +55,10 @@ def credentials(interactive: bool = False):
 
 
 def chat_text(body: str) -> str:
-    """The Teams HTML templates as Google Chat text (*bold*, _italic_, <url|label> links)."""
-    t = re.sub(r"(?i)<br\s*/?>", "\n", body or "")
+    """The Teams HTML templates as Google Chat text (*bold*, _italic_, `monospace`, <url|label> links)."""
+    t = re.sub(r"(?is)<code>\s*(.*?)\s*</code>",
+               lambda m: "`" + re.sub(r"\s+", " ", m.group(1)).replace("`", "'") + "`", body or "")
+    t = re.sub(r"(?i)<br\s*/?>", "\n", t)
     t = re.sub(r"(?i)</p>\s*", "\n\n", t)
     t = re.sub(r"(?is)<b>\s*(.*?)\s*</b>", r"*\1*", t)
     t = re.sub(r"(?is)<i>\s*(.*?)\s*</i>", r"_\1_", t)

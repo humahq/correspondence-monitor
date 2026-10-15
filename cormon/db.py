@@ -179,6 +179,37 @@ CREATE TABLE IF NOT EXISTS rules (
 );
 CREATE INDEX IF NOT EXISTS ix_rules_study ON rules(study_id, pattern_class);
 
+-- what the documents allow ("may be repeated on another day", "not a deviation if"), each with a verified quote:
+-- shown to the checks so that an allowed case is not reported
+CREATE TABLE IF NOT EXISTS allowances (
+    id TEXT PRIMARY KEY,
+    study_id TEXT NOT NULL,
+    doc_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    classes TEXT NOT NULL,
+    source_quote TEXT NOT NULL,
+    source_page INTEGER,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_allowances_study ON allowances(study_id);
+
+-- the protocol as a guide the checker reads whole: sections in the protocol's words (tables one line per row)
+-- and one checklist per visit from the schedule tables
+CREATE TABLE IF NOT EXISTS guide (
+    study_id TEXT NOT NULL,
+    doc_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    number TEXT,
+    title TEXT NOT NULL,
+    path TEXT,
+    text TEXT NOT NULL,
+    about TEXT,
+    topics TEXT,
+    ord INTEGER,
+    PRIMARY KEY (study_id, id)
+);
+
 -- rule pruning: the AI suggests keep or remove, people decide. Keyed on the rule's words and its check, not its
 -- id, so a decision survives a rebuild that renumbers the rules; a changed rule comes back undecided (kept).
 CREATE TABLE IF NOT EXISTS rule_decisions (
@@ -277,6 +308,8 @@ MIGRATIONS = {
     ("rules", "review"): "ALTER TABLE rules ADD COLUMN review TEXT",
     # tests that, when all hold, turn the rule off: an exception the document allows
     ("rules", "unless"): "ALTER TABLE rules ADD COLUMN unless TEXT",
+    # the source a guide item was read from: document version and file hash; for a pack, its sources' versions
+    ("guide", "version"): "ALTER TABLE guide ADD COLUMN version TEXT",
 }
 
 

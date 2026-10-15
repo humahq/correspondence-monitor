@@ -1,0 +1,383 @@
+id,subject,body,from,date,expect,participant
+n002,ET packet complete / G-502-202,"Rachel,
+
+G-502-202's ET paperwork is ready. Last dose and decision to end participation were both 02 Aug. We offered earlier appointments, but she declined those because her daughter was away; 03 Sep was the first date she accepted. Those calls are in the contact log.
+
+She came in yesterday, returned the remaining packets/empties, and completed the applicable placebo-period ET assessments. No baseline LP, so no LP yesterday. We also did the AE and contraception questions from the safety-call form while she was here. I marked the separate safety call not needed since we captured its content at ET; we hadn't called her separately in August.
+
+The only thing still in transit is the central lab accession confirmation. Local pregnancy test and ECG are filed. Can you confirm whether you want the safety-call form filed behind ET or in its own tab?
+
+Lena",Study coordinator,"Fri, 04 Sep 2026 14:08:00 -0400",,
+n005,G-513-041 — extra ATE packets / pharmacy reconciliation,"Hi Alex,
+
+Reconciling the diary and packets for G-513-041. On 30 Sep he took his usual two ATE sticks at 07:00 and another two at 11:00 because he thought the morning dose had been missed. His wife called us at 12:10; Dr Shah was with me and heard the account then.
+
+Dr Shah assessed him by phone, arranged observation with his wife, and gave instructions for symptoms that would warrant urgent evaluation. Follow-up calls that afternoon and the following morning were negative. No symptoms or abnormal findings were identified, so there isn't an AE entry.
+
+We kept the packet discrepancy in pharmacy source rather than sending a safety-event notification to the CC, since there was no AE. Dr Shah spoke with the MM at 13:10 on 02 Oct once we had finished the symptom follow-up. The dosing error is documented in the compliance record and we have re-educated both patient and caregiver.
+
+Do you need the diary scan before the visit, or is the pharmacy worksheet enough?
+
+Thanks,
+Maya",Research pharmacist,"Mon, 05 Oct 2026 09:15:00 -0400",,
+n008,Consent coverage while Dr Bell was in clinic,"Hi Maria,
+
+For G-507-169 on 24 Sep, we used Emily for the Master consent visit. She's an RN with current licensure and completed all study training in August. She's on the delegation log for assessments and AE review, but the PI hadn't added consent to her duties; that line was added on 25 Sep. Emily led the entire consent, answered the participant's questions and obtained the signature on 24 Sep. The participant took home the fully executed copy and we kept the original.
+
+Dr Bell stopped in during the discussion, explained the study risks and answered questions, so there was investigator involvement. The participant had plenty of time and said he was comfortable proceeding. Emily also offered a separate discussion with a licensed physician Investigator, but neither she nor Dr Bell recorded whether he accepted or declined that offer. They don't recall his answer now.
+
+All research testing followed the signature. For filing, do you want the delegation-log change behind the consent note or with the training records?
+
+Thanks,
+Jo",Lead study coordinator,"Mon, 28 Sep 2026",,
+n011,ATE packet G-582-014 — missing forms explained,"Mara,
+
+Closing out the 9 Sep ATE Week 28 packet for G-582-014. Everything collected was entered on 10 Sep.
+
+The biomarker blood draw was attempted by two staff members, three sticks total, without obtaining a sample. Attempts and outcome are in source and the collection page says attempted/no sample. We did not open a PD entry for this.
+
+ALSAQ-40 wasn't administered because of the participant's language barrier. That reason is in source and EDC, rather than a score or a PD number. The other PROs were completed using the available approved language versions. His wife wrote the ROADS answers because of his hand weakness; he selected every answer, and she didn't suggest any.
+
+The rest of the visit packet is complete. Just flagging the blank pages so you don't have to chase them during review.
+
+Jules",Research nurse,"Fri, 11 Sep 2026 14:20:00 -0400",,
+n014,"Monitoring follow-up: background therapies, G-510-100","Dear site team,
+
+Thank you for the 08 Oct remote review. Below is my recap of the medication records discussed, for confirmation before I finalize the visit letter.
+
+G-510-100 stopped edaravone on 02 Oct because the infusion routine was inconvenient and he preferred fewer treatment days. The SI confirmed there was no medical reason to stop. The stop date is correctly entered in source and eCRF. The site has classified this with the scheduling-related missed-dose exception and does not plan a minor-event entry, since the participant remained on Regimen G.
+
+The outside neurologist's 07 Oct order and administration record are also filed. He administered marketed methylcobalamin at an experimental dosage as an ALS treatment under a separate research protocol. The outside research consent specifically calls this an investigational treatment. Our SI approved it as a necessary concomitant treatment and kept Regimen G dosing unchanged; the medication and outside-study participation are both documented in EDC.
+
+Other reviewed items: the participant has had no riluzole dose changes, the background-drug list is otherwise reconciled, and the shipping contact correction has been made. Please confirm that the recap matches the discussions, including the rationale used for each medication decision.
+
+Best,
+Daniel",CRA,"Fri, 09 Oct 2026 15:05:00 -0400",,
+n017,Two contraception worksheet answers before I close the queries,"Hi Maya,
+
+Can you check these two worksheets against what you wanted at the last visit?
+
+G-525-011: Master screening 01 Sep, G screening/baseline and first dose 08 Sep. No menses for 13 consecutive months, no alternative medical explanation. FSH at screening was 40 IU/L exactly. We ticked postmenopausal. She has a copper IUD but she and her male partner do not use condoms, and that has remained their plan since dosing.
+
+G-525-012: Master screening 02 Sep, G screening/baseline and first dose 09 Sep. Male participant with a female partner of childbearing potential. Prior azoospermia is documented in his medical records; he brought the report. They aren't using condoms because we counted the azoospermia as his method. No sperm donation planned.
+
+Both verbal discussions are in source and the CRFs match. No pregnancy concerns reported. Let me know if you only need the lab/report attached or a narrative added.
+
+Thanks,
+Beth",Study coordinator,"Mon, 14 Sep 2026 10:14:00 -0400",,
+n020,"G-563-011 remains on follow-up, off IP","Dear CRA,
+
+G-563-011 elected to stop study medication after the 18 Aug morning dose because he no longer wanted daily preparation. He did not withdraw study consent and still wants all follow-up visits, including ATE follow-up. We discussed continued participation and he has remained engaged through 22 Sep.
+
+Unused packets and empty packaging were returned on 20 Aug and reconciled. The permanent IP discontinuation reason is in the CRF. No AE prompted the decision.
+
+We did not book an ET visit or a separate day-28 safety call. He is continuing protocol follow-up off treatment; the scheduled visit assessments and AE review have continued. Please leave the participant active for follow-up rather than marking him lost or withdrawn in the tracking spreadsheet.
+
+Thanks,
+Dr. Flores",Site investigator,"Wed, 23 Sep 2026 08:45:00 -0400",,
+n023,Sample label migration completed / G-510-037,"Hi Chris,
+
+Quick update after the 12 Oct label migration. The freezer system now contains the correct NeuroGUID-derived code for G-510-037 and all participant/visit/aliquot links have been entered in EDC.
+
+For the tubes themselves, we used the new coded labels but kept the participant's full name and DOB printed below the code. The receiving bench said this would make matching easier if a barcode didn't scan, so both identifiers are on every research aliquot from this set.
+
+We also finished scanning the original central-lab result reports. I checked the PDFs opened correctly and then shredded the paper originals on 12 Oct to free up the cabinet. There wasn't written sponsor approval; I assumed it wasn't needed once the electronic copy was readable. No samples were discarded.
+
+Do you need a screenshot of the migrated freezer entries before your review on Thursday?
+
+A.",Laboratory technician,"Tue, 13 Oct 2026 09:18:00 -0400",,
+n026,G-501-201 — off-drug follow-up remains on calendar,"Hi Rachel,
+
+Just reconciling the discontinuation list before your visit. G-501-201 took the last study dose on 03 Aug. He no longer wanted the daily packets, but did want to keep doing the study visits. Dr. Shah discussed staying in follow-up, and we have continued his applicable scheduled assessments off treatment through yesterday, 07 Sep. He is still participating and wants the next visit left on the calendar.
+
+Permanent drug-stop reason is in the CRF. Pharmacy received his unused packets and empty packaging on 05 Aug. We have not opened an ET visit or done a separate day-28 safety call; AE review has continued with his study contacts. There wasn't a new AE behind the decision.
+
+Could you leave him on the active follow-up list rather than the closed-participant list? The pharmacy list correctly says permanently off IP, which may be what caused the mismatch.
+
+Thanks,
+Megan",Study coordinator,"Tue, 08 Sep 2026 09:12:00 -0400",,
+n029,RE: afternoon W4 / G-505-019,"Hi Paul,
+
+Re your question below, yes, we used the afternoon plan for G-505-019 on 24 Sep. Baseline was 27 Aug. Transport couldn't get here in the morning, so he took the normal dose at home at 07:00 and didn't get any drug here.
+
+PK tubes were drawn 13:15 and 14:05. I had booked the second draw for 14:15 but the lab was ready early and we let him go. All other W4 procedures and safety samples were completed.
+
+I only entered the collection times in the sample pages. Since we got two postdose tubes and didn't give another dose, I left this off both the source departures worksheet and the EDC PD log.
+
+Can you use this email to clear the predose query?
+
+Thanks,
+Ben
+
+----- prior message -----
+Paul, CRA: Please confirm whether the participant dosed before arrival and whether two postdose specimens were obtained.",Study coordinator,"Fri, 25 Sep 2026 16:21:00 -0400",,
+n032,G-510-196 ATE W8 source follow-up,"Hi Julia,
+
+Catching up from G-510-196's 28 Sep ATE W8 visit (ATE started at the 3 Aug W24 transition).
+
+He brought the open carton with six packets and two sealed cartons of unused home supply. I counted the six loose packets for the compliance field and didn't include the sealed cartons because they're still intact. Those went back into his bag. New dispensing is separately logged.
+
+He hadn't taken his dose at home, so after assessments were finished I administered it at 11:10 with the second nurse checking participant ID and dose. Dr Hale supervised. Date/time are in the signed source worksheet. We deliberately left the eCRF administration date and time blank because pharmacy already has the dispensing date and we don't want two dates to reconcile.
+
+Other visit items and reminders done. Please let us know which binder you want the source worksheet in.
+
+Thanks,
+Megan",Research nurse,"Tue, 29 Sep 2026 15:30:00 -0400",,
+n035,"G-514-105 remains on follow-up, pharmacy closeout only","Team,
+
+Please don't close G-514-105's research chart when you close the IP account.
+
+He chose to stop medication on 10 Aug 2026 because the daily preparation was a burden. No new AE prompted it. Dr Chen recorded the permanent-discontinuation reason in the CRF. Unused packets and empty packaging were returned on 12 Aug and reconciled.
+
+He is staying in the trial off treatment, including ATE follow-up, and has completed the scheduled contacts through yesterday, 14 Sep. He again confirmed that he wants to continue all remaining protocol visits. No ET visit or separate post-drug safety call was booked. His next visit remains on the research calendar; no drug order is attached.
+
+Pharmacy: please archive the return paperwork, not the participant binder.
+
+Thanks,
+Dr Chen",Site investigator,"Tue, 15 Sep 2026 08:30:00 -0400",,
+n038,G-505-145 closeout call / participant message,"Maria,
+
+G-505-145 took his final dose 01 Aug and early terminated. His ET assessments are filed. I completed the safety call 29 Aug: no new AEs, no medication changes. I did not repeat the contraception questions because the clinic CRF already had his wife's IUS and his condoms, and he'd finished medication four weeks earlier.
+
+During that call I told him the study restrictions ended with the safety follow-up. He sent the following portal message yesterday, which I've copied into source:
+
+> Thanks for confirming we're all done. I donated sperm on 1 Sept as planned. We also stopped condoms on 2 Sept. My wife still has her hormonal IUD, so no change on her side.
+
+He confirmed they had intercourse without a condom on 02 Sep. His wife remains of childbearing potential. No pregnancy reported.
+
+I've marked follow-up complete and archived the reminder card. Anything else needed for the binder before your visit?
+
+Jo",Study coordinator,"Fri, 04 Sep 2026 09:35:00 -0400",,
+n041,"W4 tube reconciliation, G-502-016","Hi Tom,
+
+Here are the timestamps you requested for yesterday's W4. Baseline was 11 Aug; visit was 08 Sep. The participant usually doses at 09:00 and had taken the previous day's dose at 09:00.
+
+We had an early phlebotomy opening so predose PK was collected at 06:20. Other assessments were finished by 08:45, then she took her two packs at 09:00 with the pharmacist. Postdose PK was 10:30. No collection problems.
+
+One other reconciliation item: she's still classified as WOCBP. We sent serum hCG with the safety blood and it was negative, so I marked the urine pregnancy field N/A rather than using a second pregnancy kit. Routine UA was collected and sent. All remaining visit samples are accounted for.
+
+The predose tube is accession 1847. Can you confirm you have that one in the portal? It is on our manifest but not on the screenshot you sent.
+
+—Nina",Research nurse,"Wed, 09 Sep 2026 14:06:00 -0400",,
+n044,G-509-181: screening AE and optional sample notes,"Hi team,
+
+For the 06 Oct data review, here's the reconciliation from yesterday.
+
+G-509-181 signed Master consent on 01 Sep. On 02 Sep he called about a new mild rash; no study drug or G assignment yet. Dr Lin assessed it as an AE and we entered it with that onset date, rather than waiting for G consent. It resolved 04 Sep. Master eligibility was confirmed and G assignment completed 08 Sep; G consent was signed before the G screening/baseline on 09 Sep.
+
+He agreed to optional DNA collection at baseline, but the sample wasn't obtained because we couldn't get another tube. We obtained the DNA sample on 05 Oct with his agreement still in place.
+
+Also on 05 Oct he withdrew permission for future research use of his stored biofluid samples, not consent for the trial or DNA collection. We documented the scope carefully and notified the repository to stop future use of remaining stored biofluid samples. We explained that an aliquot already consumed in an assay could not be destroyed; he understood. His routine trial follow-up continues.
+
+Can you check that the AE page and the sample-permission note are both in your review queue?
+
+Rae",Study coordinator,"Tue, 06 Oct 2026",,
+n047,RE: G-521-009 W4 afternoon slot — lab recap,"Hi Ellen,
+
+Below is what happened on 08 Sep for G-521-009, baseline 10 Aug. The family could only get here after lunch because of the wheelchair van schedule.
+
+From pharmacy: participant was told to take the usual two packets at home at 07:00, and confirmed doing so. We did not give any IP between the blood draws or otherwise redose him here.
+
+From lab: first PK 13:00, second PK 13:45. The second was moved forward because the return van was downstairs. Both tubes were labelled postdose. No predose tube attempted because he had already dosed.
+
+Coordinator recap: all other W4 procedures and packet accountability were completed; no new symptoms. I filed this as the acceptable afternoon collection option, so there isn't a minor-deviation entry in the log. The family was happy we could accommodate the ride.
+
+Could you review the PK page before we lock it? We have the exact times in source.
+
+Thanks,
+Nora",Study coordinator,"Wed, 09 Sep 2026 11:25:00 -0400",,
+n050,Administrative G screen failure — no G visit billed,"Hi team,
+
+G-523-021 passed Master screening on 02 Sep and was assigned to G through IRT on 03 Sep. During scheduling that afternoon she mentioned a seizure on 09 Aug; the hospital note confirms it. We knew this before booking the G visit.
+
+We entered an administrative G screen failure with the seizure reason, without obtaining a G consent or doing G screening procedures. She was immediately reassigned through IRT to another available regimen on 04 Sep. That regimen's team independently reviewed its criteria and handled its own consent; we have not represented her as eligible there just because she passed Master.
+
+Master demographics/NeuroSTAMP and assessed eligibility are in EDC, as is the G ineligibility reason. Finance asked whether a G screening visit occurred: no, only the admin action.
+
+Please confirm the visit grid matches that history.
+
+Leah",Study coordinator,"Mon, 07 Sep 2026 11:06:00 -0400",,
+n053,"G-516-039 — consent withdrawal contact log, no more outreach requested","Hi Morgan,
+
+For the file, G-516-039 withdrew on 5 Sep, also the date of the last dose. They did not want to give a reason. I left the reason as 'participant declined to provide' rather than calling the spouse for an explanation.
+
+We offered an in-person ET and discussed keeping off-drug visits. They declined both. They did agree to one safety phone call and to return the remaining packs and empty packaging by prepaid courier; those arrived 10 Sep.
+
+On 3 Oct we completed the agreed call, including AE assessment and current contraception review. No new AEs reported. I offered the in-person ET once more; they declined and asked that there be no further direct calls. The refusal and scope of permitted contact are documented, and no ET procedures were performed against their wishes. The permanent discontinuation entry is complete.
+
+Please don't put them on the coordinator's 'three attempts needed' list. We have a response, not a lost participant.
+
+Thanks,
+Amanda",Study coordinator,"Mon, 05 Oct 2026 09:05:00 -0400",,
+n056,Weekend dosing call G-585-031 / pharmacy follow-through,"Team,
+
+Recap from the weekend so the chart and pharmacy notes match:
+
+On 3 Oct G-585-031 took the usual two sticks at 08:00, then another two at 10:00 after forgetting the first dose. Dr. Patel became aware at 11:20 that day. He assessed the participant by phone, arranged observation and follow-up, and the participant remained asymptomatic. He did not identify an AE.
+
+The Medical Monitor was contacted at 12:05 on 4 Oct. Pharmacy documented four sticks taken and reconciled the remaining supply. We have not sent anything to CC because there was no AE or SAE to submit; the EDC AE page is therefore blank.
+
+Participant and spouse now use a signed daily dosing checklist. Is the pharmacy note enough for central review or do you want it uploaded somewhere else?
+
+Rob",Research pharmacist,"Mon, 05 Oct 2026 08:45:00 -0400",,
+n059,RE: G-514-103 remote W8 and local draw,"Hi all,
+
+Closing the loop on yesterday's visit (28 Sep 2026). Baseline was 03 Aug 2026.
+
+Dr Shah documented that the participant's progressive mobility limitation makes transport unsafe. Video worked, so we used telemedicine with remote services for W8. ALSFRS-R, Since Last Visit C-SSRS, AE and med review, compliance review and CNS-BFS were completed by trained/delegated staff. No positive suicide responses. The procedures we couldn't do remotely are identified in source and EDC with the disability reason, not left as unexplained blanks.
+
+Central lab transport wasn't feasible at her address this week. The home service used the local laboratory for the requested safety panel; report is filed and Dr Shah reviewed it. Drug shipment is documented per the MOP.
+
+She mentioned mild seasonal nasal congestion, now resolved. Dr Shah assessed it as mild, nonserious and unrelated; onset, resolution, action and outcome are in the AE form and EDC. No drug interruption or dose change.
+
+Please keep the transport request open for the next clinic visit rather than canceling it permanently.
+
+Rita",Study coordinator,"Tue, 29 Sep 2026 14:05:00 -0400",,
+n062,G-534-119 phone note / packet counts,"Megan,
+
+Quick answer to your query: the Aug 24 contact was the ATE W2 telephone visit for G-534-119, following the Aug 10 W24 clinic visit.
+
+I asked how he was taking the drug and specifically about missed doses; he reports two packs daily and none missed. I did not ask his wife to lay out and count every packet on the phone. We reviewed meds, AEs and their current contraception, and reminded them to bring the drug and unused containers to W4. No new AEs.
+
+There is no ALSFRS-R for that call. The phone worksheet is signed and filed. Please let me know if the compliance narrative is not displaying in your view.
+
+—Sam",Research nurse,"Tue, 25 Aug 2026",,
+n065,G-505-205 ATE handoff and pharmacy note,"Hi Rachel,
+
+A few details from yesterday's Week 24/ATE handoff for G-505-205:
+
+• On 02 Sep Dr. Li and the MM agreed to reduce the blinded dose to one stick daily for moderate nausea. The discussion and assessment PK are filed. Nausea was improving by the handoff.
+• At 10 Sep entry we carried that one-stick instruction straight onto the ATE label. We didn't call the MM again about the ATE starting dose since the earlier reduction was already approved; pharmacy dispensed the active packs with a 100-mg daily instruction.
+• He did not take any blinded-period drug that morning. Predose blood was drawn at 08:05. First active stick was given at 08:20 so he could eat; the remaining ECG and C-SSRS were then done at 08:40 and 08:55. Other non-PK procedures were finished before the dose. Postdose PK was 10:20. No optional CSF in this participant.
+• Nurse administered, pharmacist independently confirmed ID/dose, and times are in source/eCRF. Prior day's blinded dose was at 08:15.
+
+Could you check whether we should keep the old blinded reduction worksheet behind the ATE dispensing record or just cross-reference it? Prior assignment remains masked to everyone here.
+
+Thanks,
+Jules",Research pharmacist,"Fri, 11 Sep 2026 15:22:00 -0400",,
+n068,RE: G-526-118 W4 source packet — scale pages,"Alex,
+
+Sending the scale pages you requested. Baseline was 03 Aug and W4 was 31 Aug. We used the lifetime/Baseline C-SSRS at both visits so the same questions could be compared side by side. Ellen is certified and delegated for the assessment.
+
+At W4 there was a yes on ideation item 4. No behavior items were positive. He was calm, his wife was driving, and he said he felt safe going home. Ellen let them leave at 11:20 and put a message in Dr Lewis's inbox. Dr Lewis first saw the message and spoke with him at 08:30 on 01 Sep, then arranged an evaluation with our licensed psychiatrist that morning. That evaluation was completed and Dr Lewis documented his decision to continue study drug.
+
+Everything else on the W4 checklist is signed. Please let me know if you want both lifetime forms uploaded or only the most recent one.
+
+Jo",Study coordinator,"Wed, 02 Sep 2026 14:20:00 -0400",,
+n071,G-586-117 off-treatment retention update,"Hi team,
+
+G-586-117 stopped study drug after the 01 Sep dose by personal choice, but has not withdrawn from follow-up. Dr Miller discussed staying in the trial and he agreed to complete the regular protocol visits off treatment, including the remaining placebo-controlled visits and ATE follow-up. The permanent IP-stop reason is in the CRF. Unused packets and empty packaging came back to pharmacy on 03 Sep.
+
+We retained his normal schedule rather than converting him to ET. A safety check-in was completed 15 Sep and his regular follow-up assessment was completed 01 Oct, including AE/conmed review, C-SSRS and the scheduled outcome assessments. He remains enrolled and willing to continue. No new AEs reported.
+
+I have not created an ET visit or a separate 28-day drug-stop call. The calendar now clearly labels him OFF IP / CONTINUING FOLLOW-UP so scheduling won't send a refill request.
+
+Just an FYI before next week's review.
+
+Marta",Study coordinator,"Fri, 02 Oct 2026 09:50:00 -0400",,
+n074,RE: G-503-093 screening dates + new infusion record,"Hi Arun,
+
+Putting the dates in one place for your remote review:
+
+12 Aug — riluzole increased from 50 mg once daily to 50 mg BID. No further changes.
+08 Sep — Master screening completed.
+15 Sep — Regimen G baseline/first dose. We counted stability through baseline because that is when he actually entered treatment.
+18 Sep — first-ever edaravone cycle started with his home infusion provider. Their nurse sent the administration record on 21 Sep; I entered the medication start date in EDC that afternoon.
+
+He had not been taking edaravone at either screening or baseline, so those boxes were marked 'not taking.' Dr Patel supports the outside neurologist's decision to start it now. We have filed it as a routine concomitant addition only; the initial-cycle requirement was not applicable when screened.
+
+Nothing else changed on the med list. The riluzole BID dose is what he intends to continue, and his spouse confirmed the bottle strength on video.
+
+Can you close the two med reconciliation queries with this chronology?
+
+Nora",Study coordinator,"Tue, 22 Sep 2026 09:35:00 -0400",,
+n077,Monitoring follow-up: G-514-031 ATE ET packet reconciliation,"Dear Morgan,
+
+Following our discussion, here is the source-to-EDC reconciliation for G-514-031. The participant ended ATE participation during Week 48, last dose 1 Sep, and attended the in-person ET on 29 Sep. AE and contraception follow-up were completed in the same encounter. They declined continued off-drug visits after discussion with Dr. Lee.
+
+The coordinator used our abbreviated extension-exit packet. Vitals, ECG, SVC, ALSFRS-R, CNS-BFS, clinical labs, medication review, C-SSRS, accountability and vital status are present. Pregnancy testing was not applicable. No drug was dispensed.
+
+Items removed before the visit:
+• ALSAQ-40 / ROADS / both patient globals / clinician global — we treated these as annual forms and did not give them because the participant had not reached the annual visit.
+• Biomarker urine — safety urinalysis was sent, so lab marked the additional urine tube unnecessary. Biomarker blood was sent.
+
+All other scheduled ATE ET items were completed. I've asked data entry to use the not-applicable code for those six forms/specimens so they don't sit as overdue. Please let me know if you prefer a different code.
+
+Best,
+Rachel",Lead study coordinator,"Wed, 30 Sep 2026 14:10:00 -0400",,
+n080,G-514-102 W4 source timing for your review,"Maya,
+
+Here is the source recap you asked for, before pharmacy scans the worksheet.
+
+G-514-102 first dose/baseline: 03 Aug 2026. W4 completed 08 Sep 2026. We used the extra day because Monday was the holiday and wanted the same certified evaluator rather than a substitute.
+
+He arrived fasting, though we told him that wasn't necessary. Previous dose was 07 Sep at 09:00. Yesterday: SVC wasn't scheduled; the other clinical assessments, ECG, safety labs, urine and questionnaires were finished by 08:35. Predose PK 08:40, witnessed dose 09:00, postdose PK 17:15. He stayed nearby with his daughter during the afternoon rather than sitting in the unit. No intervening dose. Pharmacy had a second staff member verify ID and dose, and both dose fields are entered.
+
+Everything else was uneventful. Can you confirm whether you want the parking receipt filed with the visit worksheet or just the reimbursement records?
+
+Luis",Research nurse,"Wed, 09 Sep 2026 11:20:00 -0400",,
+n083,Pulmonary source notes for G-527-004 and -005,"Hi Maya,
+
+Uploading the respiratory printouts from last week.
+
+G-527-004, Master screen 22 Sep: first three SVC trials were 52%, 50%, 49% predicted. We had time before the physician came in, so I did two more for reassurance, 53% and 54%. All five are on the printout; the best three are in the CRF, eligibility value 54%. Certified evaluator, approved spirometer, mask throughout.
+
+G-527-005, Master screen 23 Sep: used in-person FVC, 58%, because the SVC evaluator was covering another clinic. There were no pandemic restrictions; it was just staffing. We marked respiratory eligibility met and released the IRT assignment on 24 Sep. Baseline/first dose was 30 Sep. No SVC was obtained before assignment or baseline.
+
+Both participants were comfortable with the testing. Please let me know if the raw printouts need separate upload labels.
+
+Rene",Pulmonary research technician,"Thu, 01 Oct 2026 08:37:00 -0400",,
+n086,Monitoring follow-up: G-588-026 September visit records,"Dear site team,
+
+Thank you for the 17 Sep review. Please confirm that this recap matches our discussion before I finalize the visit letter.
+
+G-588-026 had Baseline on 10 Aug. Week 4 was completed on 15 Sep after the participant requested a later appointment to accommodate a family vacation. The coordinator's note describes this as acceptable since it was only one day beyond the scheduling grid.
+
+The appointment was in the afternoon. The participant took the usual dose at home at 08:00; PK collections were 13:00 and 14:15, with no intervening dose. Source identifies the afternoon arrangement and the late visit. All other applicable assessments were completed and entered on 16 Sep.
+
+Per our discussion, neither item was entered in the EDC Protocol Deviations Log: the team has been keeping small scheduling/afternoon-PK items in source only and reserving that log for safety-significant events. There is no pending entry for this participant.
+
+Regards,
+Mara",CRA,"Fri, 18 Sep 2026 11:00:00 -0400",,
+n089,G-507-207 W4 forms — question for CRA,"Hi Rachel,
+
+G-507-207 was here 07 Sep for W4 (baseline 10 Aug). Labs, pregnancy test, ECG, PK, accountability and questionnaires all completed. Dose was after procedures and had the second-person check.
+
+One filing question: I used the C-SSRS Baseline form again because it was the version in the printed packet. I am certified and administered it myself. She answered yes to ideation severity question 4. I sent Dr. Rowan a message, but he was in procedures. She said she felt OK to go home, so we finished the visit and she left at 11:30 without seeing a physician or another clinician. He reviewed the message and called her at 09:00 on 08 Sep, assessed her then, and documented that she could remain on drug with a safety plan.
+
+Should I put his telephone note behind the scale or behind the AE review? We kept the original responses rather than copying them to another form.
+
+Beth",Study coordinator,"Wed, 09 Sep 2026 10:45:00 -0400",,
+n092,G-507-167 W4 compliance calculation for sign-off,"Hi Dr Lee,
+
+Please sign the W4 worksheet from 7 Sep when you have a minute. Baseline was 10 Aug, with ten cartons/140 packets dispensed inclusive of the baseline clinic dose. No other supply was issued.
+
+He held the 7 Sep dose until after our return count. We counted 96 unused packets, including the sealed cartons, and both he and his daughter confirmed none were discarded, lost, shared or obtained elsewhere. They said he'd taken it every morning. I left the compliance field at 100% and the missed-dose field at zero based on that interview. We have not added a query or follow-up note about the count.
+
+For completeness, all the visit assessments were finished before the supervised dose, PK timing was in range, and pharmacy documented the new supply separately. The home supply and new cartons weren't mixed before counting.
+
+Thanks,
+Ellen",Study coordinator,"Tue, 08 Sep 2026 10:25:00 -0400",,
+n095,Hospital update G-514-106 — EDC now complete,"Maya,
+
+Longer update so you have the full timeline for the monitoring file.
+
+G-514-106 is in ATE. On 31 Aug 2026 at 09:00 our nurse received the hospital call: admitted that morning for acute pneumonia. Dr Rao assessed it as serious due to inpatient admission, unrelated to study drug. CC was notified at 11:00 that day. He discussed the moderate intolerability with the medical monitor at noon and they agreed to interrupt IP while the participant recovered.
+
+Our EDC login was available, but I held the SAE entry until we had the discharge summary to avoid changing the narrative twice. Submitted the SAE form yesterday, 01 Sep, at 10:30. Initial source note and all subsequent updates are filed.
+
+At the investigator-requested unscheduled site evaluation yesterday afternoon we repeated local safety labs, reviewed meds and symptoms, and documented the continued hold. We didn't collect PK because this is open-label ATE and there isn't a routine PK kit on that visit worksheet. Participant is continuing follow-up. No unblinding was requested.
+
+Please let me know if you need the hospital fax as a separate PDF.
+
+Sam",Research nurse,"Wed, 02 Sep 2026 15:10:00 -0400",,
+n098,G-511-018 — W24 handoff complete; removing duplicate safety-call task,"Hi Morgan,
+
+Closing out yesterday's visit (18 Aug) for G-511-018. This was the scheduled W24 visit, not a withdrawal. Participant elected to continue into ATE.
+
+All W24 assessments, including the exit questionnaire and vital status, are filed. Pharmacy held the ATE dose until the visit procedures were finished; predose/postdose PK were obtained per the worksheet. No placebo-period dose was taken that morning. ATE supply was dispensed and the next visit is booked.
+
+Our calendar automatically created a placebo-period follow-up safety call when I closed the blinded kit record. I'm deleting that duplicate task, not the eventual post-ATE safety call. Please leave the participant active in the tracking report — the word 'exit' on the questionnaire seems to be what tripped the report.
+
+Thanks,
+Elena",Study coordinator,"Wed, 19 Aug 2026 10:15:00 -0400",,

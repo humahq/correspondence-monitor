@@ -1,0 +1,41 @@
+id,subject,body,expect,participant
+e01,SAK-1001 randomized,"Hi Dana, SAK-1001 was randomized this morning after her baseline visit. Labs from baseline: eGFR 41, potassium 4.4, hemoglobin 12.2. Kit handed over by IDS.",eligibility,SAK-1001
+e02,Baseline labs SAK-1002,Quick note: SAK-1002 completed baseline yesterday and we randomized him today. His baseline potassium came back at 5.3 mEq/L but everything else looked fine.,eligibility,SAK-1002
+e03,SAK-1003,"SAK-1003 is randomized as of this afternoon. FYI her CBC showed Hgb 9.6, she says she has always run a bit low.",eligibility,SAK-1003
+e04,vitals at baseline,"Randomized SAK-1004 today. Seated BP at baseline was 186/88, repeat 184/90. Starting Period 1 meds tonight.",eligibility,SAK-1004
+e05,SAK-1005 enrolled,"We enrolled SAK-1005 today. He was a little soft on pressure at baseline, seated BP 96/60, but felt fine and completed the CPET.",eligibility,SAK-1005
+e06,echo result,The baseline echo for SAK-1006 read EF 42%. He was randomized this morning and started Period 1 study drug tonight.,eligibility,SAK-1006
+e07,SAK-1007 meds,"SAK-1007 randomized today. Med rec: metoprolol, furosemide, and isosorbide mononitrate 30 mg daily. His cardiologist does not want the Imdur stopped.",eligibility,SAK-1007
+e08,SAK-1008 randomized,Randomized SAK-1008. Note from med history: she was on Jardiance until about two months ago and stopped because of genital yeast infections.,eligibility,SAK-1008
+e09,AF patient,SAK-1009 is in persistent AF. Resting HR at the baseline assessment was 112. We randomized him since the rest of the workup was fine.,eligibility,SAK-1009
+e10,methemoglobin,"SAK-1010 randomized. Baseline met-Hgb was 6.1%, which the lab flagged, but the PI was ok to proceed.",eligibility,SAK-1010
+e11,orthostatics,"SAK-1011 randomized today. Orthostatics at baseline: seated 138/80, standing at 2 minutes 112/74. No symptoms.",eligibility,SAK-1011
+e12,SAK-1012 LFTs,"Randomized SAK-1012 this morning. Her ALT was 3.6x ULN on the baseline CMP, albumin 3.4.",eligibility,SAK-1012
+e13,SAK-1013,"SAK-1013 enrolled and randomized. Past history includes type 1 diabetes since childhood, on an insulin pump.",eligibility,SAK-1013
+e14,CPET result,During SAK-1014's baseline max CPET his sat dropped to 87% at peak. We randomized him the next day as planned.,eligibility,SAK-1014
+e15,SAK-1015 randomized,"SAK-1015 randomized today. Baseline: eGFR 58, K 4.5, Hgb 12.9, seated BP 134/78, met-Hgb 0.9%, EF 60%.",none,
+e16,screen fail,"SAK-1016's baseline potassium came back 5.4, so we did not randomize her. Logged as a screen failure; may rescreen after her meds are adjusted.",none,
+e17,plan,If SAK-1017's eGFR comes back under 45 next week we will not randomize him. Will update once labs are in.,none,
+v01,SAK-1018 visit 2,"SAK-1018 came in for Visit 2 today, about 9 weeks after starting Period 1 meds. He had a long trip abroad so we could not get him in earlier.",visit_schedule,SAK-1018
+v02,MRI timing,"SAK-1019 had the calf MRI (Visit 3) today, 14 days after her Visit 2 biopsy and exercise test. Scanner was booked solid.",visit_schedule,SAK-1019
+v03,Period 2 start,"SAK-1020 finished Visit 3 on Monday and IDS dispensed Period 2 meds on Friday, so only a 4 day washout. He wanted to keep things moving before his vacation.",visit_schedule,SAK-1020
+v04,visit 2 done,SAK-1021 completed Visit 2 today at 6 weeks and 2 days on Period 1 meds. Biopsy and submax test both done.,none,
+v05,1 week call,"We missed the one-week tolerability call for SAK-1022; first contact after randomization was at week 3, he said he was fine and we up-titrated then.",visit_schedule,SAK-1022
+p01,visit 4 order,"For SAK-1023's Visit 4 the biopsy room was tied up, so we did the submax exercise test first and the vastus lateralis biopsy about an hour after.",procedure_sequence,SAK-1023
+p02,SAK-1024 visit 2,SAK-1024 arrived for Visit 2 and mentioned she had her usual cup of coffee at 7am. We went ahead with the biopsy and submax test.,procedure_sequence,SAK-1024
+p03,not fasted,SAK-1025 forgot and ate breakfast (eggs and toast) before coming in for Visit 2. Biopsy and exercise done as scheduled.,procedure_sequence,SAK-1025
+p04,randomization,We randomized SAK-1026 at the end of the baseline visit so IDS could ship meds before the weekend. Baseline labs will be back Monday and we will check them then.,procedure_sequence,SAK-1026
+p05,MRI before exercise,"Scheduling: SAK-1027 had his Visit 5 MRI yesterday and the Visit 4 exercise/biopsy today, since the scanner had an opening first.",procedure_sequence,SAK-1027
+p06,INR,SAK-1028 is on warfarin; held 5 days. INR this morning was 1.8 but she had driven 2 hours so we did the biopsy anyway.,procedure_sequence,SAK-1028
+p07,antiplatelets,SAK-1029 had his Visit 2 biopsy today. Note he is on aspirin plus clopidogrel after his stent last year.,procedure_sequence,SAK-1029
+p08,platelets,SAK-1030's baseline platelets were 85k. Visit 2 biopsy was done today; we did not get a repeat count beforehand.,procedure_sequence,SAK-1030
+p09,MRI first,SAK-1031 had the Period 1 MRI on Monday and came back Thursday for the biopsy and submax test.,none,
+p10,SAK-1032 visit 6,SAK-1032 told us at Visit 6 check-in that he ran a 10k race yesterday morning. Biopsy and submax completed.,procedure_sequence,SAK-1032
+s01,biopsy yield,SAK-1033 Visit 2 biopsy only yielded about 120 mg after two passes; he did not want a third pass so we processed what we had.,sample_handling,SAK-1033
+c01,consent timing,"SAK-1034 arrived late for baseline, so we started the max CPET to stay on schedule and had him sign the consent right after the test.",consent,SAK-1034
+c02,SAK-1035 consent,SAK-1035 agreed by phone to join; we drew the baseline labs and did the echo before she came to the office to sign the form.,consent,SAK-1035
+o01,event at visit 2,"SAK-1036 felt faint at the end of the submax test, BP dropped and he was sent to the ED for observation overnight.",out_of_scope,
+o02,side effect,SAK-1037 called with a genital yeast infection; her PCP prescribed fluconazole and she has paused study drug for now.,out_of_scope,
+n01,reschedule,"Can we move SAK-1038's Visit 3 MRI from Tuesday to Thursday? Visit 2 was on Monday, so still within the window.",none,
+n02,IDS shipment,IDS confirmed the Period 2 kits for SAK-1039 and SAK-1040 arrived. Pill counts from Period 1 were 96% and 98%.,none,
+n03,question,Quick question: is the DEXA scan required at baseline or optional? Our scanner is down next week.,none,

@@ -109,9 +109,33 @@ def _one_post_per_room(study: Study, entries: list[dict]) -> list[dict]:
     return entries
 
 
-def route_item(item_id: int, *, force: bool = False, actor: str = "system") -> list[int]:
+def _entries(rconf: dict, item: dict) -> list[dict]:
+    if item["kind"] == "out_of_scope":
+        return rconf.get("out_of_scope", [])
+    if item["kind"] == "good_news":
+        return rconf.get("good_news", [])
+    return rconf.get("tiers", {}).get(item["tier"], [])
+
+
+def route_items(item_ids: list[int]) -> list[int]:
+    """One message's new problems: a single email per person and a single post, led by the most serious one.
+    Each problem stays its own item (its own tier, to-do entry and clearing)."""
+    rank = {"low": 0, "medium": 1, "immediate": 2}
+    rows = [items.get(i) for i in item_ids]
+    live = [r for r in rows if r["state"] != "suppressed" and r["counts"] and not r["routed"]]
+    for r in rows:
+        if r not in live:
+            route_item(r["id"])  # records why it is skipped
+    if not live:
+        return []
+    live.sort(key=lambda r: -rank[r["tier"]])
+    return route_item(live[0]["id"], also=[r["id"] for r in live[1:]])
+
+
+def route_item(item_id: int, *, force: bool = False, actor: str = "system", also: list[int] = ()) -> list[int]:
     item = items.get(item_id)
     study = config.study(item["study_id"])
+    others = [items.get(i) for i in also]
     if item["state"] in ("suppressed",) or (not item["counts"] and item["kind"] != "out_of_scope"):
         db.audit("routing_skipped", entity_type="item", entity_id=item_id, study_id=study.study_id,
                  reason=f"state={item['state']} counts={item['counts']}")
@@ -119,20 +143,27 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system") -> l
     if item["routed"] and not force:
         return []
     rconf = config.routing()
-    if item["kind"] == "out_of_scope":
-        entries = rconf.get("out_of_scope", [])
-    elif item["kind"] == "good_news":
-        entries = rconf.get("good_news", [])
-    else:
-        entries = rconf.get("tiers", {}).get(item["tier"], [])
-    entries = _one_post_per_room(study, entries)
+    entries = _one_post_per_room(study, _entries(rconf, item))
 
     msg = capture.message(item["last_message_id"] if force else item["first_message_id"])
-    routed_to = _routed_to(study, entries, item, msg)
+    routed_to = ", ".join(dict.fromkeys(
+        n for it in [item] + others
+        for n in _routed_to(study, _one_post_per_room(study, _entries(rconf, it)), it, msg).split(", ")))
     topic_default = "good_news" if item["kind"] == "good_news" else (item.get("pattern_class") or "*")
     created: list[int] = []
     sent_to: set[str] = set()
 
+    def context(person):
+        ctx = drafting.item_context(study, item, person, routed_to)
+        if others:
+            ctx.update(problems=drafting.bundle_problems(study, [item] + others), bundle=True)
+        return ctx
+
+    for it in others:  # their own to-do list and digest entries; the messages below carry them
+        for e in _entries(rconf, it):
+            if e["destination"] in ("clearing_list", "digest"):
+                db.audit("routed", entity_type="item", entity_id=it["id"], study_id=study.study_id,
+                         destination=e["destination"])
     for entry in entries:
         dest = entry["destination"]
         topic = entry.get("topic", topic_default)
@@ -142,12 +173,12 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system") -> l
         if dest.startswith("teams_"):
             axis = entry.get("recipient", "study_team")
             tpl = drafting.select(topic, axis, "teams", item["tier"])
-            ctx = drafting.item_context(study, item, None, routed_to)
-            _, body = drafting.render(tpl, ctx)
+            _, body = drafting.render(tpl, context(None))
             target = teams_target(study, dest)
             created.append(enqueue(
                 purpose=f"teams_{axis}", channel="teams", destination=dest, body=body, item_id=item_id,
-                template_id=tpl["id"], meta={"target": target, "thread_key": item["thread_key"]},
+                template_id=tpl["id"], meta={"target": target, "thread_key": item["thread_key"],
+                                                "item_ids": [item_id] + [it["id"] for it in others]},
                 study_id=study.study_id))
             continue
         if dest == "email":
@@ -156,10 +187,10 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system") -> l
                     continue
                 sent_to.add(addr.lower())
                 tpl = drafting.select(topic, axis, "email", item["tier"])
-                ctx = drafting.item_context(study, item, person, routed_to)
-                subject, body = drafting.render(tpl, ctx)
+                subject, body = drafting.render(tpl, context(person))
                 cc = _cc(study, entry, item, {addr.lower()})
-                meta = {"thread_key": item["thread_key"], "item_id": item_id}
+                meta = {"thread_key": item["thread_key"], "item_id": item_id,
+                        "item_ids": [item_id] + [it["id"] for it in others]}
                 if entry.get("to") == "sender" and msg.get("rfc_message_id"):
                     meta["in_reply_to"] = msg["rfc_message_id"]
                     meta["references"] = (msg.get("refs") or []) + [msg["rfc_message_id"]]
@@ -174,9 +205,11 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system") -> l
         db.audit("routing_unknown_destination", entity_type="item", entity_id=item_id,
                  study_id=study.study_id, destination=dest)
 
-    db.ex("UPDATE items SET routed=1, updated_at=? WHERE id=?", (db.now(), item_id))
-    db.audit("item_routed", entity_type="item", entity_id=item_id, study_id=study.study_id, actor=actor,
-             tier=item["tier"], routed_to=routed_to, outbox_ids=created, forced=force or None)
+    for it in [item] + others:
+        db.ex("UPDATE items SET routed=1, updated_at=? WHERE id=?", (db.now(), it["id"]))
+        db.audit("item_routed", entity_type="item", entity_id=it["id"], study_id=study.study_id, actor=actor,
+                 tier=it["tier"], routed_to=routed_to, outbox_ids=created, forced=force or None,
+                 sent_with=[x["id"] for x in [item] + others if x["id"] != it["id"]] or None)
     return created
 
 
