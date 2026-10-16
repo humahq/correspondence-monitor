@@ -146,6 +146,9 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
     entries = _one_post_per_room(study, _entries(rconf, item))
 
     msg = capture.message(item["last_message_id"] if force else item["first_message_id"])
+    if item["kind"] == "good_news" and capture.turn(msg) in ("quiet", "direct"):
+        # chat news nobody asked the bot about is not posted (a 1-on-1 chat gets its own thanks); still listed
+        entries = [e for e in entries if not e["destination"].startswith("teams_")]
     routed_to = ", ".join(dict.fromkeys(
         n for it in [item] + others
         for n in _routed_to(study, _one_post_per_room(study, _entries(rconf, it)), it, msg).split(", ")))

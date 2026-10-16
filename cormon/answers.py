@@ -467,12 +467,14 @@ def _post(study: Study, msg: dict, text: str) -> int | None:
                            study_id=study.study_id)
 
 
-def answer_message(study: Study, msg: dict, email: str, use_cache: bool = True) -> list[dict]:
-    """Answers to the questions the message asks that the documents could answer (none: an empty list)."""
-    if not guide.checker(study).get("answer_questions", True) or not (asks_something(email)
-                                                                      or HARM_WORDS.search(email or "")):
+def answer_message(study: Study, msg: dict, email: str, use_cache: bool = True,
+                   harm_only: bool = False) -> list[dict]:
+    """Answers to the questions the message asks that the documents could answer (none: an empty list).
+    harm_only: group chat not talking to the bot, where only how to report serious harm is said."""
+    if not guide.checker(study).get("answer_questions", True) or not (
+            HARM_WORDS.search(email or "") or (asks_something(email) and not harm_only)):
         return []
-    qs = find(email, use_cache)
+    qs = [q for q in find(email, use_cache) if q.get("harm") or not harm_only]
     if not qs:
         return []
     every = guide.load(study.study_id)
@@ -488,9 +490,9 @@ def answer_message(study: Study, msg: dict, email: str, use_cache: bool = True) 
     return answers
 
 
-def reply(study: Study, msg: dict, email: str, use_cache: bool = True) -> dict | None:
+def reply(study: Study, msg: dict, email: str, use_cache: bool = True, harm_only: bool = False) -> dict | None:
     """Answer the message's questions, if it asks any the documents could answer. Returns a trace, or None."""
-    answers = answer_message(study, msg, email, use_cache)
+    answers = answer_message(study, msg, email, use_cache, harm_only)
     if not answers:
         return None
     text = render(answers, save_page(study, msg, email, answers), chat=msg.get("channel") == "teams")

@@ -1153,3 +1153,86 @@ def test_the_alert_shows_earlier_messages_apart_and_no_footnote_marks():
     assert p["doc_quote"] == "Week 4 / Clinic / Day 28 ± 7"
     plain = drafting._shown({"message_quote": "Dose at 09:00 ... PK at 09:20", "doc_quote": ""})
     assert plain["message_quote"] == "Dose at 09:00 ... PK at 09:20" and plain["earlier_quotes"] == []
+
+
+def test_the_bot_speaks_in_a_group_chat_only_when_talked_to():
+    from cormon import routing
+    S = "spaces/AAQ"
+    group = lambda text, thread="t1", **h: {"channel": "teams", "visibility": "channel", "body_text": text,
+                                             "thread_key": f"teams:{S}/threads/{thread}", "headers": h}
+    assert capture.turn(group("G-1 week 4 visit done today.")) == "quiet"
+    assert capture.turn(group("@Huma bot is this ok?", _cormon_to_bot=True, _cormon_mentions=["bot@huma.ai"])) \
+        == "addressed"
+    assert capture.turn(group("Bot, is a Day 40 week 4 visit late?")) == "addressed"
+    assert capture.turn(group("Hey bot when is week 8?")) == "addressed"
+    assert capture.turn(group("Bottles arrived for the kit.")) == "quiet"
+    assert capture.turn(dict(group("thanks"), visibility="direct")) == "direct"
+    assert capture.turn({"channel": "email", "body_text": "bot, hi"}) == "email"
+    # a reply in a thread the bot started (its alert) is talking to the bot, unless it names someone else
+    oid = routing.enqueue(purpose="teams_study_team", channel="teams", destination="teams_study_channel", body="x")
+    db.ex("UPDATE outbox SET external_ref=? WHERE id=?", (f"{S}/messages/alert1.alert1", oid))
+    assert capture.turn(group("Is the window counted from baseline?", thread="alert1")) == "addressed"
+    assert capture.turn(group("@Peter can you look?", thread="alert1", _cormon_mentions=["peter@huma.ai"])) \
+        == "quiet"
+    # the bot's reply inside someone else's thread does not make that thread the bot's
+    oid = routing.enqueue(purpose="question_answer", channel="teams", destination="teams_study_channel", body="x")
+    db.ex("UPDATE outbox SET external_ref=? WHERE id=?", (f"{S}/messages/t1.reply9", oid))
+    assert capture.turn(group("Interesting, does it need the pharmacy manual?")) == "quiet"
+
+
+def test_google_chat_notes_who_a_message_mentions():
+    from cormon.channels.gchat import GoogleChatChannel
+    ch = GoogleChatChannel(session=object())
+    ch._me, ch._users = "users/1", {"users/1": "bot@huma.ai", "users/2": "peter@huma.ai"}
+    S = "spaces/AAQ"
+    msg = lambda *who: {"name": f"{S}/messages/m", "sender": {"type": "HUMAN", "name": "users/2"},
+                        "text": "hello", "createTime": "2026-10-16T20:00:00Z", "thread": {"name": f"{S}/threads/m"},
+                        "annotations": [{"type": "USER_MENTION", "userMention": {"user": u}} for u in who]}
+    to_bot = ch._to_inbound(msg({"name": "users/1", "email": "bot@huma.ai"}), study_id="x", visibility="channel")
+    assert to_bot.headers == {"_cormon_mentions": ["bot@huma.ai"], "_cormon_to_bot": True}
+    other = ch._to_inbound(msg({"name": "users/3", "email": "eliot@huma.ai"}), study_id="x", visibility="channel")
+    assert other.headers == {"_cormon_mentions": ["eliot@huma.ai"], "_cormon_to_bot": False}
+    assert ch._to_inbound(msg(), study_id="x", visibility="channel").headers == {}
+
+
+def test_a_message_to_the_bot_always_gets_a_reply(monkeypatch):
+    from cormon import pipeline
+    said = []
+    monkeypatch.setattr(pipeline, "_answer_in_chat", lambda study, msg, text, purpose="": said.append(text))
+    found = {7: {"id": 7, "kind": "finding", "state": "open", "link_token": "a"},
+             8: {"id": 8, "kind": "good_news", "state": "open", "link_token": "b"}}
+    monkeypatch.setattr(pipeline.items, "get", lambda i: found[i])
+    direct = {"visibility": "direct", "body_text": "G-1 week 4 visit done today."}
+    run = lambda msg, created=(), repeat=(), trial=True: pipeline._acknowledge(
+        None, msg, {"items_created": list(created), "items_repeat": list(repeat)}, trial) or said[-1]
+    assert run(direct, created=[7]).startswith("Thanks. I found 1 problem to check and raised it: <a href=")
+    assert "Item #7" in run(direct, repeat=[7]) and run(direct, repeat=[7]).startswith("This is already raised")
+    assert run(direct, created=[8]) == "Thanks for letting me know."
+    assert run(dict(direct, body_text="Is a Day 30 week 4 visit ok?")) == \
+        "I checked this against the protocol and found no problem."
+    assert run({"visibility": "channel", "body_text": "Bot, check G-1 week 4 done today"}) == \
+        "I checked this against the protocol and found no problem."
+    assert run(dict(direct, body_text="thanks!"), trial=False) == "Thanks for letting me know."
+
+
+def test_group_chatter_gets_only_the_serious_harm_warning(monkeypatch):
+    from cormon import answers
+    asked = []
+    qs = [{"question": answers.REPORTING_QUESTION, "participant": "G-1", "harm": True},
+          {"question": "When is the next visit?", "participant": "G-1", "harm": False}]
+    monkeypatch.setattr(answers.guide, "checker", lambda s: {})
+    monkeypatch.setattr(answers, "find", lambda text, use_cache=True: qs)
+    monkeypatch.setattr(answers.guide, "load", lambda sid: [])
+    monkeypatch.setattr(answers.reader, "view", lambda s, every: [])
+    monkeypatch.setattr(answers, "answer_one", lambda st, m, q, *a: asked.append(q["question"]) or
+                        {"question": q["question"], "serious": True})
+    monkeypatch.setattr(answers, "plain", lambda a, role, use_cache=True: "")
+    study = type("S", (), {"study_id": "x", "person_by_email": lambda self, e: None})()
+    text = "G-1 was admitted to hospital last night. When is the next visit?"
+    answers.answer_message(study, {}, text, harm_only=True)
+    assert asked == [answers.REPORTING_QUESTION]
+    asked.clear()
+    answers.answer_message(study, {}, text)
+    assert asked == [answers.REPORTING_QUESTION, "When is the next visit?"]
+    asked.clear()
+    assert answers.answer_message(study, {}, "When is G-1's next visit?", harm_only=True) == [] and not asked

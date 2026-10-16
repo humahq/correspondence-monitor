@@ -337,6 +337,27 @@ def capture(inb: Inbound) -> int | None:
     return msg_id
 
 
+_CALLED = re.compile(r"^\W*(?:(?:hey|hi|hello|ok|okay)\s+)?(?:huma\s+)?bot\b", re.I)
+
+
+def turn(msg: dict) -> str:
+    """Whether a chat message is talking to the bot: "direct" (a 1-on-1 chat), "addressed" (in a group: it
+    @mentions the bot, starts "bot, ...", or replies in a thread the bot started without @mentioning someone
+    else), "quiet" (other group chat), or "email"."""
+    if msg.get("channel") != "teams":
+        return "email"
+    if msg.get("visibility") == "direct":
+        return "direct"
+    h = msg.get("headers") or {}
+    if h.get("_cormon_to_bot") or _CALLED.match(msg.get("body_text") or ""):
+        return "addressed"
+    m = re.fullmatch(r"teams:(spaces/[^/]+)/threads/([^/]+)", msg.get("thread_key") or "")
+    if m and not h.get("_cormon_mentions") and db.q1(
+            "SELECT 1 FROM outbox WHERE channel='teams' AND external_ref=?", (f"{m[1]}/messages/{m[2]}.{m[2]}",)):
+        return "addressed"
+    return "quiet"
+
+
 def message(msg_id: int) -> dict:
     row = db.q1("SELECT * FROM messages WHERE id=?", (msg_id,))
     if row is None:

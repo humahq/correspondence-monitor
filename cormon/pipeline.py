@@ -9,7 +9,7 @@ from dateutil import parser as dtparser
 from . import (answers, capture, checks, config, db, events, guide, items, matching, reader, routing, settings,
                textutil, triage)
 from .config import Study
-from .drafting import local_time
+from .drafting import item_link, local_time
 
 SAFETY_TITLE = "Safety information received; not reviewed by this monitor (out of scope)"
 
@@ -244,14 +244,34 @@ def _target_items(msg: dict, instruction: dict) -> list[int]:
     return [one] if one is not None else []
 
 
-def _answer_in_chat(study: Study, msg: dict, text: str) -> None:
-    """A short reply in the chat thread an instruction came from, so the sender sees it was taken."""
+def _answer_in_chat(study: Study, msg: dict, text: str, purpose: str = "instruction_answer") -> None:
+    """A short reply in the chat thread a message came from, so the sender sees it was taken."""
     m = re.fullmatch(r"teams:((spaces/[^/]+)/threads/[^/]+)", msg.get("thread_key") or "")
     if msg.get("channel") != "teams" or not m:
         return
-    routing.enqueue(purpose="instruction_answer", channel="teams", destination="teams_study_channel", body=text,
+    routing.enqueue(purpose=purpose, channel="teams", destination="teams_study_channel", body=text,
                     message_id=msg["id"], study_id=study.study_id,
                     meta={"target": {"space": m.group(2), "thread": m.group(1), "key": "study_channel"}})
+
+
+def _acknowledge(study: Study, msg: dict, summary: dict, trial_related: bool) -> None:
+    """A reply when someone talks to the bot and nothing else answered them: the problems it raised, or that
+    it found none. A 1-on-1 chat always gets one; a group chat only when the bot was asked."""
+    raised = [it for it in (items.get(i) for i in summary["items_created"] + summary["items_repeat"])
+              if it and it["kind"] == "finding" and it["state"] != "suppressed"]
+    new = [it for it in raised if it["id"] in summary["items_created"]]
+    names = lambda its: ", ".join(f'<a href="{item_link(it)}">Item #{it["id"]}</a>' for it in its)
+    if new:
+        n = len(new)
+        text = f"Thanks. I found {n} problem{'s' if n > 1 else ''} to check and raised {'them' if n > 1 else 'it'}: {names(new)}."
+    elif raised:
+        text = f"This is already raised: {names(raised)}."
+    elif trial_related and (msg.get("visibility") != "direct" or answers.asks_something(msg.get("body_text"))):
+        text = "I checked this against the protocol and found no problem."
+    else:
+        text = "Thanks for letting me know."
+    _answer_in_chat(study, msg, text, purpose="chat_acknowledgement")
+    summary["acknowledged"] = text
 
 
 def _target_item(msg: dict) -> int | None:
@@ -617,15 +637,21 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
             else:
                 summary["items_repeat"].append(item_id)
 
+        turn = capture.turn(msg)
+        summary["turn"] = turn
         if reader_route and not rerun:
             try:  # an answer that fails must not stop the problems from going out
                 said = answers.reply(study, msg, f"{msg.get('subject') or ''}\n\n{msg.get('body_text') or ''}",
-                                     use_cache=use_cache)
+                                     use_cache=use_cache, harm_only=turn == "quiet")
                 if said:
                     summary["answered"] = len(said["answers"])
             except Exception as e:
+                summary["answer_failed"] = True
                 db.audit("question_answer_failed", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                          error=str(e)[:500])
+        if (turn in ("direct", "addressed") and not rerun and not summary.get("answered")
+                and not summary.get("answer_failed") and not summary.get("instruction")):
+            _acknowledge(study, msg, summary, data["trial_related"])
 
         if rerun:
             previous = db.q("SELECT id FROM items WHERE first_message_id=? AND kind='finding'", (msg_id,))

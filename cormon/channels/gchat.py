@@ -144,7 +144,13 @@ class GoogleChatChannel:
         if not text:
             return None
         thread = (m.get("thread") or {}).get("name") or m["name"]
+        named = [(a.get("userMention") or {}).get("user") or {} for a in m.get("annotations") or []
+                 if a.get("type") == "USER_MENTION"]
+        bot = lambda u: u.get("name") == self.me or (u.get("email") or "").lower() == self._users.get(self.me)
+        headers = {"_cormon_mentions": [u.get("email") or u.get("name") for u in named],
+                   "_cormon_to_bot": any(bot(u) for u in named)} if named else {}
         return Inbound(
+            headers=headers,
             channel="teams", external_id=m["name"], thread_ref=thread,
             from_addr=self._email_for(sender["name"]), from_name=sender.get("displayName") or None,
             subject=None, body_text=text, body_html=m.get("formattedText"), sent_at=m.get("createTime"),
