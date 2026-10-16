@@ -8,6 +8,8 @@ An older demo study, **MAP (NCT04098666)**, is still in the code. Its lab manual
 
 ## Testing guide (for Eliot and Peter)
 
+**New to Terminal? Use the simple step-by-step guide: [PETER_SETUP.md](PETER_SETUP.md)** (Mac, Windows and Linux).
+
 **How it's set up:** the bot runs on a small Google Cloud server that is always on (project `optical-depth-506808-t0`, server `cormon-demo`). You don't install the bot. You talk to it in Google Chat or by email. To run test sets or look inside, you type short commands in Terminal, signed in with your own huma.ai Google account.
 
 Only one copy of the bot should read the inbox and chat, so **don't start the bot on your own laptop.** Always use `./bin/cormon-cloud`.
