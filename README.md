@@ -67,7 +67,7 @@ The bot tells people by their **role** in the study. Right now the roles use Joh
 | **Low** (for example, a visit a few days outside its window) | A post in **DNL343 Study Updates**, an email to the CRA (subject "For your to-do list"), the CRA's to-do list and the daily summary. |
 | **Safety** (a death, side effects, falls, hospital visits) | Nobody is emailed. The bot records it as "safety information received; not reviewed" (it shows in the item list and daily summary). Nothing is judged. |
 | **Nothing wrong, or not about the study** | Nobody. The bot stays quiet. |
-| **A general question** ("what is the Week 4 window?") | Nobody. The bot does not answer questions (yet). |
+| **A question** ("what is the Week 4 window?", "when is G-708-002's Week 8 due?") | The bot answers the person who asked: in the same chat thread, or by email reply. See "Asking the bot a question". |
 
 **One message, one alert.** If one site message has several problems, they come together in **one** chat post and **one** email, numbered 1, 2, 3. Immediate problems are the exception: they always go out on their own.
 
@@ -110,6 +110,33 @@ Only the CRA or the sponsor lead can do this. It works in chat and by email.
 
 In chat the bot answers in the thread, for example "Done: #20 cleared, by John Huma." If it can't tell which problem you mean, it says how to name one.
 
+### Asking the bot a question
+
+Anyone can ask, in chat or by email. Example: "When is G-711-001's Week 8 visit due?"
+
+```
+Q: When is G-711-001's Week 8 visit due?
+It is due between Mon 21 Sep 2026 and Mon 05 Oct 2026.
+Protocol, SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD: "Week 8 [12] / Clinic / Day 56 ± 7"
+
+From the study documents. Please confirm with your CRA before acting on it.
+```
+
+- It answers only from the study documents, and shows the protocol's own words, found word for word.
+- If it can't find the words, it says "I could not find this in the study documents, so I won't guess."
+- If its answer has a number that is not in the documents or the patient's dates, it shows only the protocol's words.
+- Patient dates (like the window above) are worked out by code, from dates the site gave in **earlier** messages.
+- Safety questions are not judged.
+- It does not answer messages meant for a person ("can you send kits?", "are you free at 3?").
+
+### The bot remembers each patient
+
+The bot saves the dates each message gives about a patient (Baseline, first dose, visits, last dose). A later message is checked with them. Example: "G-711-001 week 4 visit done today", with Baseline given 6 weeks earlier, is caught as late. The evidence then names the earlier message, for example "(earlier message, 03 Aug 2026 10:00) baseline visit done today".
+
+- Old problems are never alerted again: a problem needs at least one fact from the new message.
+- Earlier facts are only used for day-counted windows. They are not used for hour-counted rules (a sample and an old dose) or order rules.
+- Memory started on 16 Oct 2026. Messages before that are not remembered.
+
 ### How the bot thinks (in 5 steps)
 
 1. **Reads the message.** It works out which patient, what happened, and when. It decides if it is **done**, **planned**, or **old news**.
@@ -125,7 +152,7 @@ In chat the bot answers in the thread, for example "Done: #20 cleared, by John H
 - **Safety:** no judging of side effects, deaths or hospital visits. It records the message and sends nothing.
 - **Old news:** no alert on past events that were already dealt with.
 - **Missing information:** no alert just because something wasn't mentioned.
-- **Questions:** no answers to protocol questions.
+- **Guessing:** no answer to a question without the protocol's own words behind it.
 - **Unknown study:** mail to the general address `bot+clinical@huma.ai` is never checked, because the bot never guesses the study.
 
 **Key Regimen G limits (handy for writing tests).** Baseline is Day 0.
@@ -184,7 +211,8 @@ This runs test messages through a separate practice copy of the bot on the serve
   Baseline CSF drawn 9/1, first dose 9/15.
   ```
 
-- **Many at once:** one `.csv` spreadsheet with the columns `subject`, `body`, `from` and `expect`.
+- **Many at once:** one `.csv` spreadsheet with the columns `subject`, `body`, `from`, `expect` and (optional) `date`.
+- **A patient's story over several messages:** put an empty file named `.memory` in the folder, and dates in the csv. Then the bot remembers each patient from one message to the next. Without it, every message is a fresh patient. Example: `demo/test-questions-g` (30 messages: questions, follow-ups that need memory, and chit-chat).
 
 **Expect** (optional) is what the bot *should* find, so it can be scored: `eligibility`, `visit_schedule`, `procedure_sequence`, `sample_handling`, `study_drug`, `consent`, `none` (nothing wrong) or `out_of_scope` (safety). Several are allowed, separated by commas.
 
@@ -363,7 +391,7 @@ What this sets up:
 
 ## Known limits of this build
 
-- The bot does not answer protocol questions yet.
+- Answers: the protocol words shown are always real, but the sentence above them is written by the AI. Check it against the words. A question needing a sum of its own ("days between visits") gets the protocol's numbers, not a worked total.
 - The same problem can sometimes be alerted twice; some headlines are worded loosely; some date problems arrive as "please check" when they are clear.
 - The web address is a test one (`sslip.io`); a proper Huma address needs one DNS entry.
 - The MAP lab manual is a placeholder; real lab manuals will need their own check.

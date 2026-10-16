@@ -238,6 +238,20 @@ CREATE TABLE IF NOT EXISTS notes (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS patient_facts (
+    id INTEGER PRIMARY KEY,
+    study_id TEXT NOT NULL,
+    participant_key TEXT NOT NULL,
+    participant_id TEXT NOT NULL,
+    message_id INTEGER NOT NULL,
+    sent_at TEXT,
+    dates TEXT NOT NULL,
+    events TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (study_id, participant_key, message_id)
+);
+CREATE INDEX IF NOT EXISTS patient_facts_who ON patient_facts (study_id, participant_key);
+
 CREATE TABLE IF NOT EXISTS config_versions (
     id INTEGER PRIMARY KEY,
     path TEXT NOT NULL,

@@ -6,7 +6,8 @@ import re
 
 from dateutil import parser as dtparser
 
-from . import capture, config, db, events, guide, items, matching, reader, routing, settings, textutil, triage
+from . import (answers, capture, config, db, events, guide, items, matching, reader, routing, settings, textutil,
+               triage)
 from .config import Study
 from .drafting import local_time
 
@@ -602,6 +603,16 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 routing.route_item(item_id)
             else:
                 summary["items_repeat"].append(item_id)
+
+        if reader_route and not rerun:
+            try:  # an answer that fails must not stop the problems from going out
+                said = answers.reply(study, msg, f"{msg.get('subject') or ''}\n\n{msg.get('body_text') or ''}",
+                                     use_cache=use_cache)
+                if said:
+                    summary["answered"] = len(said["answers"])
+            except Exception as e:
+                db.audit("question_answer_failed", entity_type="message", entity_id=msg_id, study_id=study.study_id,
+                         error=str(e)[:500])
 
         if rerun:
             previous = db.q("SELECT id FROM items WHERE first_message_id=? AND kind='finding'", (msg_id,))

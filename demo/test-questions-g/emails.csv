@@ -1,0 +1,31 @@
+id,date,subject,body,expect,participant
+a01,2026-08-03 10:00,G-711-001 baseline,"Hi all, baseline visit done today for G-711-001. First dose of study drug taken in clinic at 10:15. All procedures completed.",none,G-711-001
+a02,2026-08-17 11:00,G-711-001 wk2,"Week 2 phone call done today for G-711-001. No issues reported.",none,G-711-001
+a03,2026-07-06 09:30,G-711-002 baseline,"Baseline completed for G-711-002 today, first dose given at 9:40.",none,G-711-002
+a04,2026-09-01 14:00,G-711-003 extension,"G-711-003 had the Week 24 visit today and started the active treatment extension (ATE Day 0). Open-label drug dispensed.",,G-711-003
+a05,2026-09-15 15:00,G-711-001 week 4,"G-711-001 came in for the week 4 visit today. Vitals, labs and C-SSRS done.",visit_schedule,G-711-001
+a06,2026-09-16 09:00,question G-711-001,"Hi, when is G-711-001's Week 8 visit due? Want to book the room.",none,G-711-001
+a07,2026-09-17 10:00,phone visits,"What is the maximum number of days allowed between phone visits?",none,
+a08,2026-09-18 10:00,safety call timing,"How long after the last dose should the follow-up safety call happen?",none,
+a09,2026-09-21 10:00,kits,"Hi team, can you send us 4 more lab kits? We are running low. Thanks!",none,
+a10,2026-09-22 10:00,week 2 by phone?,"Can the Week 2 visit be done over the phone, or does the participant have to come in?",none,
+a11,2026-09-28 16:00,G-711-001 wk8,"G-711-001 week 8 visit done today, all good. When should we schedule Week 12?",none,G-711-001
+a12,2026-10-20 13:00,G-711-002 wk16,"G-711-002 Week 16 visit completed today. Labs drawn, ECG normal.",none,G-711-002
+a13,2026-10-21 09:00,G-711-002 wk20?,"Quick q - what is the window for G-711-002's Week 20 phone call?",none,G-711-002
+a14,2026-10-27 12:00,G-711-003 ATE wk8,"ATE week 8 visit done for G-711-003 today, no concerns.",none,G-711-003
+a15,2026-10-28 10:00,parking,"Do you know what parking validation participants get at the hospital?",none,
+a16,2026-11-10 11:00,G-711-003 ATE wk12,"G-711-003 ATE Week 12 phone visit done today.",visit_schedule,G-711-003
+a17,2026-11-11 10:00,did you get it,"Did you get my email from yesterday?",none,
+a18,2026-11-12 10:00,eligibility question,"What is the upper age limit for enrolling in Regimen G?",none,
+a19,2026-11-13 10:00,G-711-002 hospital,"G-711-002 was admitted to hospital yesterday with pneumonia. What do we need to do?",,G-711-002
+a20,2026-11-16 10:00,G-711-002 wk20,"G-711-002 week 20 phone call done today.",visit_schedule,G-711-002
+a21,2026-11-17 10:00,PK week 4,"What PK samples are needed at the Week 4 visit?",none,
+a22,2026-11-17 14:00,pregnancy test,"Is a pregnancy test needed at the Week 8 visit for women of childbearing potential?",none,
+a23,2026-11-18 10:00,G-711-003 ATE wk16,"When is G-711-003's ATE Week 16 visit due?",none,G-711-003
+a24,2026-11-18 15:00,riluzole,"Can participants keep taking riluzole while on study drug?",none,
+a25,2026-11-19 09:00,thanks,"Thanks so much for the help this week!",none,
+a26,2026-11-19 11:00,G-711-001 safety call,"When is G-711-001's follow-up safety call?",none,G-711-001
+a27,2026-11-20 10:00,G-711-002 stopping,"G-711-002 took their last dose of study drug today and is stopping treatment. When is the follow-up safety call due?",,G-711-002
+a28,2026-11-20 15:00,call?,"Hey Sam, are you around for a quick call at 3?",none,
+a29,2026-11-23 10:00,wk4 window,"What is the Week 4 visit window?",none,
+a30,2026-11-23 12:00,missed dose,"If a participant misses a dose, can they take it later the same day?",none,

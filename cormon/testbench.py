@@ -408,8 +408,15 @@ def child_main(argv: list[str]) -> None:
         sys.exit(f"no .txt, .eml, .csv or .json messages found in {args.folder}")
     _fresh_db(Path(args.seed_from))
     study = config.study(args.study) if args.study else next(iter(config.studies().values()))
-    print(f"running {len(cases)} message(s) through the sandbox (nothing is sent)\n", flush=True)
+    # cases are separate stories unless the folder says they follow one another: a reused participant id must not
+    # carry one case's dates into the next
+    story = (Path(args.folder) / ".memory").exists()
+    print(f"running {len(cases)} message(s) through the sandbox (nothing is sent)"
+          f"{'; participant memory carries over between messages' if story else ''}\n", flush=True)
+    from . import db
     for n, c in enumerate(cases, 1):
+        if not story:
+            db.ex("DELETE FROM patient_facts")
         try:
             run_case(study, c)
         except Exception as e:  # one broken case must not stop the run

@@ -942,3 +942,101 @@ def test_cleared_in_chat_works_in_the_alerts_thread_or_by_number():
     assert pipeline._target_items(new_post, {"text": "cleared #19"}) == [19]
     assert pipeline._target_items(new_post, {"text": "cleared #99"}) == []
     assert pipeline._target_items(dict(new_post, study_id="S2"), {"text": "cleared #19"}) == []
+
+
+def _two_messages_about_one_participant():
+    from cormon import memory
+    ev = lambda e, d, t="", q="": {"event": e, "date": d, "time": t, "status": "done", "quote": q or e}
+    first = {"id": 1, "sent_at": "2026-06-01T14:00:00+00:00"}
+    memory.save("S1", "G-708-002", first,
+                [{"label": "Baseline", "kind": "baseline", "date": "2026-06-01", "time": None, "visit_id": ""}],
+                [ev("baseline_visit", "2026-06-01", q="baseline done today"),
+                 ev("study_drug_dose", "2026-06-01", "09:00", q="first dose 9am")])
+    later = {"id": 3, "sent_at": "2026-11-01T14:00:00+00:00"}
+    memory.save("S1", "G708002", later, [{"label": "Week 24", "kind": "visit", "date": "2026-11-01"}], [])
+    return {"id": 2, "sent_at": "2026-09-30T14:00:00+00:00"}
+
+
+def test_earlier_messages_give_the_dates_a_new_message_counts_from():
+    from cormon import memory
+    msg = _two_messages_about_one_participant()
+    past = memory.history("S1", "g-708-002", msg)
+    assert [h["message_id"] for h in past] == [1]  # same person however the id is written; not a later message
+    assert memory.history("S2", "G-708-002", msg) == []
+    added = memory.anchor_dates(past, [{"label": "Week 16", "kind": "visit", "date": "2026-09-30"}])
+    assert [d["kind"] for d in added] == ["baseline"] and "earlier message" in added[0]["label"]
+    assert memory.anchor_dates(past, [{"label": "Baseline", "kind": "baseline", "date": "2026-06-02"}]) == []
+    as_visit = [{"label": "Baseline visit", "kind": "visit", "date": "2026-06-01", "visit_id": "g:v1-baseline"}]
+    assert memory.anchor_kind(as_visit[0]) == "baseline" and memory.anchor_dates(past, as_visit) == []
+
+
+def test_code_checks_pair_an_earlier_fact_with_a_new_one_but_never_raise_old_news():
+    from cormon import memory, reader
+    msg = _two_messages_about_one_participant()
+    past = memory.history("S1", "G-708-002", msg)
+    rules = [{"id": "a", "kind": "interval", "from_event_id": "baseline_visit", "to_event_id": "w16_visit",
+              "unit": "days", "min": 105, "max": 119},
+             {"id": "b", "kind": "interval", "from_event_id": "predose_pk", "to_event_id": "study_drug_dose",
+              "unit": "hours", "min": 0, "max": 2},
+             {"id": "c", "kind": "interval", "from_event_id": "baseline_visit", "to_event_id": "study_drug_dose",
+              "unit": "days", "min": 1, "max": 3}]
+    now = {"events": [{"event": "w16_visit", "date": "2026-09-30", "time": "", "status": "done", "quote": "wk16 done"},
+                      {"event": "predose_pk", "date": "2026-09-30", "time": "08:00", "status": "done",
+                       "quote": "predose 8am"}], "values": []}
+    bad, ok, notes = [], [], []
+    reader._with_earlier(rules, now, past, bad, ok, notes)
+    assert [d["rule"]["id"] for d in bad] == ["a"] and "121 days" in bad[0]["fact"]
+    assert bad[0]["quotes"][0].startswith("(earlier message, ") and "wk16 done" in bad[0]["quotes"]
+    assert notes and "baseline done today" in notes[0]
+    # an old dose is not this sample's dose (hours rule), and baseline-to-first-dose was checked back then
+    assert {d["rule"]["id"] for d in bad + ok} == {"a"}
+
+
+def test_answers_show_only_proven_protocol_words_and_say_so_when_none(monkeypatch):
+    from cormon import answers, memory
+    sec = {"id": "g:6.9", "kind": "section", "title": "Week 8 Visit", "number": "6.9", "path": "", "doc_id": "p",
+           "ord": 1, "topics": ["visits"], "about": "Week 8 visit",
+           "text": "Phone visits will occur every 28 days (± 3 days) after the Week 24 visit."}
+    wk8 = {"id": "g:v-w8", "kind": "visit", "title": "Week 8", "path": "SCHEDULE", "doc_id": "p", "ord": 2,
+           "topics": [], "about": "", "text": "Visit checklist: Week 8 (Clinic), window Day 56 ± 7. From: x."}
+    msg = _two_messages_about_one_participant()
+    replies = {"answer_pick": {"ids": ["g:6.9", "g:v-w8"]},
+               "answer_question": {"answerable": True, "safety": False, "quotes": [
+                   {"section_id": "g:6.9", "words": "Phone visits will occur every 28 days (± 3 days)"}],
+                   "answer": "Phone visits are every 28 days, give or take 3 days."}}
+    monkeypatch.setattr(answers.llm, "structured", lambda task, *a, **k: replies[task])
+    q = {"question": "How often are phone visits?", "participant": ""}
+    a = answers.answer_one(None, msg, q, [sec, wk8], [sec], "how often are phone visits?")
+    assert a["found"] and a["traced"] and "every 28 days (± 3 days)" in a["quotes"][0][1]
+    assert 'Protocol, ' in answers.render([a]) and answers.FOOTER in answers.render([a])
+    replies["answer_question"] = dict(replies["answer_question"], quotes=[
+        {"section_id": "g:6.9", "words": "Phone visits will occur every 19 days."}])
+    a = answers.answer_one(None, msg, q, [sec, wk8], [sec], "how often are phone visits?")
+    assert not a["found"] and "could not find this" in answers.render([a])
+    # the participant's windows are worked out by code from the Baseline an earlier message gave
+    sched = answers.schedule(memory.history("S1", "G-708-002", msg), [wk8])
+    assert sched == ["Week 8: Day 49 to Day 63 from baseline (01 Jun 2026, said in the message of "
+                     f"{memory.history('S1', 'G-708-002', msg)[0]['when']}) = Mon 20 Jul 2026 to Mon 03 Aug 2026"]
+    assert not answers._numbers_traced("Visit between 20 and 35 days", "Day 20 to Day 30")
+    assert answers._numbers_traced("Window opens 03 Aug", "Mon 3 Aug 2026")
+    assert answers.asks_something("When is her week 8 visit?") and not answers.asks_something("wk8 done 7/22.")
+
+
+def test_one_departure_worded_two_ways_on_the_same_email_words_is_one_problem():
+    from cormon.reader import same_problem
+    a = {"problem": "The Week 12 phone call was done outside the allowed visit window.", "section_id": "g:s010",
+         "email_quote": "Week 12 phone call done 9/30."}
+    b = dict(a, problem="The Week 12 Telephone Visit was done outside the protocol window.", section_id="g:6.4")
+    assert same_problem(a, b)
+    assert not same_problem(a, dict(b, problem="The Week 12 call missed the ALSFRS-R questionnaire."))
+    assert not same_problem(a, dict(b, problem="The Week 16 Telephone Visit was done outside the protocol window."))
+
+
+def test_a_visits_window_is_quoted_from_the_schedule_table_not_the_checklist():
+    from cormon import answers
+    soa = {"id": "g:s011", "kind": "section", "title": "SOA ATE", "text": "Schedule table (SOA ATE). Columns: "
+           "Week 2 / Week 26 / Phone / Day 14 ± 3 | Week 12 / Week 36 / Phone / Day 84 ± 3 | Week 120 / Clinic / x"}
+    v = {"id": "g:v2-week-12", "kind": "visit", "title": "Study Week in ATE: Week 12 = Study Week from Baseline: Week 36",
+         "text": "Visit checklist: Study Week in ATE: Week 12 = ... (Phone), window Day 84 ± 3. From: SOA ATE.\n- ECG"}
+    assert answers.schedule_cell(v, [soa]) == (soa, "Week 12 / Week 36 / Phone / Day 84 ± 3")
+    assert answers._clean('Day 84 ± 3 [g:6.4].\n"Week 12 / Phone" [g:s010]') == "Day 84 ± 3."

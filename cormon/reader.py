@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 from dateutil import parser as dtparser
 from dateutil.relativedelta import relativedelta
 
-from . import guide, ingest, llm, settings, textutil
+from . import guide, ingest, llm, memory, settings, textutil
 from .config import Study
 from .matching import Finding
 
@@ -203,7 +203,7 @@ def date_notes(dates: list[dict], sent: datetime, visits: dict[str, dict] | None
     if not pts:
         return []
     today = sent.date()
-    base = next((p["day"] for p in pts if p["kind"] == "baseline"), None)
+    base = next((p["day"] for p in pts if memory.anchor_kind(p) == "baseline"), None)
     ext = next((p["day"] for p in pts if p["kind"] == "extension_start"), None)
     dob = next((p["day"] for p in pts if p["kind"] == "date_of_birth"), None)
     last = next((p for p in pts if p["kind"] == "last_dose"), None)
@@ -212,7 +212,7 @@ def date_notes(dates: list[dict], sent: datetime, visits: dict[str, dict] | None
         if p["kind"] == "date_of_birth":
             continue
         bits = [f"{p['label']}: {p['day']:%A %d %b %Y}" + (f" {p['time']}" if p.get("time") else "")]
-        if base and p["kind"] != "baseline":
+        if base and memory.anchor_kind(p) != "baseline":
             n = (p["day"] - base).days
             bits.append(f"Day {n} counting Baseline ({base:%d %b %Y}) as Day 0, i.e. {n / 7:.1f} weeks after Baseline")
         if ext and p["day"] > ext:
@@ -841,7 +841,7 @@ def _words(s: str) -> set[str]:
     return {w for w in _norm(s).split() if len(w) > 2 and w not in _STOP}
 
 
-def same_problem(a: dict, b: dict) -> bool:
+def same_problem(a: dict, b: dict, loose: bool = True) -> bool:
     """Two findings about one departure: the same email words, or nearly the same description. Findings resting
     on different departures worked out by code are never one ("predose too early" and "postdose too soon")."""
     fa, fb = a.get("code_fact") or a.get("from_fact"), b.get("code_fact") or b.get("from_fact")
@@ -851,6 +851,10 @@ def same_problem(a: dict, b: dict) -> bool:
     if qa and qa == qb and a["section_id"] == b["section_id"]:
         return True
     pa, pb = _norm(a["problem"]), _norm(b["problem"])
+    wa, wb = _words(pa), _words(pb)
+    if (loose and qa and qa == qb and set(re.findall(r"\d+", pa)) == set(re.findall(r"\d+", pb))
+            and len(wa & wb) * 2 >= len(wa | wb)):  # same email words, same numbers, mostly the same words
+        return True
     if set(re.findall(r"\d+", pa)) != set(re.findall(r"\d+", pb)) or len(_words(pa) ^ _words(pb)) > 4:
         return False
     return SequenceMatcher(None, pa, pb).ratio() >= 0.8
@@ -1179,14 +1183,37 @@ def _attach_duties(study: Study, part: dict, said: str, notes: list[str], email:
 
 # ---------------------------------------------------------------- the whole check
 
+def _with_earlier(rules: list[dict], facts: dict, past: list[dict], bad: list[dict], ok: list[dict],
+                  notes: list[str]) -> None:
+    """Day-counted gaps between a fact from an earlier message about the participant and one from this message
+    (Week 8 counted from a Baseline given last month). Hour-counted, order and count rules are left to the
+    message alone: an old dose is not this sample's dose, and an old procedure says nothing about a new consent."""
+    from . import checks
+    old = memory.earlier_events(past, facts["events"])
+    day_rules = [r for r in rules if r["kind"] == "interval" and r["unit"] in ("days", "weeks", "months")]
+    if not old or not day_rules:
+        return
+    more_bad, more_ok = checks.evaluate(day_rules, {"events": facts["events"] + old, "values": []})
+    have = {d["fact"] for d in bad + ok}
+    new = lambda d: (d["fact"] not in have and not memory.only_earlier(d)
+                     and any(memory.is_earlier_quote(q) for q in d["quotes"]))
+    bad += [d for d in more_bad if new(d)]
+    ok += [d for d in more_ok if new(d)]
+    used = {q for d in bad + ok for q in d["quotes"] if memory.is_earlier_quote(q)}
+    notes += [f"said in an earlier message about this participant: {q}" for q in sorted(used)]
+
+
 def _code_checks(study: Study, rules: list[dict], vocab: list[dict], part: dict, email: str, sent: datetime,
-                 notes: list[str], res: dict, context: list[dict], sources: list[dict], use_cache: bool) -> dict:
+                 notes: list[str], res: dict, context: list[dict], sources: list[dict], use_cache: bool,
+                 past: list[dict] | None = None) -> dict:
     """The check list's countable rules, run by code on facts pulled from the email. A departure the AI already
     reported (same email words) only adds its fact for the confirm step; any other becomes a finding of its own.
     Rules the facts pass are handed to the confirm step too, so a wrong timing finding can be turned down."""
     from . import checks
     facts = checks.extract(study, rules, vocab, email, part["participant"] or "", sent, use_cache)
     bad, ok = checks.evaluate(rules, facts)
+    if past:
+        _with_earlier(rules, facts, past, bad, ok, notes)
     ai = [f for f in res["findings"] if f["status"] != "already_handled"]
     added = []
     cfs = [checks.finding(d) for d in bad]
@@ -1230,8 +1257,14 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
         from . import checks
         rules, vocab = checks.load(study)
         code_rules = checks.live(rules)
+    remember: dict[str, tuple[str, list, list]] = {}
     for part in scope(study, items, email, sent, use_cache):
-        notes = date_notes(part["dates"], sent, {i["id"]: i for i in items if i["kind"] == "visit"})
+        past = memory.history(study.study_id, part["participant"], msg) if part["participant"] else []
+        anchors = memory.anchor_dates(past, part["dates"])
+        notes = date_notes(part["dates"] + anchors, sent, {i["id"]: i for i in items if i["kind"] == "visit"})
+        if anchors:
+            notes.append("Dates marked 'earlier message' come from earlier messages about this participant and were "
+                         "checked then: count this message's dates from them, but do not report them again.")
         said = part["summary"] + "\n" + "\n".join(s["text"] for s in part.get("statements", []))
         start = len(out)
         med_notes, med_secs = medicine_notes(said, meds)
@@ -1255,8 +1288,14 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
             context = context + [s for s in sources if s["id"] in ids and s["id"] not in have]
         code: dict = {}
         if code_rules:
-            code = _code_checks(study, code_rules, vocab, part, email, sent, notes, res, context, sources, use_cache)
+            code = _code_checks(study, code_rules, vocab, part, email, sent, notes, res, context, sources, use_cache,
+                                past)
+        if part["participant"]:
+            k = memory.key(part["participant"])
+            _, ds, es = remember.get(k, (part["participant"], [], []))
+            remember[k] = (part["participant"], ds + part["dates"], es + (code.get("facts") or {}).get("events", []))
         pt = {"participant": part["participant"], "visits": part["visits"], "sections": part["sections"],
+              "earlier": [d["label"] for d in anchors],
               "statements": part.get("statements", []), "date_notes": notes,
               "tokens_in": sum(len(i["text"]) for i in context) // 4,
               "checks": res["checks"], "reminders": res["reminders"],
@@ -1276,7 +1315,8 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
             if f["status"] == "already_handled":
                 rec["outcome"] = "already_handled"
                 continue
-            if repeat or any(same_problem(f, k) or _same_fact(f, k) for k in kept):
+            # the loose match waits for the last pass, which keeps the surer of the two
+            if repeat or any(same_problem(f, k, loose=False) or _same_fact(f, k) for k in kept):
                 rec["outcome"] = "duplicate"
                 continue
             doubt = _window_conflict(f, notes)  # sent as "please check", not dropped: the match can pick the wrong date
@@ -1347,6 +1387,8 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
         if log:
             log(f"reader {part['participant'] or '-'}: {len(context)} sections, {pt['tokens_in']} tokens, "
                 f"{len(res['findings'])} findings")
+    for pid, ds, es in remember.values():
+        memory.save(study.study_id, pid, msg, ds, es)
     # every part reads the whole email, so two parts can report the same departure
     order = sorted(range(len(out)), key=lambda n: out[n].certainty != "clear")
     group = duplicates([meta[n][0] for n in order], use_cache) if ai_merge else {}
