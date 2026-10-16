@@ -125,8 +125,9 @@ From the study documents. Please confirm with your CRA before acting on it.
 - It answers only from the study documents, and shows the protocol's own words, found word for word.
 - If it can't find the words, it says "I could not find this in the study documents, so I won't guess."
 - If its answer has a number that is not in the documents or the patient's dates, it shows only the protocol's words.
+- Sums ("days between visits", "longest gap") are worked out by code from the protocol's numbers, and shown as "Worked out by code".
+- If the message says someone may be seriously hurt (death, hospital stay), the reply starts with "This may be a Serious Adverse Event. Contact the PI and the Medical Monitor now." and quotes the protocol's reporting rule.
 - Patient dates (like the window above) are worked out by code, from dates the site gave in **earlier** messages.
-- Safety questions are not judged.
 - It does not answer messages meant for a person ("can you send kits?", "are you free at 3?").
 
 ### The bot remembers each patient
@@ -217,6 +218,8 @@ This runs test messages through a separate practice copy of the bot on the serve
 **Expect** (optional) is what the bot *should* find, so it can be scored: `eligibility`, `visit_schedule`, `procedure_sequence`, `sample_handling`, `study_drug`, `consent`, `none` (nothing wrong) or `out_of_scope` (safety). Several are allowed, separated by commas.
 
 Then run `./bin/cormon-cloud test my-tests --study NCT05842941`.
+
+**Testing the answers to questions:** `python -m cormon.qabench make demo/qa-new/questions.json --study NCT05842941 --seed 5` writes 100 realistic questions (protocol facts, visit dates, gaps, serious events, things the documents don't cover, chit-chat). `python -m cormon.qabench run demo/qa-new/questions.json --study NCT05842941 --out /tmp/qa` answers them and has a strong model grade each one: correct, partly, wrong or refused. Use a new `--seed` for a fresh set the bot has never seen. Sets so far: `demo/qa-g` and `demo/qa-g-fresh` (86 and 87 correct of 100, Oct 16 2026).
 
 **Reading the result.** Each message shows **RIGHT** or **WRONG** and what the bot found. At the end:
 
@@ -391,7 +394,7 @@ What this sets up:
 
 ## Known limits of this build
 
-- Answers: the protocol words shown are always real, but the sentence above them is written by the AI. Check it against the words. A question needing a sum of its own ("days between visits") gets the protocol's numbers, not a worked total.
+- Answers: the protocol words shown are always real, but the sentence above them is written by the AI. Check it against the words. Known slip: for a named visit it sometimes adds a test the schedule does not list there (for example ALSFRS-R at a phone visit).
 - The same problem can sometimes be alerted twice; some headlines are worded loosely; some date problems arrive as "please check" when they are clear.
 - The web address is a test one (`sslip.io`); a proper Huma address needs one DNS entry.
 - The MAP lab manual is a placeholder; real lab manuals will need their own check.

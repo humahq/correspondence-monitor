@@ -1,0 +1,1462 @@
+[
+ {
+  "id": "doc-01",
+  "kind": "doc",
+  "message": "When should we schedule the Week 4 visit relative to Baseline, and does it need to be in person?",
+  "expect": {
+   "reply": true,
+   "answer": "The Week 4 visit must take place in person 28 + 7 days after the Baseline Visit.",
+   "must": [
+    "28 + 7 days after Baseline",
+    "In person"
+   ],
+   "source": "master:8.5"
+  }
+ },
+ {
+  "id": "doc-02",
+  "kind": "doc",
+  "message": "Pt stopped study med early and doesn't want any more ITT follow-up—what visits/calls do we need?",
+  "expect": {
+   "reply": true,
+   "answer": "An Early Termination Visit and a Follow-Up Safety Phone Call should be completed.",
+   "must": [
+    "Early Termination Visit",
+    "Follow-Up Safety Phone Call"
+   ],
+   "source": "regimen_g:s008"
+  }
+ },
+ {
+  "id": "doc-03",
+  "kind": "doc",
+  "message": "Can a caregiver help a participant complete the ROADS questionnaire, and what assistance is allowed?",
+  "expect": {
+   "reply": true,
+   "answer": "Yes. A caregiver may help transfer the participant’s responses to the form if needed, but must not help determine the answers.",
+   "must": [
+    "Yes, caregiver assistance is allowed if needed.",
+    "Only transfer the participant’s responses to the form.",
+    "Must not help determine answers."
+   ],
+   "source": "regimen_g:7.3"
+  }
+ },
+ {
+  "id": "doc-04",
+  "kind": "doc",
+  "message": "Hello, could you please confirm what reference point the clinician should use for the CGI-C and which score indicates no change? Thank you.",
+  "expect": {
+   "reply": true,
+   "answer": "The clinician should compare the patient’s condition with their condition at admission to the project, prior to study drug initiation. A score of 4 indicates no change from baseline.",
+   "must": [
+    "Compare with condition at admission, prior to study drug initiation",
+    "4 = no change from baseline"
+   ],
+   "source": "regimen_g:7.6"
+  }
+ },
+ {
+  "id": "doc-05",
+  "kind": "doc",
+  "message": "Hello, could you please confirm when a participant should be assigned to a regimen and when we should obtain their regimen-specific informed consent? Thank you.",
+  "expect": {
+   "reply": true,
+   "answer": "The participant is randomly assigned to a regimen once Master Protocol eligibility is confirmed. Regimen-specific informed consent is obtained at the scheduled Regimen-Specific Screening Visit.",
+   "must": [
+    "Random assignment after Master Protocol eligibility is confirmed",
+    "Regimen-specific consent at the scheduled Regimen-Specific Screening Visit"
+   ],
+   "source": "master:8.1"
+  }
+ },
+ {
+  "id": "doc-06",
+  "kind": "doc",
+  "message": "For phone f/u, do we still need to ask about AEs, or only at in-person visits?",
+  "expect": {
+   "reply": true,
+   "answer": "Yes, at every visit, including telephone interviews, ask whether the participant has had any problems or symptoms since their last visit to identify adverse events.",
+   "must": [
+    "Yes, including telephone interviews",
+    "Ask about problems or symptoms since the last visit"
+   ],
+   "source": "master:10.2.1"
+  }
+ },
+ {
+  "id": "doc-07",
+  "kind": "doc",
+  "message": "When should we conduct the Week 20 telephone visit, and what do we need to review or remind the participant about?",
+  "expect": {
+   "reply": true,
+   "answer": "Conduct the visit by telephone 140 ± 3 days after the Baseline Visit. Check drug compliance and reinforce its importance, remind the participant to bring unused study drug to the next visit, review concomitant medications and adverse events, and review contraceptive methods used by the participant and partner.",
+   "must": [
+    "140 ± 3 days after the Baseline Visit, by telephone",
+    "Check compliance and remind participant to bring unused study drug to the next visit",
+    "Review concomitant medications, adverse events, and participant/partner contraceptive methods"
+   ],
+   "source": "regimen_g:6.6"
+  }
+ },
+ {
+  "id": "doc-08",
+  "kind": "doc",
+  "message": "Pt’s ET visit is 30 days after last dose—can we do the safety f/u then or do we still need a separate call?",
+  "expect": {
+   "reply": true,
+   "answer": "The Follow-Up Safety Call information can be collected at the ET Visit because 30 days is within 28±3 days after the last dose. A separate Follow-Up Safety Call is not needed.",
+   "must": [
+    "ET Visit within 28±3 days after last dose",
+    "Safety call information can be collected at ET Visit",
+    "No separate Follow-Up Safety Call needed"
+   ],
+   "source": "regimen_g:6.10.13"
+  }
+ },
+ {
+  "id": "doc-09",
+  "kind": "doc",
+  "message": "Which regimen-specific assessments should we complete at a Week 16 visit conducted by telemedicine with remote services?",
+  "expect": {
+   "reply": true,
+   "answer": "Complete ALSFRS-R, CNS-BFS, ROADS, PGI-C, and PGI-S at the Week 16 remote visit.",
+   "must": [
+    "ALSFRS-R and CNS-BFS",
+    "ROADS",
+    "PGI-C and PGI-S"
+   ],
+   "source": "regimen_g:s060"
+  }
+ },
+ {
+  "id": "doc-10",
+  "kind": "doc",
+  "message": "Participant G-712-034 has used noninvasive ventilation for 23 hours a day for eight consecutive days. Does this meet the protocol definition of PAV, and which day should we record as PAV initiation?",
+  "expect": {
+   "reply": true,
+   "answer": "Yes, this meets the PAV definition: noninvasive or invasive mechanical ventilation for more than 22 hours per day for more than seven consecutive days. Record the first day of those consecutive days as the PAV initiation date.",
+   "must": [
+    "Yes, meets PAV definition",
+    "More than 22 hours/day for more than seven consecutive days",
+    "PAV initiation is the first day of the consecutive days"
+   ],
+   "source": "master:11.1"
+  }
+ },
+ {
+  "id": "doc-11",
+  "kind": "doc",
+  "message": "Dear Study Team, Could you please confirm whether the IND-holder/Sponsor may terminate an individual regimen without terminating the overall Master Protocol, and where we should look for any regimen-specific termination criteria? Thank you.",
+  "expect": {
+   "reply": true,
+   "answer": "Yes, the IND-holder/Sponsor may terminate any individual regimen or the overall Master Protocol at any time. Any regimen-specific termination criteria are detailed in the RSA or Regimen Statistical Analysis Plan.",
+   "must": [
+    "Yes, an individual regimen may be terminated",
+    "At any time",
+    "Criteria are in the RSA or Regimen Statistical Analysis Plan"
+   ],
+   "source": "master:6.5.3"
+  }
+ },
+ {
+  "id": "doc-12",
+  "kind": "doc",
+  "message": "Participant G-712-034 signed the Master Protocol consent but was deemed ineligible for the Master Protocol. What information do we need to collect?",
+  "expect": {
+   "reply": true,
+   "answer": "Collect the participant’s demographic information, including age, gender, race, and ethnicity, and the reasons for Master Protocol ineligibility.",
+   "must": [
+    "Age, gender, race, and ethnicity",
+    "Reasons for Master Protocol ineligibility"
+   ],
+   "source": "master:6.3"
+  }
+ },
+ {
+  "id": "doc-13",
+  "kind": "doc",
+  "message": "Hi, could you please confirm the timing of the Week 32 telephone visit and whether we should remind the participant to bring their investigational product to the Week 36 visit? Thank you.",
+  "expect": {
+   "reply": true,
+   "answer": "The Week 32 visit takes place by telephone 224 + 3 days after the Baseline Visit. Yes, remind the participant to bring their investigational product to the Week 36 Visit.",
+   "must": [
+    "Telephone visit 224 + 3 days after Baseline",
+    "Yes—bring investigational product to the Week 36 Visit"
+   ],
+   "source": "master:8.9-61"
+  }
+ },
+ {
+  "id": "doc-14",
+  "kind": "doc",
+  "message": "Wk 4 visit can only be in the afternoon and pt already dosed at home—what PKs do we need, and is this a deviation?",
+  "expect": {
+   "reply": true,
+   "answer": "Obtain two postdose PK blood samples at least one hour apart, with no dose administered between them. Record a minor protocol deviation.",
+   "must": [
+    "Two postdose PK samples",
+    "At least 1 hour apart with no dose in between",
+    "Record a minor protocol deviation"
+   ],
+   "source": "regimen_g:6.3"
+  }
+ },
+ {
+  "id": "doc-15",
+  "kind": "doc",
+  "message": "Participant G-712-034 was randomized within a regimen but never received the intervention. Do we still need to include them in the EDC participant log?",
+  "expect": {
+   "reply": true,
+   "answer": "Yes. The EDC must include a log of all participants randomized within a regimen, regardless of whether they received the intervention.",
+   "must": [
+    "Yes",
+    "Log all participants randomized within a regimen in EDC, even if untreated"
+   ],
+   "source": "master:6.1"
+  }
+ },
+ {
+  "id": "doc-16",
+  "kind": "doc",
+  "message": "For participant G-712-034, is CSF collection required, and should we schedule it at Week 16 or Week 24 after Baseline?",
+  "expect": {
+   "reply": true,
+   "answer": "CSF collection is optional for Regimen G and occurs at Baseline and Week 24, rather than Baseline and Week 16.",
+   "must": [
+    "CSF collection is optional",
+    "Baseline and Week 24",
+    "Not Week 16"
+   ],
+   "source": "regimen_g:8"
+  }
+ },
+ {
+  "id": "doc-17",
+  "kind": "doc",
+  "message": "Can we give the first dose of study drug before all Baseline Visit procedures are completed?",
+  "expect": {
+   "reply": true,
+   "answer": "No. Administer the first dose of study drug only after all Baseline Visit procedures are completed.",
+   "must": [
+    "No",
+    "Complete Baseline Visit procedures before the first dose"
+   ],
+   "source": "master:protocol-summary"
+  }
+ },
+ {
+  "id": "doc-18",
+  "kind": "doc",
+  "message": "A participant at our site stopped study drug early before completing the ATE. When should we schedule their Follow-Up Safety Call, and what do we need to cover?",
+  "expect": {
+   "reply": true,
+   "answer": "Schedule the Follow-Up Safety Call 28 ± 3 days after the participant’s last dose of study drug. Assess and document adverse events and review the contraceptive methods being used by the participant and their partner.",
+   "must": [
+    "28 ± 3 days after last dose",
+    "Assess and document AEs",
+    "Review participant and partner contraceptive methods"
+   ],
+   "source": "regimen_g:6.10.12"
+  }
+ },
+ {
+  "id": "doc-19",
+  "kind": "doc",
+  "message": "When should we schedule the Week 4 ATE visit, and does it need to be in person?",
+  "expect": {
+   "reply": true,
+   "answer": "The Week 4 ATE visit must take place in person 28 ± 7 days after the Week 24 visit of the placebo-controlled portion of the trial.",
+   "must": [
+    "28 ± 7 days after the placebo-controlled Week 24 visit",
+    "In person"
+   ],
+   "source": "regimen_g:6.10.2"
+  }
+ },
+ {
+  "id": "doc-20",
+  "kind": "doc",
+  "message": "Participant G-712-034 is finishing the 24-week double-blind treatment period. Will they receive active DNL343 in the extension even if they were assigned placebo, and for how long?",
+  "expect": {
+   "reply": true,
+   "answer": "Yes. All participants enter the active treatment extension and receive DNL343 200 mg orally once daily for an additional 52 to 78 weeks.",
+   "must": [
+    "Yes, all participants receive active DNL343 in the extension",
+    "200 mg orally once daily",
+    "An additional 52 to 78 weeks"
+   ],
+   "source": "regimen_g:3"
+  }
+ },
+ {
+  "id": "doc-21",
+  "kind": "doc",
+  "message": "Our participant completed a regimen 30 days ago, and the prior treatment has a known half-life of 8 days. They want to join another regimen. Can we re-screen and assign them now, or do we need to wait longer?",
+  "expect": {
+   "reply": true,
+   "answer": "You need to wait until 40 days after regimen completion before re-screening and assignment to another regimen. The required interval is 30 days or 5 known half-lives, whichever is longer.",
+   "must": [
+    "30 days or 5 half-lives, whichever is longer",
+    "Wait until 40 days after regimen completion"
+   ],
+   "source": "master:11.2.4"
+  }
+ },
+ {
+  "id": "doc-22",
+  "kind": "doc",
+  "message": "What is the primary efficacy endpoint, and through which week is it assessed?",
+  "expect": {
+   "reply": true,
+   "answer": "The primary efficacy endpoint is change from baseline through Week 24 in disease severity as measured by ALSFRS-R total score and survival.",
+   "must": [
+    "ALSFRS-R total score and survival",
+    "Baseline through Week 24"
+   ],
+   "source": "regimen_g:2.1"
+  }
+ },
+ {
+  "id": "doc-23",
+  "kind": "doc",
+  "message": "Where do we need to document assessments missed because of pandemic-related restrictions?",
+  "expect": {
+   "reply": true,
+   "answer": "Document assessments missed due to pandemic-related restrictions as such in both the source documentation and the EDC.",
+   "must": [
+    "Source documentation",
+    "EDC",
+    "Document pandemic-related restrictions as the reason"
+   ],
+   "source": "master:8.14"
+  }
+ },
+ {
+  "id": "doc-24",
+  "kind": "doc",
+  "message": "Participant G-734-018 plans to use abstinence for contraception. How long must she remain abstinent, and would calendar-based periodic abstinence qualify?",
+  "expect": {
+   "reply": true,
+   "answer": "She must refrain from heterosexual intercourse throughout the study and for 90 days after her last dose of study drug. Calendar-based periodic abstinence is not acceptable.",
+   "must": [
+    "Throughout the study",
+    "90 days after last dose of study drug",
+    "Periodic abstinence is not acceptable"
+   ],
+   "source": "regimen_g:s089"
+  }
+ },
+ {
+  "id": "doc-25",
+  "kind": "doc",
+  "message": "Participant G-712-034 wants to withdraw consent for use of their biofluid samples. Can they do this now, and can samples already used be destroyed?",
+  "expect": {
+   "reply": true,
+   "answer": "Participants may withdraw consent for use of their samples at any time. Samples that have already been used cannot be destroyed.",
+   "must": [
+    "Consent may be withdrawn at any time",
+    "Samples already used cannot be destroyed"
+   ],
+   "source": "master:9.4"
+  }
+ },
+ {
+  "id": "doc-26",
+  "kind": "doc",
+  "message": "During G-724-018's Week 12 telephone visit, what should I remind them to bring to the Week 16 visit?",
+  "expect": {
+   "reply": true,
+   "answer": "Remind the participant to bring their investigational product to the Week 16 visit.",
+   "must": [
+    "Bring investigational product",
+    "Week 16 visit"
+   ],
+   "source": "master:8.7"
+  }
+ },
+ {
+  "id": "doc-27",
+  "kind": "doc",
+  "message": "Dear Monitor, could you please confirm when coagulation testing is required for participants? Is it only at Master Protocol Screening, or do we need to repeat it? Thank you.",
+  "expect": {
+   "reply": true,
+   "answer": "Coagulation parameters (prothrombin time, INR, and activated partial thromboplastin time) are collected for all participants at Master Protocol Screening. They are collected a second time before the second lumbar puncture, as defined in the RSA.",
+   "must": [
+    "All participants at Master Protocol Screening",
+    "Repeat before the second lumbar puncture, as defined in the RSA"
+   ],
+   "source": "master:9.1.2"
+  }
+ },
+ {
+  "id": "doc-28",
+  "kind": "doc",
+  "message": "We completed a participant’s screening ECG on the study-provided device, and the tracing is ready. Who should review it, and do we need to keep a copy at the site?",
+  "expect": {
+   "reply": true,
+   "answer": "The tracing will be reviewed by a central ECG reader. Keep a copy on site as part of the source documents.",
+   "must": [
+    "Central ECG reader reviews the tracing",
+    "Keep a copy on site as source documents"
+   ],
+   "source": "master:9.1.3"
+  }
+ },
+ {
+  "id": "doc-29",
+  "kind": "doc",
+  "message": "We reached the participant for the Week 2 phone visit 14 days after Baseline. They reported having some unused study drug at home. What should we remind them to do about the medication?",
+  "expect": {
+   "reply": true,
+   "answer": "Remind the participant of the importance of drug compliance and ask them to bring any unused study drug to the next visit.",
+   "must": [
+    "Remind participant of the importance of compliance",
+    "Bring any unused study drug to the next visit"
+   ],
+   "source": "regimen_g:6.2"
+  }
+ },
+ {
+  "id": "doc-30",
+  "kind": "doc",
+  "message": "SVC: top 2 values differ by 12% after 3 trials—can we do more, and which go on the CRF?",
+  "expect": {
+   "reply": true,
+   "answer": "Yes. If variability between the highest and second-highest VC is 10% or greater after the first 3 trials, up to 5 trials may be performed; only the 3 best trials are recorded on the CRF.",
+   "must": [
+    "Additional trials allowed at variability ≥10%",
+    "Maximum 5 trials per session",
+    "Record only the 3 best trials on the CRF"
+   ],
+   "source": "master:9.2.2"
+  }
+ },
+ {
+  "id": "doc-31",
+  "kind": "doc",
+  "message": "For in-clinic dosing, can the person giving the drug also do the dose/pt ID check, or do we need a 2nd staff member?",
+  "expect": {
+   "reply": true,
+   "answer": "A different member of the study site staff must confirm the study drug dose and participant identification at the time of dosing; the person administering the drug cannot perform that check.",
+   "must": [
+    "No, the person administering cannot do the confirmation",
+    "Another site staff member confirms dose and participant ID",
+    "Confirmation occurs at the time of dosing"
+   ],
+   "source": "regimen_g:5.7"
+  }
+ },
+ {
+  "id": "doc-32",
+  "kind": "doc",
+  "message": "What is the recommended washout for sirolimus if it must be excluded because of its narrow therapeutic index?",
+  "expect": {
+   "reply": true,
+   "answer": "The recommended washout for sirolimus is 13 days.",
+   "must": [
+    "Sirolimus washout: 13 days"
+   ],
+   "source": "regimen_g:s094"
+  }
+ },
+ {
+  "id": "doc-33",
+  "kind": "doc",
+  "message": "For participant G-712-034, how often do we assess the primary endpoint, and can we do it by phone rather than on-site?",
+  "expect": {
+   "reply": true,
+   "answer": "The primary endpoint is assessed every 4 weeks for all interventions. Assessments may be performed either on-site or by phone.",
+   "must": [
+    "Every 4 weeks",
+    "Phone assessments are allowed"
+   ],
+   "source": "master:4.1"
+  }
+ },
+ {
+  "id": "doc-34",
+  "kind": "doc",
+  "message": "What temperature and access restrictions apply when storing DNL343 and placebo at our site?",
+  "expect": {
+   "reply": true,
+   "answer": "Store DNL343 and placebo at room temperature below 30°C in a secure, temperature-controlled area with access limited to authorized research site staff.",
+   "must": [
+    "Below 30°C",
+    "Secure, temperature-controlled storage",
+    "Access limited to authorized research site staff"
+   ],
+   "source": "regimen_g:5.3"
+  }
+ },
+ {
+  "id": "doc-35",
+  "kind": "doc",
+  "message": "For participant G-712-034, should we measure height again after the Master Protocol Screening Visit, or keep using the screening measurement?",
+  "expect": {
+   "reply": true,
+   "answer": "Height is measured and recorded only at the Master Protocol Screening Visit (Visit 1). Use that one-time measurement throughout the study.",
+   "must": [
+    "Height measured only at Visit 1",
+    "Use the same height measurement throughout the study"
+   ],
+   "source": "master:9.1.1"
+  }
+ },
+ {
+  "id": "doc-36",
+  "kind": "doc",
+  "message": "A participant stopped riluzole yesterday because they no longer wanted to take it, with no medical reason for stopping. How should we record this under the protocol?",
+  "expect": {
+   "reply": true,
+   "answer": "Stopping riluzole for a non-medical reason, such as participant preference, must be recorded as a minor protocol deviation.",
+   "must": [
+    "Record as a minor protocol deviation"
+   ],
+   "source": "master:5.2.2"
+  }
+ },
+ {
+  "id": "doc-37",
+  "kind": "doc",
+  "message": "Dear Study Team, could you please confirm how quickly an AE of Special Interest occurring within 24 hours of dosing must be reported to the DSMB, and when that reporting clock starts? Thank you.",
+  "expect": {
+   "reply": true,
+   "answer": "An AE of Special Interest occurring within 24 hours of dosing must be reported to the DSMB in real time, within 1 business day of CC awareness.",
+   "must": [
+    "AE of Special Interest within 24 hours of dosing",
+    "Within 1 business day of CC awareness"
+   ],
+   "source": "master:12.4"
+  }
+ },
+ {
+  "id": "doc-38",
+  "kind": "doc",
+  "message": "We closed a trial regimen and activated its EDC lock, but a site user now wants to edit data in that regimen. Should we allow the change, and what access should users have after the lock?",
+  "expect": {
+   "reply": true,
+   "answer": "No. Once the regimen lock is activated, every user has read-only access until all access is revoked following NCRI DM procedures.",
+   "must": [
+    "No modifications after the regimen lock is activated",
+    "Every user has read-only access",
+    "Access is subsequently revoked following NCRI DM procedures"
+   ],
+   "source": "master:12.2.3"
+  }
+ },
+ {
+  "id": "doc-39",
+  "kind": "doc",
+  "message": "Participant G-742-019 already provided blood for optional DNA sequencing at an earlier visit. Do we need to collect it again at the Week 36 visit?",
+  "expect": {
+   "reply": true,
+   "answer": "No. Blood for optional DNA sequencing is collected at Week 36 only if it was not done previously.",
+   "must": [
+    "No repeat DNA sequencing blood collection if done previously"
+   ],
+   "source": "master:8.10-62"
+  }
+ },
+ {
+  "id": "doc-40",
+  "kind": "doc",
+  "message": "Participant G-712-034 plans to use abstinence as his contraceptive method. How long must he refrain from heterosexual intercourse, and would periodic abstinence be acceptable?",
+  "expect": {
+   "reply": true,
+   "answer": "He must refrain from heterosexual intercourse for the entire study and for 90 days after the last dose of study drug. Periodic abstinence is not acceptable.",
+   "must": [
+    "Entire duration of the study",
+    "90 days after last dose of study drug",
+    "Periodic abstinence is not acceptable"
+   ],
+   "source": "regimen_g:s090"
+  }
+ },
+ {
+  "id": "doc-41",
+  "kind": "doc",
+  "message": "How should the SI classify an AE if an alternate etiology has been established?",
+  "expect": {
+   "reply": true,
+   "answer": "The SI should classify the AE as Not Related to the investigational product when an alternate etiology has been established.",
+   "must": [
+    "Not Related",
+    "Alternate etiology established"
+   ],
+   "source": "master:10.2.2"
+  }
+ },
+ {
+  "id": "doc-42",
+  "kind": "doc",
+  "message": "Participant G-712-034 has stopped study drug but will continue follow-up under ITT for at least 28 days. Do we need to do a Follow-Up Safety Call when they stop the drug?",
+  "expect": {
+   "reply": true,
+   "answer": "No. A Follow-Up Safety Call at study drug discontinuation is not required as long as the participant is followed under the ITT principle for a minimum of 28 days.",
+   "must": [
+    "No Follow-Up Safety Call required",
+    "ITT follow-up for at least 28 days"
+   ],
+   "source": "master:6.5.1"
+  }
+ },
+ {
+  "id": "doc-43",
+  "kind": "doc",
+  "message": "For participant G-712-034, what is the total planned time in Regimen G, including screening and safety follow-up?",
+  "expect": {
+   "reply": true,
+   "answer": "The total planned duration is approximately 86 to 112 weeks, including a 6-week screening window, 24-week placebo-controlled treatment period, 52- to 78-week ATE period, and 4-week safety follow-up period.",
+   "must": [
+    "Minimum approximately 86 weeks",
+    "Maximum approximately 112 weeks",
+    "Includes screening and safety follow-up"
+   ],
+   "source": "regimen_g:s009"
+  }
+ },
+ {
+  "id": "doc-44",
+  "kind": "doc",
+  "message": "Quick check—how many pkts are in a carton, and how many pkts per dose?",
+  "expect": {
+   "reply": true,
+   "answer": "Each carton contains 14 packets, divided into 7 doses of 2 packets each.",
+   "must": [
+    "14 packets per carton",
+    "7 doses per carton",
+    "2 packets per dose"
+   ],
+   "source": "regimen_g:5.2"
+  }
+ },
+ {
+  "id": "doc-45",
+  "kind": "doc",
+  "message": "We found an incorrect entry in a participant’s paper source document, and it hasn’t been corrected yet. How should we correct it?",
+  "expect": {
+   "reply": true,
+   "answer": "Cross out the original entry with a single line, then initial and date the change, using dark ink. Do not erase, overwrite, or use correction fluid or tape on the original.",
+   "must": [
+    "Cross out the original entry with a single line",
+    "Initial and date the change",
+    "Do not erase, overwrite, or use correction fluid or tape"
+   ],
+   "source": "master:12.6"
+  }
+ },
+ {
+  "id": "doc-46",
+  "kind": "doc",
+  "message": "We identified a protocol deviation at our site today. Where do we need to document it, and what follow-up actions should we take?",
+  "expect": {
+   "reply": true,
+   "answer": "Record the deviation in the participant’s source documentation and enter it in the Protocol Deviations Log in EDC, and report it to the sIRB per its guidelines. The site must develop corrective and preventative actions, with review by the Coordination Center and Study Monitors, and implement them promptly.",
+   "must": [
+    "Record in participant source documentation and the EDC Protocol Deviations Log",
+    "Report to the sIRB per its guidelines",
+    "Develop corrective and preventative actions with CC and Study Monitor review; implement promptly"
+   ],
+   "source": "master:8.13"
+  }
+ },
+ {
+  "id": "doc-47",
+  "kind": "doc",
+  "message": "A staff member assigned to participant G-712-034 has been debarred. Can we keep using this person for study tasks?",
+  "expect": {
+   "reply": true,
+   "answer": "No. The study will not use the services of study personnel where sanctions have been invoked, including debarment.",
+   "must": [
+    "No",
+    "Debarred personnel cannot be used for study services"
+   ],
+   "source": "master:1.2"
+  }
+ },
+ {
+  "id": "doc-48",
+  "kind": "doc",
+  "message": "Quick q—can we do the ALSFRS-R by phone, and does the rater need NEALS cert?",
+  "expect": {
+   "reply": true,
+   "answer": "Yes, the ALSFRS-R can be administered by phone. All ALSFRS-R evaluators must be NEALS certified.",
+   "must": [
+    "Yes, phone administration is allowed",
+    "All evaluators must be NEALS certified"
+   ],
+   "source": "master:9.2.1"
+  }
+ },
+ {
+  "id": "schedule-01",
+  "kind": "schedule",
+  "message": "When is G-900-001's ATE Week 24 due?",
+  "expect": {
+   "reply": true,
+   "answer": "ATE Week 24 is due from 04 Feb 2027 to 10 Feb 2027 (Day 165 to 171 from extension start 23 Aug 2026).",
+   "must": [
+    "04 Feb 2027",
+    "10 Feb 2027"
+   ]
+  },
+  "participant": "G-900-001",
+  "setup": [
+   {
+    "label": "ATE Day 0",
+    "kind": "extension_start",
+    "date": "2026-08-23",
+    "time": null,
+    "visit_id": ""
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-02",
+  "kind": "schedule",
+  "message": "what dates can we book ATE Week 40 for G-901-001?",
+  "expect": {
+   "reply": true,
+   "answer": "ATE Week 40 is due from 06 Dec 2026 to 03 Jan 2027 (Day 266 to 294 from extension start 15 Mar 2026).",
+   "must": [
+    "06 Dec 2026",
+    "03 Jan 2027"
+   ]
+  },
+  "participant": "G-901-001",
+  "setup": [
+   {
+    "label": "ATE Day 0",
+    "kind": "extension_start",
+    "date": "2026-03-15",
+    "time": null,
+    "visit_id": ""
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-03",
+  "kind": "schedule",
+  "message": "G-902-001 - window for ATE Week 2?",
+  "expect": {
+   "reply": true,
+   "answer": "ATE Week 2 is due from 21 Oct 2026 to 27 Oct 2026 (Day 11 to 17 from extension start 10 Oct 2026).",
+   "must": [
+    "21 Oct 2026",
+    "27 Oct 2026"
+   ]
+  },
+  "participant": "G-902-001",
+  "setup": [
+   {
+    "label": "ATE Day 0",
+    "kind": "extension_start",
+    "date": "2026-10-10",
+    "time": null,
+    "visit_id": ""
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-04",
+  "kind": "schedule",
+  "message": "Hi, when should G-903-001 come in for ATE Follow-Up Safety Call?",
+  "expect": {
+   "reply": true,
+   "answer": "ATE Follow-Up Safety Call is due from 22 Oct 2026 to 28 Oct 2026 (Day 25 to 31 from last dose 27 Sep 2026).",
+   "must": [
+    "22 Oct 2026",
+    "28 Oct 2026"
+   ]
+  },
+  "participant": "G-903-001",
+  "setup": [
+   {
+    "label": "Last dose of study drug",
+    "kind": "last_dose",
+    "date": "2026-09-27",
+    "time": null,
+    "visit_id": ""
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-05",
+  "kind": "schedule",
+  "message": "When does the ATE Week 28 window open and close for G-904-001?",
+  "expect": {
+   "reply": true,
+   "answer": "ATE Week 28 is due from 08 Apr 2027 to 06 May 2027 (Day 182 to 210 from extension start 08 Oct 2026).",
+   "must": [
+    "08 Apr 2027",
+    "06 May 2027"
+   ]
+  },
+  "participant": "G-904-001",
+  "setup": [
+   {
+    "label": "ATE Day 0",
+    "kind": "extension_start",
+    "date": "2026-10-08",
+    "time": null,
+    "visit_id": ""
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-06",
+  "kind": "schedule",
+  "message": "When is G-905-001's Week 8 due?",
+  "expect": {
+   "reply": true,
+   "answer": "Week 8 is due from 24 Nov 2026 to 08 Dec 2026 (Day 49 to 63 from baseline 06 Oct 2026).",
+   "must": [
+    "24 Nov 2026",
+    "08 Dec 2026"
+   ]
+  },
+  "participant": "G-905-001",
+  "setup": [
+   {
+    "label": "Baseline visit",
+    "kind": "visit",
+    "date": "2026-10-06",
+    "time": null,
+    "visit_id": "regimen_g:v1-baseline"
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-07",
+  "kind": "schedule",
+  "message": "what dates can we book Week 24 or ET Visit for G-906-001?",
+  "expect": {
+   "reply": true,
+   "answer": "Week 24 or ET Visit is due from 21 Mar 2027 to 04 Apr 2027 (Day 161 to 175 from baseline 11 Oct 2026).",
+   "must": [
+    "21 Mar 2027",
+    "04 Apr 2027"
+   ]
+  },
+  "participant": "G-906-001",
+  "setup": [
+   {
+    "label": "Baseline visit",
+    "kind": "visit",
+    "date": "2026-10-11",
+    "time": null,
+    "visit_id": "regimen_g:v1-baseline"
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-08",
+  "kind": "schedule",
+  "message": "G-907-001 - window for ATE Week 12?",
+  "expect": {
+   "reply": true,
+   "answer": "ATE Week 12 is due from 04 Nov 2026 to 10 Nov 2026 (Day 81 to 87 from extension start 15 Aug 2026).",
+   "must": [
+    "04 Nov 2026",
+    "10 Nov 2026"
+   ]
+  },
+  "participant": "G-907-001",
+  "setup": [
+   {
+    "label": "ATE Day 0",
+    "kind": "extension_start",
+    "date": "2026-08-15",
+    "time": null,
+    "visit_id": ""
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-09",
+  "kind": "schedule",
+  "message": "Hi, when should G-908-001 come in for Follow-Up Safety Call?",
+  "expect": {
+   "reply": true,
+   "answer": "Follow-Up Safety Call is due from 19 Oct 2026 to 25 Oct 2026 (Day 25 to 31 from last dose 24 Sep 2026).",
+   "must": [
+    "19 Oct 2026",
+    "25 Oct 2026"
+   ]
+  },
+  "participant": "G-908-001",
+  "setup": [
+   {
+    "label": "Last dose of study drug",
+    "kind": "last_dose",
+    "date": "2026-09-24",
+    "time": null,
+    "visit_id": ""
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-10",
+  "kind": "schedule",
+  "message": "When does the Week 4 window open and close for G-909-001?",
+  "expect": {
+   "reply": true,
+   "answer": "Week 4 is due from 19 Oct 2026 to 02 Nov 2026 (Day 21 to 35 from baseline 28 Sep 2026).",
+   "must": [
+    "19 Oct 2026",
+    "02 Nov 2026"
+   ]
+  },
+  "participant": "G-909-001",
+  "setup": [
+   {
+    "label": "Baseline visit",
+    "kind": "visit",
+    "date": "2026-09-28",
+    "time": null,
+    "visit_id": "regimen_g:v1-baseline"
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-11",
+  "kind": "schedule",
+  "message": "When is G-910-001's Week 16 due?",
+  "expect": {
+   "reply": true,
+   "answer": "Week 16 is due from 14 Jan 2027 to 28 Jan 2027 (Day 105 to 119 from baseline 01 Oct 2026).",
+   "must": [
+    "14 Jan 2027",
+    "28 Jan 2027"
+   ]
+  },
+  "participant": "G-910-001",
+  "setup": [
+   {
+    "label": "Baseline visit",
+    "kind": "visit",
+    "date": "2026-10-01",
+    "time": null,
+    "visit_id": "regimen_g:v1-baseline"
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-12",
+  "kind": "schedule",
+  "message": "what dates can we book ATE Week 8 for G-911-001?",
+  "expect": {
+   "reply": true,
+   "answer": "ATE Week 8 is due from 21 Oct 2026 to 04 Nov 2026 (Day 49 to 63 from extension start 02 Sep 2026).",
+   "must": [
+    "21 Oct 2026",
+    "04 Nov 2026"
+   ]
+  },
+  "participant": "G-911-001",
+  "setup": [
+   {
+    "label": "ATE Day 0",
+    "kind": "extension_start",
+    "date": "2026-09-02",
+    "time": null,
+    "visit_id": ""
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-13",
+  "kind": "schedule",
+  "message": "G-912-001 - window for ATE Week 20?",
+  "expect": {
+   "reply": true,
+   "answer": "ATE Week 20 is due from 06 Jan 2027 to 12 Jan 2027 (Day 137 to 143 from extension start 22 Aug 2026).",
+   "must": [
+    "06 Jan 2027",
+    "12 Jan 2027"
+   ]
+  },
+  "participant": "G-912-001",
+  "setup": [
+   {
+    "label": "ATE Day 0",
+    "kind": "extension_start",
+    "date": "2026-08-22",
+    "time": null,
+    "visit_id": ""
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "schedule-14",
+  "kind": "schedule",
+  "message": "Hi, when should G-913-001 come in for Week 2?",
+  "expect": {
+   "reply": true,
+   "answer": "Week 2 is due from 21 Oct 2026 to 27 Oct 2026 (Day 11 to 17 from baseline 10 Oct 2026).",
+   "must": [
+    "21 Oct 2026",
+    "27 Oct 2026"
+   ]
+  },
+  "participant": "G-913-001",
+  "setup": [
+   {
+    "label": "Baseline visit",
+    "kind": "visit",
+    "date": "2026-10-10",
+    "time": null,
+    "visit_id": "regimen_g:v1-baseline"
+   }
+  ],
+  "sent": "2026-10-16T14:00:00+00:00"
+ },
+ {
+  "id": "gap-01",
+  "kind": "gap",
+  "message": "how long between Baseline and Week 12?",
+  "expect": {
+   "reply": true,
+   "answer": "84 days between the target days (Day 0 to Day 84); 81 to 87 days within the visit windows.",
+   "must": [
+    "84"
+   ]
+  }
+ },
+ {
+  "id": "gap-02",
+  "kind": "gap",
+  "message": "How many days are there between the Week 8 and Week 16 visits?",
+  "expect": {
+   "reply": true,
+   "answer": "56 days between the target days (Day 56 to Day 112); 42 to 70 days within the visit windows.",
+   "must": [
+    "56"
+   ]
+  }
+ },
+ {
+  "id": "gap-03",
+  "kind": "gap",
+  "message": "How many days are there between the Baseline and Week 4 visits?",
+  "expect": {
+   "reply": true,
+   "answer": "28 days between the target days (Day 0 to Day 28); 21 to 35 days within the visit windows.",
+   "must": [
+    "28"
+   ]
+  }
+ },
+ {
+  "id": "gap-04",
+  "kind": "gap",
+  "message": "how long between Week 12 and Week 24 or ET Visit?",
+  "expect": {
+   "reply": true,
+   "answer": "84 days between the target days (Day 84 to Day 168); 74 to 94 days within the visit windows.",
+   "must": [
+    "84"
+   ]
+  }
+ },
+ {
+  "id": "gap-05",
+  "kind": "gap",
+  "message": "What's the planned gap in days from Week 4 to Week 24 or ET Visit?",
+  "expect": {
+   "reply": true,
+   "answer": "140 days between the target days (Day 28 to Day 168); 126 to 154 days within the visit windows.",
+   "must": [
+    "140"
+   ]
+  }
+ },
+ {
+  "id": "gap-06",
+  "kind": "gap",
+  "message": "What's the planned gap in days from Week 2 to Week 8?",
+  "expect": {
+   "reply": true,
+   "answer": "42 days between the target days (Day 14 to Day 56); 32 to 52 days within the visit windows.",
+   "must": [
+    "42"
+   ]
+  }
+ },
+ {
+  "id": "gap-07",
+  "kind": "gap",
+  "message": "What's the planned gap in days from Week 8 to Week 24 or ET Visit?",
+  "expect": {
+   "reply": true,
+   "answer": "112 days between the target days (Day 56 to Day 168); 98 to 126 days within the visit windows.",
+   "must": [
+    "112"
+   ]
+  }
+ },
+ {
+  "id": "gap-08",
+  "kind": "gap",
+  "message": "how long between Week 8 and Week 20?",
+  "expect": {
+   "reply": true,
+   "answer": "84 days between the target days (Day 56 to Day 140); 74 to 94 days within the visit windows.",
+   "must": [
+    "84"
+   ]
+  }
+ },
+ {
+  "id": "gap-09",
+  "kind": "gap",
+  "message": "What is the maximum number of days between phone visits according to the protocol?",
+  "expect": {
+   "reply": true,
+   "answer": "The protocol does not state a maximum; the phone visits are on Days 14, 84, 140, so the longest gap is 70 days.",
+   "must": [
+    "70"
+   ]
+  }
+ },
+ {
+  "id": "gap-10",
+  "kind": "gap",
+  "message": "longest gap between two phone calls in the placebo period?",
+  "expect": {
+   "reply": true,
+   "answer": "The protocol does not state a maximum; the phone visits are on Days 14, 84, 140, so the longest gap is 70 days.",
+   "must": [
+    "70"
+   ]
+  }
+ },
+ {
+  "id": "serious-01",
+  "kind": "serious",
+  "message": "Hi, participant G-742-018 was admitted overnight with acute pancreatitis and is still receiving IV fluids. We are submitting the initial SAE report now. Should the scheduled day-15 PK draw be recorded as missed if they remain in hospital?",
+  "expect": {
+   "reply": true,
+   "answer": "This may be a serious adverse event: contact the PI and the medical monitor now, and report it as the protocol requires (within 24 hours).",
+   "must": [
+    "PI",
+    "medical monitor",
+    "24 hours"
+   ],
+   "serious": true
+  }
+ },
+ {
+  "id": "serious-02",
+  "kind": "serious",
+  "message": "Participant G-715-063 died at home yesterday; the cause has not yet been confirmed. The investigator has been notified, and we have requested the available records. Who should receive the follow-up death certificate once we obtain it?",
+  "expect": {
+   "reply": true,
+   "answer": "This may be a serious adverse event: contact the PI and the medical monitor now, and report it as the protocol requires (within 24 hours).",
+   "must": [
+    "PI",
+    "medical monitor",
+    "24 hours"
+   ],
+   "serious": true
+  }
+ },
+ {
+  "id": "serious-03",
+  "kind": "serious",
+  "message": "Quick heads-up: G-786-024 had an anaphylactic reaction requiring epinephrine and emergency airway support this morning. The treating team considered it life-threatening. The PI has held study treatment pending review. Is there a separate form for documenting that interruption?",
+  "expect": {
+   "reply": true,
+   "answer": "This may be a serious adverse event: contact the PI and the medical monitor now, and report it as the protocol requires (within 24 hours).",
+   "must": [
+    "PI",
+    "medical monitor",
+    "24 hours"
+   ],
+   "serious": true
+  }
+ },
+ {
+  "id": "serious-04",
+  "kind": "serious",
+  "message": "We learned today that G-731-087 has persistent loss of vision following a retinal artery occlusion. The ophthalmologist describes the impairment as permanent and substantially limiting daily activities. Can you confirm which supporting records should accompany the SAE follow-up?",
+  "expect": {
+   "reply": true,
+   "answer": "This may be a serious adverse event: contact the PI and the medical monitor now, and report it as the protocol requires (within 24 hours).",
+   "must": [
+    "PI",
+    "medical monitor",
+    "24 hours"
+   ],
+   "serious": true
+  }
+ },
+ {
+  "id": "serious-05",
+  "kind": "serious",
+  "message": "The infant born to participant G-768-041 was diagnosed with a congenital ventricular septal defect after delivery. We are collecting the pediatric cardiology report for the safety submission. Should the pregnancy outcome form and congenital anomaly report be linked in the portal?",
+  "expect": {
+   "reply": true,
+   "answer": "This may be a serious adverse event: contact the PI and the medical monitor now, and report it as the protocol requires (within 24 hours).",
+   "must": [
+    "PI",
+    "medical monitor",
+    "24 hours"
+   ],
+   "serious": true
+  }
+ },
+ {
+  "id": "serious-06",
+  "kind": "serious",
+  "message": "G-704-096 was treated in the ED for severe hypoglycemia with a seizure. They were discharged after observation, but the investigator considers this an important medical event because urgent intervention was needed to prevent serious harm. Can next week's routine visit be done remotely?",
+  "expect": {
+   "reply": true,
+   "answer": "This may be a serious adverse event: contact the PI and the medical monitor now, and report it as the protocol requires (within 24 hours).",
+   "must": [
+    "PI",
+    "medical monitor",
+    "24 hours"
+   ],
+   "serious": true
+  }
+ },
+ {
+  "id": "serious-07",
+  "kind": "serious",
+  "message": "Hi—G-759-032 is in hospital with a pulmonary embolism confirmed on CT. They're stable on anticoagulation, and the SAE entry is underway. For the unused study tablets, should we arrange a courier return or wait until the participant can attend?",
+  "expect": {
+   "reply": true,
+   "answer": "This may be a serious adverse event: contact the PI and the medical monitor now, and report it as the protocol requires (within 24 hours).",
+   "must": [
+    "PI",
+    "medical monitor",
+    "24 hours"
+   ],
+   "serious": true
+  }
+ },
+ {
+  "id": "serious-08",
+  "kind": "serious",
+  "message": "Participant G-793-055 developed acute liver failure and was transferred to intensive care for transplant evaluation. This has been assessed as life-threatening, and study drug has been stopped by the PI. Our safety portal is unavailable; which approved backup reporting route should we use?",
+  "expect": {
+   "reply": true,
+   "answer": "This may be a serious adverse event: contact the PI and the medical monitor now, and report it as the protocol requires (within 24 hours).",
+   "must": [
+    "PI",
+    "medical monitor",
+    "24 hours"
+   ],
+   "serious": true
+  }
+ },
+ {
+  "id": "serious-09",
+  "kind": "serious",
+  "message": "G-726-079 was hospitalized after a fall resulting in a displaced hip fracture and underwent surgery yesterday. We have the admission note but not the operative report yet. Should we send the initial SAE packet with the records currently available and add the operative report as follow-up?",
+  "expect": {
+   "reply": true,
+   "answer": "This may be a serious adverse event: contact the PI and the medical monitor now, and report it as the protocol requires (within 24 hours).",
+   "must": [
+    "PI",
+    "medical monitor",
+    "24 hours"
+   ],
+   "serious": true
+  }
+ },
+ {
+  "id": "serious-10",
+  "kind": "serious",
+  "message": "Reporting an important medical event for G-781-006: symptomatic complete heart block required urgent temporary pacing, followed by permanent pacemaker placement. The participant is now stable; the investigator's relatedness assessment is pending. Could you clarify how to document the missing wearable-device data from the treatment period?",
+  "expect": {
+   "reply": true,
+   "answer": "This may be a serious adverse event: contact the PI and the medical monitor now, and report it as the protocol requires (within 24 hours).",
+   "must": [
+    "PI",
+    "medical monitor",
+    "24 hours"
+   ],
+   "serious": true
+  }
+ },
+ {
+  "id": "absent-01",
+  "kind": "absent",
+  "message": "Who should our finance office contact about the site’s unpaid startup invoice, and what supporting documents do they need?",
+  "expect": {
+   "reply": true,
+   "answer": "The study documents do not answer this.",
+   "must": []
+  }
+ },
+ {
+  "id": "absent-02",
+  "kind": "absent",
+  "message": "Can we reserve a parking space for your monitoring visit, or will you need instructions for the hospital’s visitor garage?",
+  "expect": {
+   "reply": true,
+   "answer": "The study documents do not answer this.",
+   "must": []
+  }
+ },
+ {
+  "id": "absent-03",
+  "kind": "absent",
+  "message": "Our hospital requires outside visitors to complete an online orientation before entering research areas—where should we send your invitation?",
+  "expect": {
+   "reply": true,
+   "answer": "The study documents do not answer this.",
+   "must": []
+  }
+ },
+ {
+  "id": "absent-04",
+  "kind": "absent",
+  "message": "Who can help reset our study coordinator’s sponsor-portal account after the multifactor authentication app was moved to a new phone?",
+  "expect": {
+   "reply": true,
+   "answer": "The study documents do not answer this.",
+   "must": []
+  }
+ },
+ {
+  "id": "absent-05",
+  "kind": "absent",
+  "message": "Would the sponsor reimburse temporary coordinator coverage while our lead coordinator is on parental leave, and who approves that request?",
+  "expect": {
+   "reply": true,
+   "answer": "The study documents do not answer this.",
+   "must": []
+  }
+ },
+ {
+  "id": "absent-06",
+  "kind": "absent",
+  "message": "Our IT department blocks external file-sharing links; is there an approved alternative for exchanging administrative documents with your team?",
+  "expect": {
+   "reply": true,
+   "answer": "The study documents do not answer this.",
+   "must": []
+  }
+ },
+ {
+  "id": "absent-07",
+  "kind": "absent",
+  "message": "If your visit runs past the research office’s closing time, should we arrange an after-hours badge and security escort in advance?",
+  "expect": {
+   "reply": true,
+   "answer": "The study documents do not answer this.",
+   "must": []
+  }
+ },
+ {
+  "id": "absent-08",
+  "kind": "absent",
+  "message": "Which sponsor contact should receive our updated bank details, and what verification process should we follow before making the change?",
+  "expect": {
+   "reply": true,
+   "answer": "The study documents do not answer this.",
+   "must": []
+  }
+ },
+ {
+  "id": "absent-09",
+  "kind": "absent",
+  "message": "Can your travel team book a hotel near our satellite clinic rather than the main hospital for the next monitoring visit?",
+  "expect": {
+   "reply": true,
+   "answer": "The study documents do not answer this.",
+   "must": []
+  }
+ },
+ {
+  "id": "absent-10",
+  "kind": "absent",
+  "message": "Our hospital is introducing a fee for remote monitor access to its records system—who should we talk to about covering that charge?",
+  "expect": {
+   "reply": true,
+   "answer": "The study documents do not answer this.",
+   "must": []
+  }
+ },
+ {
+  "id": "chat-01",
+  "kind": "chat",
+  "message": "Thanks so much for the help this week!",
+  "expect": {
+   "reply": false
+  }
+ },
+ {
+  "id": "chat-02",
+  "kind": "chat",
+  "message": "Hey, are you around for a quick call at 3?",
+  "expect": {
+   "reply": false
+  }
+ },
+ {
+  "id": "chat-03",
+  "kind": "chat",
+  "message": "Can someone send us 4 more lab kits? Running low.",
+  "expect": {
+   "reply": false
+  }
+ },
+ {
+  "id": "chat-04",
+  "kind": "chat",
+  "message": "Did you get my email from yesterday?",
+  "expect": {
+   "reply": false
+  }
+ },
+ {
+  "id": "chat-05",
+  "kind": "chat",
+  "message": "Happy Friday everyone!",
+  "expect": {
+   "reply": false
+  }
+ },
+ {
+  "id": "chat-06",
+  "kind": "chat",
+  "message": "Who is covering for Sam next week?",
+  "expect": {
+   "reply": false
+  }
+ },
+ {
+  "id": "chat-07",
+  "kind": "chat",
+  "message": "Can you resend the monitoring visit letter?",
+  "expect": {
+   "reply": false
+  }
+ },
+ {
+  "id": "chat-08",
+  "kind": "chat",
+  "message": "ok will do, thanks",
+  "expect": {
+   "reply": false
+  }
+ }
+]

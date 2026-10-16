@@ -1001,7 +1001,7 @@ def test_answers_show_only_proven_protocol_words_and_say_so_when_none(monkeypatc
            "topics": [], "about": "", "text": "Visit checklist: Week 8 (Clinic), window Day 56 ± 7. From: x."}
     msg = _two_messages_about_one_participant()
     replies = {"answer_pick": {"ids": ["g:6.9", "g:v-w8"]},
-               "answer_question": {"answerable": True, "safety": False, "quotes": [
+               "answer_question": {"answerable": True, "serious_event": False, "calculations": [], "quotes": [
                    {"section_id": "g:6.9", "words": "Phone visits will occur every 28 days (± 3 days)"}],
                    "answer": "Phone visits are every 28 days, give or take 3 days."}}
     monkeypatch.setattr(answers.llm, "structured", lambda task, *a, **k: replies[task])
@@ -1040,3 +1040,54 @@ def test_a_visits_window_is_quoted_from_the_schedule_table_not_the_checklist():
          "text": "Visit checklist: Study Week in ATE: Week 12 = ... (Phone), window Day 84 ± 3. From: SOA ATE.\n- ECG"}
     assert answers.schedule_cell(v, [soa]) == (soa, "Week 12 / Week 36 / Phone / Day 84 ± 3")
     assert answers._clean('Day 84 ± 3 [g:6.4].\n"Week 12 / Phone" [g:s010]') == "Day 84 ± 3."
+
+
+def test_sums_are_worked_out_by_code_from_the_protocols_numbers_only():
+    from cormon import answers
+    backing = '"Week 2 / Phone / Day 14 ± 3" "Week 12 / Phone / Day 84 ± 3"'
+    assert answers.calculate("84 - 14", backing) == "84 - 14 = 70"
+    assert answers.calculate("(84 + 3) - (14 - 3)", backing) == "(84 + 3) - (14 - 3) = 76"
+    assert answers.calculate("90 - 14", backing) is None           # 90 is not in the documents
+    assert answers.calculate("__import__('os')", backing) is None  # only plain arithmetic
+    a = {"question": "Max gap between phone visits?", "quotes": [("SOA", "Week 12 / Phone / Day 84 ± 3")],
+         "found": True, "traced": True, "serious": False, "text": "Not stated directly; the longest gap is 70 days.",
+         "sums": [("Week 2 to Week 12", "84 - 14 = 70")]}
+    shown = answers.render([a])
+    assert "Worked out by code: Week 2 to Week 12: 84 - 14 = 70" in shown and answers.SERIOUS_LINE not in shown
+    assert answers.SERIOUS_LINE in answers.render([dict(a, serious=True, found=False)])
+
+
+def test_a_sum_written_in_the_answer_counts_only_when_code_agrees():
+    from cormon import answers
+    q = {"question": "Longest gap between phone visits?", "participant": ""}
+    def proof(text):
+        res = {"answer": text, "quotes": [], "calculations": []}
+        return answers._proof(res, q, [], [], [], [], "phone visits at Day 14 and Day 84", [], [])
+    assert proof("70 days: Day 84 - Day 14 = 70.")["traced"]
+    assert not proof("71 days: Day 84 - Day 14 = 71.")["traced"]
+    gap = {"question": "What is the maximum number of days between phone visits?", "participant": ""}
+    cells = [("SOA", "Week 2 / Phone / Day 14 ± 3"), ("SOA", "Week 12 / Phone / Day 84 ± 3"),
+             ("SOA", "Week 20 / Phone / Day 140 ± 3")]
+    import unittest.mock as mock
+    with mock.patch.object(answers, "schedule_cell", lambda v, s: None), \
+         mock.patch.object(answers.reader, "_exact_words", lambda words, *a: ({"kind": "section", "title": "SOA"}, words)), \
+         mock.patch.object(answers.reader, "_heading", lambda s: "SOA"):
+        res = {"answer": "56 days: 140 - 84 = 56.", "quotes": [{"section_id": "x", "words": w} for _, w in cells],
+               "calculations": []}
+        wrong = answers._proof(res, gap, [], [], [], [], "", [], [])
+        right = answers._proof(dict(res, answer="70 days: 84 - 14 = 70."), gap, [], [], [], [], "", [], [])
+    assert not wrong["traced"] and "Day 14 to Day 84: 70" in wrong["conflict"]
+    assert right["traced"] and ("the maximum gap", "84 - 14 = 70") in right["sums"]
+    res = {"answer": "Days 81 to 87.", "quotes": [], "calculations": []}
+    assert answers._proof(res, q, [], [], [], [], "Week 12 is Day 84 ± 3", [], [])["traced"]
+
+
+def test_the_full_text_finds_an_exception_the_headings_do_not_show():
+    from cormon import answers
+    secs = [{"id": "a", "title": "Missed Visits and Procedures", "text": "Procedures not performed will be reported "
+             "as protocol deviations."},
+            {"id": "b", "title": "Patient Reported Outcomes", "text": "PROs not performed due to a participant "
+             "language barrier are not reported as protocol deviations."},
+            {"id": "c", "title": "Storage", "text": "Keep the drug at room temperature."}]
+    got = [s["id"] for s in answers.lexical("ALSAQ-40 not done because of a language barrier: deviation?", secs)]
+    assert got[0] == "b" and "c" not in got
