@@ -9,6 +9,7 @@ from dateutil import parser as dtparser
 from . import (answers, capture, checks, config, db, events, guide, items, matching, reader, routing, settings,
                textutil, triage)
 from .config import Study
+from . import drafting
 from .drafting import item_link, local_time
 
 SAFETY_TITLE = "Safety information received; not reviewed by this monitor (out of scope)"
@@ -258,10 +259,19 @@ def _acknowledge(study: Study, msg: dict, summary: dict, trial_related: bool) ->
     """A reply when someone talks to the bot and nothing else answered them: the problems it raised, or that
     it found none. A 1-on-1 chat always gets one; a group chat only when the bot was asked."""
     raised = [it for it in (items.get(i) for i in summary["items_created"] + summary["items_repeat"])
-              if it and it["kind"] == "finding" and it["state"] != "suppressed"]
+              if it and it["kind"] == "finding" and it["state"] != "suppressed" and it["counts"]]
     new = [it for it in raised if it["id"] in summary["items_created"]]
     names = lambda its: ", ".join(f'<a href="{item_link(it)}">Item #{it["id"]}</a>' for it in its)
-    if new:
+    if new and msg.get("visibility") == "direct":  # said only here: the problems themselves, not a pointer
+        shown = [p for it in new for p in drafting.problems(study, it, it["evidence"])]
+        lines = [f"Thanks. I found {len(shown)} problem{'s' if len(shown) > 1 else ''}:"]
+        for n, p in enumerate(shown, 1):
+            lines.append(f"<b>{n}. {p['title']}</b>" + (" <i>(please check: not sure)</i>" if p["unsure"] else ""))
+            lines += [p["detail"]] if p["detail"] else []
+            lines += [f"<b>What to do:</b> {p['next_step']}"] if p["next_step"] else []
+        lines.append(f"I've sent {'them' if len(shown) > 1 else 'it'} to the CRA. Details: {names(new)}.")
+        text = "<br>".join(lines)
+    elif new:
         n = len(new)
         text = f"Thanks. I found {n} problem{'s' if n > 1 else ''} to check and raised {'them' if n > 1 else 'it'}: {names(new)}."
     elif raised:

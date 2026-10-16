@@ -117,6 +117,14 @@ def _entries(rconf: dict, item: dict) -> list[dict]:
     return rconf.get("tiers", {}).get(item["tier"], [])
 
 
+def _chat_posts(item: dict, turn: str, entries: list[dict]) -> list[dict]:
+    """No group-space post for what was said to the bot 1-on-1 (the reply there shows it; emails still go), nor
+    for chat news nobody asked the bot about (still listed)."""
+    if turn == "direct" or (item["kind"] == "good_news" and turn == "quiet"):
+        return [e for e in entries if not e["destination"].startswith("teams_")]
+    return entries
+
+
 def route_items(item_ids: list[int]) -> list[int]:
     """One message's new problems: a single email per person and a single post, led by the most serious one.
     Each problem stays its own item (its own tier, to-do entry and clearing)."""
@@ -146,9 +154,7 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
     entries = _one_post_per_room(study, _entries(rconf, item))
 
     msg = capture.message(item["last_message_id"] if force else item["first_message_id"])
-    if item["kind"] == "good_news" and capture.turn(msg) in ("quiet", "direct"):
-        # chat news nobody asked the bot about is not posted (a 1-on-1 chat gets its own thanks); still listed
-        entries = [e for e in entries if not e["destination"].startswith("teams_")]
+    entries = _chat_posts(item, capture.turn(msg), entries)
     routed_to = ", ".join(dict.fromkeys(
         n for it in [item] + others
         for n in _routed_to(study, _one_post_per_room(study, _entries(rconf, it)), it, msg).split(", ")))

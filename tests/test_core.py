@@ -1203,13 +1203,22 @@ def test_a_message_to_the_bot_always_gets_a_reply(monkeypatch):
     from cormon import pipeline
     said = []
     monkeypatch.setattr(pipeline, "_answer_in_chat", lambda study, msg, text, purpose="": said.append(text))
-    found = {7: {"id": 7, "kind": "finding", "state": "open", "link_token": "a"},
-             8: {"id": 8, "kind": "good_news", "state": "open", "link_token": "b"}}
+    found = {7: {"id": 7, "kind": "finding", "state": "open", "counts": 1, "link_token": "a", "evidence": {}},
+             8: {"id": 8, "kind": "good_news", "state": "open", "counts": 1, "link_token": "b", "evidence": {}}}
     monkeypatch.setattr(pipeline.items, "get", lambda i: found[i])
+    monkeypatch.setattr(pipeline.drafting, "problems", lambda study, it, ev: [
+        {"title": "Week 4 visit was 10 days late.", "unsure": False, "next_step": "Record a protocol deviation.",
+         "detail": "Done 16 Oct 2026 (Day 45 after Baseline on 1 Sep 2026)."}])
     direct = {"visibility": "direct", "body_text": "G-1 week 4 visit done today."}
     run = lambda msg, created=(), repeat=(), trial=True: pipeline._acknowledge(
         None, msg, {"items_created": list(created), "items_repeat": list(repeat)}, trial) or said[-1]
-    assert run(direct, created=[7]).startswith("Thanks. I found 1 problem to check and raised it: <a href=")
+    shown = run(direct, created=[7]).split("<br>")
+    assert shown[:4] == ["Thanks. I found 1 problem:", "<b>1. Week 4 visit was 10 days late.</b>",
+                         "Done 16 Oct 2026 (Day 45 after Baseline on 1 Sep 2026).",
+                         "<b>What to do:</b> Record a protocol deviation."]
+    assert shown[4].startswith("I've sent it to the CRA. Details: <a href=") and "Item #7" in shown[4]
+    group = {"visibility": "channel", "body_text": "bot, G-1 week 4 visit done today."}
+    assert run(group, created=[7]).startswith("Thanks. I found 1 problem to check and raised it: <a href=")
     assert "Item #7" in run(direct, repeat=[7]) and run(direct, repeat=[7]).startswith("This is already raised")
     assert run(direct, created=[8]) == "Thanks for letting me know."
     assert run(dict(direct, body_text="Is a Day 30 week 4 visit ok?")) == \
@@ -1270,3 +1279,15 @@ def test_a_refused_threaded_chat_reply_is_sent_plain():
     out = ch.send({"body": "Thanks for letting me know.",
                    "meta": {"target": {"space": "spaces/D", "thread": "spaces/D/threads/t"}}})
     assert out["external_ref"] == "spaces/D/messages/1" and sent[-1] == ({"text": "Thanks for letting me know."}, None)
+
+
+def test_a_problem_told_to_the_bot_1_on_1_is_not_posted_in_the_group():
+    from cormon import routing
+    entries = [{"destination": "clearing_list"}, {"destination": "teams_study_channel"},
+               {"destination": "teams_alert_channel"}, {"destination": "email", "to_role": "cra"}]
+    finding, news = {"kind": "finding"}, {"kind": "good_news"}
+    kept = lambda item, turn: [e["destination"] for e in routing._chat_posts(item, turn, entries)]
+    assert kept(finding, "direct") == ["clearing_list", "email"]
+    assert kept(finding, "quiet") == kept(finding, "addressed") == kept(finding, "email") == \
+        ["clearing_list", "teams_study_channel", "teams_alert_channel", "email"]
+    assert kept(news, "quiet") == ["clearing_list", "email"] and len(kept(news, "addressed")) == 4
