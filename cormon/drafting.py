@@ -139,8 +139,26 @@ def also_broken(study: Study, ev: dict) -> list[dict]:
                     "doc_quote": a.get("doc_quote") or "", "message_quote": a.get("message_quote") or "",
                     "title": a.get("headline") or a.get("rule_text") or "Also against this rule",
                     "next_step": a.get("next_step") or "", "unsure": a.get("certainty") == "unsure",
-                    "unsure_reason": a.get("unsure_reason") or ""})
+                    "unsure_reason": a.get("unsure_reason") or "", "detail": a.get("detail") or ""})
     return out
+
+
+_EARLIER = re.compile(r"^\(earlier message, ([^)]+)\)\s*")
+_FOOTNOTE = re.compile(r"\s*\[\d+\]")
+
+
+def _shown(p: dict) -> dict:
+    """A problem as the alert shows it: this message's words apart from an earlier message's, and the schedule
+    table's footnote marks left out of the rule (the exact words stay on the details page)."""
+    now, earlier = [], []
+    for piece in (p.get("message_quote") or "").split(" ... "):
+        m = _EARLIER.match(piece.strip())
+        if m:
+            earlier.append({"when": m.group(1), "words": piece.strip()[m.end():]})
+        elif piece.strip():
+            now.append(piece.strip())
+    return dict(p, message_quote=" ... ".join(now) or p.get("message_quote") or "", earlier_quotes=earlier,
+                doc_quote=_FOOTNOTE.sub("", p.get("doc_quote") or ""))
 
 
 _UNSURE = re.compile(r"^Please check \(not sure\):\s*", re.I)
@@ -151,9 +169,10 @@ def problems(study: Study, item: dict, ev: dict) -> list[dict]:
     lead = {"title": _UNSURE.sub("", item["title"]), "unsure": ev.get("certainty") == "unsure",
             "unsure_reason": ev.get("unsure_reason") or "", "next_step": ev.get("next_step") or "",
             "message_quote": ev.get("message_quote", ""), "doc_quote": ev.get("doc_quote", ""),
-            "where": _where(ev.get("doc_title", ""), ev.get("doc_page"), ev.get("rule_text"))}
+            "where": _where(ev.get("doc_title", ""), ev.get("doc_page"), ev.get("rule_text")),
+            "detail": ev.get("detail") or ""}
     tier = TIER_LABELS.get(item.get("tier"), item.get("tier") or "")
-    return [dict(p, n=n, item_id=item["id"], tier_label=tier)
+    return [dict(_shown(p), n=n, item_id=item["id"], tier_label=tier)
             for n, p in enumerate([lead] + also_broken(study, ev), 1)]
 
 

@@ -21,7 +21,7 @@ import json
 import re
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from . import db, guide, ingest, llm, settings, textutil
 from .config import Study
@@ -399,13 +399,13 @@ def evaluate(rules: list[dict], facts: dict) -> tuple[list[dict], list[dict]]:
     real = lambda eid: [e for e in by.get(eid, []) if e["status"] != "not_done"]
     bad, ok, seen = [], [], set()
 
-    def add(r, fact, quotes, broken, status="done"):
+    def add(r, fact, quotes, broken, status="done", numbers=None):
         key = (r["kind"], fact)
         if key in seen:
             return
         seen.add(key)
         (bad if broken else ok).append({"rule": r, "fact": fact, "quotes": [q for q in quotes if q],
-                                        "status": status})
+                                        "status": status, "numbers": numbers})
 
     for r in rules:
         k = r["kind"]
@@ -425,8 +425,11 @@ def evaluate(rules: list[dict], facts: dict) -> tuple[list[dict], list[dict]]:
                 fact = (f"{_label(r['to_event_id'])} ({b['date']} {b.get('time') or ''}) is {g:g} {r['unit']} after "
                         f"{_label(r['from_event_id'])} ({a['date']} {a.get('time') or ''}); the protocol allows "
                         f"{allowed} {r['unit']}")
-                add(r, re.sub(r" +", " ", fact).replace(" )", ")"), [a["quote"], b["quote"]], broken,
-                    "planned" if "planned" in (a["status"], b["status"]) else "done")
+                status = "planned" if "planned" in (a["status"], b["status"]) else "done"
+                add(r, re.sub(r" +", " ", fact).replace(" )", ")"), [a["quote"], b["quote"]], broken, status,
+                    {"from": r["from_event_id"], "to": r["to_event_id"], "from_date": a["date"],
+                     "from_time": a.get("time") or "", "to_date": b["date"], "to_time": b.get("time") or "",
+                     "gap": g, "unit": r["unit"], "min": lo, "max": hi, "status": status})
         elif k == "order":
             for b in real(r["then_event_id"]):
                 for a in by.get(r["first_event_id"], []):
@@ -489,7 +492,71 @@ def finding(d: dict) -> dict:
             "next_step": "Confirm the dates and values; if they are right, record this as a protocol deviation and "
                          "follow the protocol's steps for it.",
             "severity": "moderate", "certainty": "conflict", "pattern_class": pattern_class(r),
-            "status": d["status"], "from_fact": d["fact"], "from_code": r["id"]}
+            "status": d["status"], "from_fact": d["fact"], "from_code": r["id"], "code_numbers": d.get("numbers")}
+
+
+_ACRONYMS = {"ate", "pk", "csf", "sae", "cc", "edc", "si", "nti", "bcrp", "oat3", "als", "ecg", "ae", "ip", "et",
+             "svc", "cyp3a"}
+_ANCHORS = {"baseline_visit", "ate_start", "w24_placebo_control"}
+_VISIT = re.compile(r"^(?:ate_)?w\d+(?:_visit|_ate)?$")
+
+
+def pretty(event_id: str) -> str:
+    """An event id as words: "w4_visit" -> "Week 4 visit", "ate_w8" -> "ATE Week 8 visit"."""
+    if event_id == "baseline_visit":
+        return "Baseline"
+    if event_id == "w24_placebo_control":
+        return "the placebo-controlled Week 24 visit"
+    m = re.fullmatch(r"(ate_)?w(\d+)(_visit|_ate)?", event_id)
+    if m:
+        return f"{'ATE ' if m.group(1) or m.group(3) == '_ate' else ''}Week {m.group(2)} visit"
+    words = [w.upper() if w in _ACRONYMS else "ALSFRS-R" if w == "alsfrsr" else
+             re.sub(r"^w(\d+)$", r"Week \1", w) for w in event_id.split("_")]
+    return " ".join(words)
+
+
+def _day(iso: str, shift: float = 0) -> str:
+    d = datetime.fromisoformat(iso[:10]) + timedelta(days=shift)
+    return f"{d.day} {d:%b %Y}"
+
+
+def _span(x: float, unit: str) -> str:
+    """A gap as a person says it: 0.33 hours -> "20 minutes", 2.5 hours -> "2 hours 30 minutes"."""
+    if unit == "hours" and not float(x).is_integer():
+        h, m = divmod(round(x * 60), 60)
+        return " ".join(([f"{h} hour{'s' if h != 1 else ''}"] if h else []) + ([f"{m} minutes"] if m else []))
+    return f"{x:g} {unit[:-1] if x == 1 and unit.endswith('s') else unit}"
+
+
+def explain(n: dict | None) -> dict:
+    """A code-checked gap in plain words, from the numbers code used: {detail, headline, next_step}. headline and
+    next_step only for a visit counted from its anchor (Baseline, ATE start), where "late" and "early" are sure."""
+    if not n or n.get("gap") is None:
+        return {}
+    g, lo, hi, unit = n["gap"], n["min"], n["max"], n["unit"]
+    num = lambda x: f"{x:g}" if float(x).is_integer() else f"{x:.1f}"
+    allowed = (f"{_span(lo, unit)} to {_span(hi, unit)}" if lo is not None and hi is not None else
+               f"at least {_span(lo, unit)}" if lo is not None else f"at most {_span(hi, unit)}")
+    a, b = pretty(n["from"]), pretty(n["to"])
+    when = lambda d, t: f"{t} on {_day(d)}" if t else _day(d)
+    rel = f"{_span(abs(g), unit)} {'after' if g >= 0 else 'before'}"
+    detail = (f"{b[0].upper() + b[1:]}: {when(n['to_date'], n['to_time'])}, {rel} {a} "
+              f"({when(n['from_date'], n['from_time'])}). Allowed: {allowed}.")
+    out = {"detail": detail}
+    if unit == "days" and lo is not None and hi is not None and n["from"] in _ANCHORS and _VISIT.match(n["to"]):
+        done = n.get("status") != "planned"
+        start, end = _day(n["from_date"], lo), _day(n["from_date"], hi)
+        off = g - hi if g > hi else lo - g if g < lo else 0
+        if not off:
+            return out
+        side = "late" if g > hi else "early"
+        days = f"{num(off)} day{'s' if off != 1 else ''}"
+        out["headline"] = f"{b[0].upper() + b[1:]} {'was' if done else 'is planned'} {days} {side}."
+        out["detail"] = (f"{'Done' if done else 'Planned for'} {_day(n['to_date'])} (Day {num(g)} after {a} on "
+                         f"{_day(n['from_date'])}). Allowed: {start} to {end} (Day {num(lo)} to {num(hi)}).")
+        out["next_step"] = ("Record a protocol deviation." if done else
+                            f"Move it to between {start} and {end} if possible; otherwise record a protocol deviation.")
+    return out
 
 
 def overlaps(code: dict, ai: dict) -> int:

@@ -6,8 +6,8 @@ import re
 
 from dateutil import parser as dtparser
 
-from . import (answers, capture, config, db, events, guide, items, matching, reader, routing, settings, textutil,
-               triage)
+from . import (answers, capture, checks, config, db, events, guide, items, matching, reader, routing, settings,
+               textutil, triage)
 from .config import Study
 from .drafting import local_time
 
@@ -278,6 +278,14 @@ def _target_item(msg: dict) -> int | None:
     return None
 
 
+def _code_step(said: dict, ai_step: str | None) -> str | None:
+    """Code's next step for a visit-window departure, keeping the duty table's "Also required: ..." from the AI's."""
+    if not said.get("next_step"):
+        return ai_step
+    also = re.search(r"Also required: .*", ai_step or "")
+    return said["next_step"] + (f" {also.group(0)}" if also else "")
+
+
 def _shown_key(f) -> tuple[str, str]:
     """What a reader sees of a problem; without a proven protocol quote its headline stands in for it."""
     return (textutil.normalize(f.doc_quote or (f.extra or {}).get("headline") or ""),
@@ -541,23 +549,28 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 if key not in shown:  # two rules can rest on the same sentence and email words; show them once
                     shown.add(key)
                     others.append(c)
+            said = {id(c["f"]): checks.explain(c["f"].extra.get("numbers")) for c in group}
+            headline = lambda x: said[id(x)].get("headline") or x.extra.get("headline")
+            step = lambda x: _code_step(said[id(x)], x.extra.get("next_step"))
             evidence = dict(
                 lead["base"], message_quote=f.message_quote, rule_id=f.rule["id"], rule_text=f.rule["text"],
                 doc_id=f.rule["doc_id"], doc_title=study.doc(f.rule["doc_id"])["title"],
                 doc_quote=f.doc_quote, doc_page=f.doc_page, doc_passage=f.doc_passage,
                 method=f.method, observed=f.observed, certainty=f.certainty,
                 confirmation=f.confirmation, unsure_reason=f.extra.get("unsure_reason"),
-                earlier=f.extra.get("earlier"), next_step=f.extra.get("next_step"), headline=f.extra.get("headline"),
+                earlier=f.extra.get("earlier"), next_step=step(f), headline=headline(f),
+                numbers=f.extra.get("numbers"), detail=said[id(f)].get("detail"),
                 hours_until=lead["hours"], triage_facts=lead["facts"],
                 additional=[{"rule_id": c["f"].rule["id"], "rule_text": c["f"].rule["text"],
                              "doc_id": c["f"].rule["doc_id"], "doc_title": study.doc(c["f"].rule["doc_id"])["title"],
                              "doc_quote": c["f"].doc_quote, "doc_page": c["f"].doc_page,
                              "message_quote": c["f"].message_quote, "reasoning": c["f"].reasoning,
-                             "confirmation": c["f"].confirmation, "headline": c["f"].extra.get("headline"),
-                             "next_step": c["f"].extra.get("next_step"), "certainty": c["f"].certainty,
+                             "confirmation": c["f"].confirmation, "headline": headline(c["f"]),
+                             "next_step": step(c["f"]), "certainty": c["f"].certainty,
+                             "detail": said[id(c["f"])].get("detail"),
                              "unsure_reason": c["f"].extra.get("unsure_reason")} for c in others])
             pattern = study.pattern(pclass) or {}
-            title = f.extra.get("headline") or f"{pattern.get('label', 'Possible issue')}: {f.rule['text']}"
+            title = headline(f) or f"{pattern.get('label', 'Possible issue')}: {f.rule['text']}"
             if f.certainty == "unsure":
                 title = f"Please check (not sure): {title}"
             item_id, created = items.upsert(

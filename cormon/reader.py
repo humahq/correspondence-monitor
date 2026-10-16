@@ -1226,6 +1226,7 @@ def _code_checks(study: Study, rules: list[dict], vocab: list[dict], part: dict,
             f["code_fact"] = d["fact"]
             f["code_quotes"] = d["quotes"]
             f["code_rule_quote"] = d["rule"]["quote"]
+            f["code_numbers"] = d.get("numbers")
         if same:
             continue
         res["findings"].append(cf)
@@ -1376,6 +1377,7 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
                 reasoning=f"{f['why']} Next step: {f['next_step']}", certainty=certainty, doc_quote=quote,
                 doc_passage=sec["text"][:2000], confirmation=c["reasons"],
                 extra={"headline": f["problem"], "next_step": f["next_step"], "severity": f["severity"],
+                       "numbers": f.get("code_numbers"),
                        "problem_key": hashlib.sha1(f"{_norm(f['email_quote'])}|{sec['id']}".encode()).hexdigest()[:10],
                        "unsure_reason": None if certainty == "clear" else
                        ("the code's date check put a visit date mentioned here inside its window" if doubt else

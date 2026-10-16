@@ -1115,3 +1115,41 @@ def test_the_full_text_finds_an_exception_the_headings_do_not_show():
             {"id": "c", "title": "Storage", "text": "Keep the drug at room temperature."}]
     got = [s["id"] for s in answers.lexical("ALSAQ-40 not done because of a language barrier: deviation?", secs)]
     assert got[0] == "b" and "c" not in got
+
+
+def test_a_late_visit_alert_says_how_late_and_why_in_dates():
+    from cormon import checks
+    n = {"from": "baseline_visit", "to": "w4_visit", "from_date": "2026-09-01", "from_time": None,
+         "to_date": "2026-10-16", "to_time": None, "gap": 45, "unit": "days", "min": 21, "max": 35, "status": "done"}
+    said = checks.explain(n)
+    assert said["headline"] == "Week 4 visit was 10 days late."
+    assert said["detail"] == ("Done 16 Oct 2026 (Day 45 after Baseline on 1 Sep 2026). "
+                              "Allowed: 22 Sep 2026 to 6 Oct 2026 (Day 21 to 35).")
+    assert said["next_step"] == "Record a protocol deviation."
+    planned = checks.explain(dict(n, gap=18, to_date="2026-09-19", status="planned"))
+    assert planned["headline"] == "Week 4 visit is planned 3 days early."
+    assert planned["next_step"].startswith("Move it to between 22 Sep 2026 and 6 Oct 2026")
+    assert "headline" not in checks.explain(dict(n, gap=30, to_date="2026-10-01"))  # inside the window
+    # a gap between two other events gets only the dated "why"; late or early is not sure there
+    pk = checks.explain({"from": "dose", "to": "pk_sample", "from_date": "2026-10-16", "from_time": "09:00",
+                         "to_date": "2026-10-16", "to_time": "09:20", "gap": 0.33, "unit": "hours",
+                         "min": 0.5, "max": None, "status": "done"})
+    assert set(pk) == {"detail"}
+    assert pk["detail"] == ("PK sample: 09:20 on 16 Oct 2026, 20 minutes after dose (09:00 on 16 Oct 2026). "
+                            "Allowed: at least 30 minutes.")
+    assert checks.pretty("ate_w8") == checks.pretty("w8_ate") == "ATE Week 8 visit"
+    assert checks.pretty("w24_csf") == "Week 24 CSF" and checks.pretty("last_study_dose") == "last study dose"
+    assert "headline" not in checks.explain(dict(n, **{"from": "previous_ate_visit", "to": "next_ate_post_w52"}))
+    assert checks.explain(None) == {}
+
+
+def test_the_alert_shows_earlier_messages_apart_and_no_footnote_marks():
+    p = drafting._shown({"message_quote": "G-931-001 week 4 visit done today. ... (earlier message, 16 Oct 2026 "
+                                          "16:38) baseline visit and first dose done 9/1, all fine.",
+                         "doc_quote": "Week 4 [12] / Clinic / Day 28 ± 7"})
+    assert p["message_quote"] == "G-931-001 week 4 visit done today."
+    assert p["earlier_quotes"] == [{"when": "16 Oct 2026 16:38",
+                                    "words": "baseline visit and first dose done 9/1, all fine."}]
+    assert p["doc_quote"] == "Week 4 / Clinic / Day 28 ± 7"
+    plain = drafting._shown({"message_quote": "Dose at 09:00 ... PK at 09:20", "doc_quote": ""})
+    assert plain["message_quote"] == "Dose at 09:00 ... PK at 09:20" and plain["earlier_quotes"] == []
