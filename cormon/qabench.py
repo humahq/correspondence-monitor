@@ -178,7 +178,8 @@ def _answer(study, case: dict, n: int) -> dict:
     msg = {"id": 990000 + n, "sent_at": sent, "channel": "teams", "thread_key": "", "subject": ""}
     t0 = time.time()
     got = answers.answer_message(study, msg, case["message"])
-    return {"answers": got, "reply": answers.render(got) if got else "", "seconds": round(time.time() - t0, 1)}
+    return {"answers": got, "reply": answers.render(got, "https://details") if got else "",
+            "seconds": round(time.time() - t0, 1)}
 
 
 def _grade(case: dict, res: dict, sources: dict) -> dict:

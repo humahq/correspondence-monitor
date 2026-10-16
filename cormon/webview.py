@@ -1,8 +1,9 @@
-"""Read-only item detail pages, reached only through the unguessable link in a draft."""
+"""Read-only item and answer detail pages, reached only through the unguessable link in a draft or a reply."""
 
 from __future__ import annotations
 
 import html
+import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -70,6 +71,29 @@ confirmed against the original document: {_e(ev.get('confirmation'))}</p>
 </body></html>"""
 
 
+def render_answers(page: dict) -> str:
+    s = config.study(page["study_id"])
+    blocks = []
+    for a in json.loads(page["answers"]):
+        quotes = "".join(f'<p class="muted">{_e(h)}</p><blockquote>{_e(w)}</blockquote>' for h, w in a["quotes"])
+        sums = "".join(f"<li>{_e(what)}: {_e(r)}</li>" for what, r in a.get("sums", []))
+        blocks.append(f"""<h2>{_e(a['question'])}</h2>
+<p><b>Reply posted:</b> {_e(a.get('plain') or a['text'])}</p>
+<p><b>Full answer:</b> {_e(a['text'])}</p>
+{f'<p><b>Worked out by code</b></p><ul>{sums}</ul>' if sums else ''}
+<p><b>The protocol's words</b> (found word for word in the documents)</p>
+{quotes or '<p class="muted">None found.</p>'}
+<p class="muted">Sections read: {_e(', '.join(a.get('picked', [])))} · numbers checked: {_e(a['traced'])}</p>""")
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Answer details</title>
+<style>{CSS}</style></head><body>
+<p class="muted">{_e(s.title)} ({_e(s.study_id)}) · {_e(local_time(page['created_at']))}</p>
+<h1>Answer details</h1>
+<h2>The question as asked</h2><blockquote>{_e(page['message_text'])}</blockquote>
+{''.join(blocks)}
+<p class="muted">From the study documents. Please confirm with your CRA before acting on it.</p>
+</body></html>"""
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -91,6 +115,11 @@ class Handler(BaseHTTPRequestHandler):
             row = db.q1("SELECT id FROM items WHERE link_token=?", (token,))
             if row:
                 return self._send(200, render_item(items.get(row["id"])))
+        if self.path.startswith("/answers/"):
+            token = self.path.split("/answers/", 1)[1].split("?")[0]
+            row = db.q1("SELECT * FROM answer_pages WHERE link_token=?", (token,))
+            if row:
+                return self._send(200, render_answers(dict(row)))
         return self._send(404, "not found", "text/plain")
 
 

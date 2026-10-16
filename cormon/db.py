@@ -252,6 +252,16 @@ CREATE TABLE IF NOT EXISTS patient_facts (
 );
 CREATE INDEX IF NOT EXISTS patient_facts_who ON patient_facts (study_id, participant_key);
 
+CREATE TABLE IF NOT EXISTS answer_pages (
+    id INTEGER PRIMARY KEY,
+    study_id TEXT NOT NULL,
+    message_id INTEGER,
+    link_token TEXT NOT NULL UNIQUE,
+    message_text TEXT NOT NULL,
+    answers TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS config_versions (
     id INTEGER PRIMARY KEY,
     path TEXT NOT NULL,

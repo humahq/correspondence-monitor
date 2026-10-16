@@ -14,6 +14,7 @@ import json
 import math
 import operator
 import re
+import secrets
 from collections import Counter
 from datetime import date
 
@@ -89,6 +90,21 @@ ANSWER_SCHEMA = llm.obj({
     "calculations": {"type": "array", "items": llm.obj({"what": {"type": "string"},
                                                        "expression": {"type": "string"}})},
     "quotes": {"type": "array", "items": llm.obj({"section_id": {"type": "string"}, "words": {"type": "string"}})}})
+
+PLAIN_SYSTEM = """You turn a study monitor's checked answer into the reply a helpful human assistant would post in a
+clinical-trial team chat. The reader is busy site or study staff, often a nurse or a doctor.
+Rules:
+- Plain English, at most four short sentences. Lead with the direct answer (a number, a date range, yes or no).
+- Rewrite, do not summarise: keep every fact the checked answer gives in reply to the question (numbers, windows
+  such as "± 3 days", definitions and their thresholds, counts, who does or reviews what, conditions, exceptions).
+- Remove only how it was worked out: sums, "worked out by code", section numbers, quotation marks, "the protocol
+  does not state this directly", where a date came from.
+- Keep the participant's own calendar dates when the checked answer gives them; do not swap them for day numbers.
+- Use only facts in the CHECKED ANSWER and the PROTOCOL'S WORDS. Never add a number, a date or a rule of your own.
+- When a serious event must be reported, say to whom and how fast, taken from the protocol's words.
+- No greeting and no sign-off."""
+
+PLAIN_SCHEMA = llm.obj({"text": {"type": "string"}})
 
 SAE_TITLE = re.compile(r"serious adverse|\bSAEs?\b|reportable event|reporting of (?:serious )?adverse", re.I)
 SERIOUS_LINE = "This may be a Serious Adverse Event. Contact the PI and the Medical Monitor now."
@@ -366,23 +382,68 @@ def _shown(words: str, limit: int = 320) -> str:
     return (words[:cut + 1] if cut > 80 else words[:limit].rsplit(" ", 1)[0]).rstrip(" .") + " ..."
 
 
-def render(answers: list[dict]) -> str:
+NOT_FOUND = "I couldn't find this in the study documents, so I won't guess. Please ask your CRA."
+NOT_SURE = "I couldn't work out a sure answer. The protocol's words on it are in the details."
+
+
+def plain(a: dict, reader_role: str, use_cache: bool = True) -> str:
+    """The checked answer as a human assistant would say it in chat: short, no workings. Every number in it must
+    be in the checked answer, its sums, its quotes or the question; otherwise the checked answer is used."""
+    if not a["found"]:
+        return NOT_FOUND
+    if not a["traced"]:
+        return NOT_SURE
+    facts = "\n".join([a["text"]] + [f"{what}: {r}" for what, r in a.get("sums", [])])
+    words = "\n".join(f"- {w}" for _, w in a["quotes"]) or "- none"
+    try:
+        said = _clean(llm.structured("answer_plain", PLAIN_SYSTEM, f"READER: {reader_role}\n\nQUESTION: "
+                                     f"{a['question']}\n\nCHECKED ANSWER:\n{facts}\n\nPROTOCOL'S WORDS:\n{words}"
+                                     + ("\n\nThis is a serious event." if a.get("serious") else ""),
+                                     PLAIN_SCHEMA, "reply", use_cache=use_cache)["text"])
+    except Exception:
+        return a["text"]
+    backing = " ".join([facts, a["question"]] + [w for _, w in a["quotes"]])
+    lead = re.split(r"(?<=[.!?])\s", a["text"], maxsplit=1)[0]  # the direct answer: its numbers must all stay
+    ok = said and _numbers_traced(said, backing) and _norm_nums(lead) <= _norm_nums(said)
+    return said if ok else a["text"]
+
+
+def render(answers: list[dict], link: str | None = None, chat: bool = True) -> str:
+    """The chat or email reply: each answer in plain words; the quotes and workings are on the details page."""
     blocks = []
     for a in answers:
-        lines = [f"Q: {a['question']}"]
+        lines = [f"*{a['question']}*" if chat else f"Q: {a['question']}"] if len(answers) > 1 else []
         if a.get("serious"):  # said whatever else is found: reporting a serious event cannot wait for the answer
             lines.append(f"⚠️ {SERIOUS_LINE}")
+        lines.append(a.get("plain") or (NOT_FOUND if not a["found"] else NOT_SURE if not a["traced"] else a["text"]))
+        blocks.append("\n".join(lines))
+    more = ("" if not link else f"\n\n<{link}|Details and the protocol's words>" if chat
+            else f"\n\nDetails and the protocol's words: {link}")
+    return "\n\n".join(blocks) + more + (f"\n\n_{FOOTER}_" if chat else f"\n\n{FOOTER}")
+
+
+def render_full(answers: list[dict]) -> str:
+    """Every answer with its workings and the protocol's words, as plain text (the command line and tests)."""
+    blocks = []
+    for a in answers:
+        lines = [f"Q: {a['question']}"] + ([f"⚠️ {SERIOUS_LINE}"] if a.get("serious") else [])
         words = [f'Protocol, {h}: "{_shown(w)}"' for h, w in a["quotes"]]
         if not a["found"]:
-            lines.append("I could not find this in the study documents, so I won't guess. Please ask your CRA.")
-        elif not a["traced"]:  # its numbers are not all in the documents or the record: the words, not a guess
+            lines.append(NOT_FOUND)
+        elif not a["traced"]:
             lines += ["I could not work out a sure answer. These are the protocol's words on it:"] + words
         else:
-            lines.append(a["text"])
-            lines += [f"Worked out by code: {what}: {r}" for what, r in a.get("sums", [])]
-            lines += words
+            lines += [a["text"]] + [f"Worked out by code: {what}: {r}" for what, r in a.get("sums", [])] + words
         blocks.append("\n".join(lines))
-    return "\n\n".join(blocks) + f"\n\n{FOOTER}"
+    return "\n\n".join(blocks)
+
+
+def save_page(study: Study, msg: dict, email: str, answers: list[dict]) -> str:
+    """Keeps the full answers for the details page; returns its link."""
+    token = secrets.token_urlsafe(12)
+    db.ex("INSERT INTO answer_pages (study_id, message_id, link_token, message_text, answers, created_at)"
+          " VALUES (?,?,?,?,?,?)", (study.study_id, msg.get("id"), token, email, db.js(answers), db.now()))
+    return f"{settings.get('web.base_url', 'http://localhost:8080').rstrip('/')}/answers/{token}"
 
 
 def _post(study: Study, msg: dict, text: str) -> int | None:
@@ -419,7 +480,12 @@ def answer_message(study: Study, msg: dict, email: str, use_cache: bool = True) 
     sources = [i for i in every if i["kind"] == "section"]
     answers = [answer_one(study, msg, q, items, sources, email, use_cache) for q in qs]
     # the reporting question was added on a hunch of harm: kept only when the protocol's definition makes it serious
-    return [a for a in answers if a["question"] != REPORTING_QUESTION or a["serious"]]
+    answers = [a for a in answers if a["question"] != REPORTING_QUESTION or a["serious"]]
+    who = study.person_by_email(msg.get("from_addr"))
+    role = study.role_label(who.roles[0]) if who and who.roles else "study site staff"
+    for a in answers:
+        a["plain"] = plain(a, role, use_cache)
+    return answers
 
 
 def reply(study: Study, msg: dict, email: str, use_cache: bool = True) -> dict | None:
@@ -427,7 +493,7 @@ def reply(study: Study, msg: dict, email: str, use_cache: bool = True) -> dict |
     answers = answer_message(study, msg, email, use_cache)
     if not answers:
         return None
-    text = render(answers)
+    text = render(answers, save_page(study, msg, email, answers), chat=msg.get("channel") == "teams")
     oid = _post(study, msg, text)
     db.audit("question_answered", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
              outbox_id=oid, answers=answers)

@@ -1008,11 +1008,11 @@ def test_answers_show_only_proven_protocol_words_and_say_so_when_none(monkeypatc
     q = {"question": "How often are phone visits?", "participant": ""}
     a = answers.answer_one(None, msg, q, [sec, wk8], [sec], "how often are phone visits?")
     assert a["found"] and a["traced"] and "every 28 days (± 3 days)" in a["quotes"][0][1]
-    assert 'Protocol, ' in answers.render([a]) and answers.FOOTER in answers.render([a])
+    assert 'Protocol, ' in answers.render_full([a]) and answers.FOOTER in answers.render([a])
     replies["answer_question"] = dict(replies["answer_question"], quotes=[
         {"section_id": "g:6.9", "words": "Phone visits will occur every 19 days."}])
     a = answers.answer_one(None, msg, q, [sec, wk8], [sec], "how often are phone visits?")
-    assert not a["found"] and "could not find this" in answers.render([a])
+    assert not a["found"] and answers.NOT_FOUND in answers.render([a])
     # the participant's windows are worked out by code from the Baseline an earlier message gave
     sched = answers.schedule(memory.history("S1", "G-708-002", msg), [wk8])
     assert sched == ["Week 8: Day 49 to Day 63 from baseline (01 Jun 2026, said in the message of "
@@ -1052,9 +1052,33 @@ def test_sums_are_worked_out_by_code_from_the_protocols_numbers_only():
     a = {"question": "Max gap between phone visits?", "quotes": [("SOA", "Week 12 / Phone / Day 84 ± 3")],
          "found": True, "traced": True, "serious": False, "text": "Not stated directly; the longest gap is 70 days.",
          "sums": [("Week 2 to Week 12", "84 - 14 = 70")]}
-    shown = answers.render([a])
+    shown = answers.render_full([a])
     assert "Worked out by code: Week 2 to Week 12: 84 - 14 = 70" in shown and answers.SERIOUS_LINE not in shown
     assert answers.SERIOUS_LINE in answers.render([dict(a, serious=True, found=False)])
+
+
+def test_the_chat_reply_is_short_and_never_adds_a_number(monkeypatch):
+    from cormon import answers
+    a = {"question": "Max gap between phone visits?", "found": True, "traced": True, "serious": False,
+         "quotes": [("SOA", "Week 2 / Phone / Day 14 ± 3"), ("SOA", "Week 12 / Phone / Day 84 ± 3")],
+         "sums": [("the maximum gap", "84 - 14 = 70")],
+         "text": "70 days. It is not stated directly; the phone visits are Day 14 and Day 84, so 84 - 14 = 70."}
+    said = {"text": "The longest gap is 70 days (Week 2 to Week 12), give or take 3 days."}
+    monkeypatch.setattr(answers.llm, "structured", lambda *a, **k: said)
+    assert answers.plain(a, "Study coordinator") == said["text"]
+    said["text"] = "The longest gap is 76 days."  # a number the checked answer never gave
+    assert answers.plain(a, "Study coordinator") == a["text"]
+    reply = answers.render([dict(a, plain="The longest gap is 70 days.")], "https://x/answers/t")
+    assert "Worked out by code" not in reply and "<https://x/answers/t|" in reply
+    assert "Details and the protocol's words: https://x/answers/t" in answers.render(
+        [dict(a, plain="70 days.")], "https://x/answers/t", chat=False)
+    assert answers.plain(dict(a, found=False), "x") == answers.NOT_FOUND
+    dated = dict(a, text="The Week 4 window is 19 Oct 2026 to 2 Nov 2026. It counts from baseline on 28 Sep 2026.",
+                 sums=[], quotes=[("SOA", "Week 4 / Clinic / Day 28 ± 7")])
+    said["text"] = "Week 4 is Day 28 ± 7."  # the participant's dates swapped for the protocol's day numbers
+    assert answers.plain(dated, "x") == dated["text"]
+    said["text"] = "Week 4 is due between 19 Oct and 2 Nov 2026."
+    assert answers.plain(dated, "x") == said["text"]
 
 
 def test_a_sum_written_in_the_answer_counts_only_when_code_agrees():
