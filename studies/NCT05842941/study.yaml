@@ -47,6 +47,8 @@ roles:
   - { id: cra, label: Clinical research associate }
   - { id: clinops_lead, label: Sponsor ClinOps lead }
   - { id: medical_monitor, label: Medical monitor }
+  # testers may clear and disregard alerts and chat with the bot 1-on-1; no routing rule emails them
+  - { id: tester, label: Study team member }
 
 sites:
   - { id: site-01, name: "Site 01 (MGH)", aliases: [MGH, Massachusetts General] }
@@ -71,6 +73,16 @@ people:
     name: the Regimen G medical monitor
     email: null
     roles: [medical_monitor]
+    sites: ["*"]
+  - id: peter-tester
+    name: Peter Brown
+    email: peter@huma.ai
+    roles: [tester]
+    sites: ["*"]
+  - id: eliot-tester
+    name: Eliot
+    email: eliot@huma.ai
+    roles: [tester]
     sites: ["*"]
 
 pattern_classes:

@@ -117,20 +117,30 @@ In chat the bot answers in the thread, for example "Done: #20 cleared, by John H
 Anyone can ask, in chat or by email. Example: "When is G-711-001's Week 8 visit due?"
 
 ```
-Q: When is G-711-001's Week 8 visit due?
-It is due between Mon 21 Sep 2026 and Mon 05 Oct 2026.
-Protocol, SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD: "Week 8 [12] / Clinic / Day 56 ± 7"
+It is due between 21 Sep and 5 Oct 2026.
+
+Details and the protocol's words
 
 From the study documents. Please confirm with your CRA before acting on it.
 ```
 
-- It answers only from the study documents, and shows the protocol's own words, found word for word.
-- If it can't find the words, it says "I could not find this in the study documents, so I won't guess."
+- The reply is short and plain. The link opens a details page with the protocol's own words (found word for word) and any sums.
+- It answers only from the study documents. If it can't find the words, it says "I could not find this in the study documents, so I won't guess."
 - If its answer has a number that is not in the documents or the patient's dates, it shows only the protocol's words.
-- Sums ("days between visits", "longest gap") are worked out by code from the protocol's numbers, and shown as "Worked out by code".
-- If the message says someone may be seriously hurt (death, hospital stay), the reply starts with "This may be a Serious Adverse Event. Contact the PI and the Medical Monitor now." and quotes the protocol's reporting rule.
+- Sums ("days between visits", "longest gap") are worked out by code from the protocol's numbers.
+- If the message says someone may be seriously hurt (death, hospital stay), the reply starts with "This may be a Serious Adverse Event. Contact the PI and the Medical Monitor now." and gives the reporting deadline.
 - Patient dates (like the window above) are worked out by code, from dates the site gave in **earlier** messages.
 - It does not answer messages meant for a person ("can you send kits?", "are you free at 3?").
+
+### When the bot speaks in chat
+
+| Where | What the bot does |
+|---|---|
+| Group space, normal chat | Stays quiet. It still checks every message and posts an alert for a real problem. |
+| Group space, talking to the bot (@mention it, start with "bot,", or reply in one of its alert threads) | Always answers, in the thread. With nothing wrong: "I checked this against the protocol and found no problem." |
+| Group space, serious harm reported | Always gives the Serious Adverse Event warning. |
+| 1-on-1 chat with the bot | Always replies: an answer, "Thanks. I found 1 problem to check and raised it: Item #…", or "Thanks for letting me know." Only for people on the study's people list (Peter and Eliot are there as testers: they can clear and disregard, and get no alert emails). |
+| Email | Unchanged: answers questions, emails alerts. |
 
 ### The bot remembers each patient
 

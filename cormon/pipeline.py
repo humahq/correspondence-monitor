@@ -318,7 +318,7 @@ def handle_instruction(study: Study, msg: dict, instruction: dict) -> bool:
         return False
     person = study.person_by_email(msg.get("from_addr"))
     item_ids = _target_items(msg, instruction)
-    if not item_ids or person is None or not ({"cra", "clinops_lead"} & set(person.roles)):
+    if not item_ids or person is None or not ({"cra", "clinops_lead", "tester"} & set(person.roles)):
         db.audit("instruction_not_applied", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
                  instruction=instruction, item_id=item_ids[0] if item_ids else None,
                  reason="no item referenced" if not item_ids else "sender is not the CRA or sponsor lead")
@@ -326,7 +326,7 @@ def handle_instruction(study: Study, msg: dict, instruction: dict) -> bool:
             _answer_in_chat(study, msg, f'I could not tell which problem you mean. Reply "{kind}" in the alert\'s '
                                         f'thread, or name it, for example "{kind} #12".')
         return False
-    actor_type = "cra" if "cra" in person.roles else "sponsor"
+    actor_type = "cra" if "cra" in person.roles else "sponsor" if "clinops_lead" in person.roles else "tester"
     who = f"{person.name} <{person.email}>"
     for item_id in item_ids:
         if kind == "disregard":

@@ -10,33 +10,52 @@ Part 2 (Terminal) is only needed if you want to run many test messages at once, 
 
 ## Part 1: Use the bot in chat or by email (no setup)
 
+### How the bot behaves in chat
+
+- In the space **DNL343 Study Updates**, the bot **stays quiet during normal chat**. It still reads every message, and it posts an alert when it sees a real problem.
+- It **answers when you talk to it**. Do one of these:
+  - **@mention it:** type `@`, then pick **Huma bot** from the list;
+  - **start your message with** `bot,`;
+  - **reply in the thread of one of its alerts.**
+- If a message says a patient may be seriously hurt (for example, a death or a hospital stay), the bot always replies: "This may be a Serious Adverse Event. Contact the PI and the Medical Monitor now."
+
 ### Ask the bot a question
 
-In Google Chat, open the space **DNL343 Study Updates** and write a question, for example:
+In **DNL343 Study Updates**, @mention the bot and write a question, for example:
 
 ```
-Question about G-912-001: What is the window for the Week 8 visit?
+@Huma bot Question about G-912-001: What is the window for the Week 8 visit?
 ```
 
 The bot answers in a reply under your message (click "1 reply" to open it). It takes about a minute.
 
-- It quotes the protocol's own words, so you can check the answer.
+- The answer is short and plain. Click **Details and the protocol's words** under it to see the protocol's exact words and how the answer was worked out.
 - If the documents don't answer it, it says so. It doesn't guess.
-- If a message says a patient may be seriously hurt (for example, a death or a hospital stay), the reply starts with "This may be a Serious Adverse Event. Contact the PI and the Medical Monitor now."
+- If you ask it "is this a problem?" and nothing is wrong, it says "I checked this against the protocol and found no problem."
 
 ### Check a site message for problems
 
-Write a message in **DNL343 Study Updates** as a site coordinator would. For example:
+Write a message in **DNL343 Study Updates** as a site coordinator would. You don't need to @mention the bot for this. For example:
 
 ```
 Hi team, update on G-913-001: baseline + first dose were 9/15. Baseline CSF was drawn 9/5. Wk2 phone call done 10/6. Also our kit fridge read 32C this morning.
 ```
 
-In about a minute, the bot posts one alert with 3 problems: the CSF was drawn too early, the fridge was too warm, and the Week 2 call was late.
+In about a minute, the bot posts one alert with 3 problems: the CSF was drawn too early, the fridge was too warm, and the Week 2 call was outside its window. A problem the bot is less sure of is marked "please check (not sure)".
+
+A message with nothing wrong (for example `G-913-002 baseline visit done today, all fine.`) gets no reply. That's on purpose.
 
 **Tip:** use a new patient number for each test (G-913-001, G-914-001 and so on). The bot remembers each patient, so reusing a number mixes your tests.
 
 **By email:** send an email **to** the CRA test address `johnernest978@gmail.com`, with the bot in **CC**: `bot+NCT05842941@huma.ai`. Any email account works.
+
+### Chat with the bot 1-on-1
+
+Start a direct chat with **Huma bot** in Google Chat. There it always replies:
+
+- a question gets an answer;
+- a site update with a problem gets "Thanks. I found 1 problem to check and raised it: Item #…";
+- anything else gets "Thanks for letting me know."
 
 ### Mark an alert as done
 
@@ -47,6 +66,10 @@ Reply in the alert's thread (or reply to the alert email):
 | `cleared` | All problems in that alert are marked as dealt with. |
 | `cleared #20` | Only problem number 20 is marked as dealt with. |
 | `disregard #20` | Problem number 20 is dropped as not a real problem. |
+
+The bot confirms in the thread, for example "Done: #20 cleared, by Peter Brown."
+
+You and Eliot are set up as testers: you can do all of the above, and the bot doesn't email you its alerts.
 
 That's all you need for chat and email. Stop here unless you want Part 2.
 
@@ -222,7 +245,7 @@ Tests run on a practice copy of the bot. Nothing is posted or emailed, and the l
    ./bin/cormon-cloud test my-tests --study NCT05842941
    ```
 
-Each message shows **RIGHT** or **WRONG**, and what the bot found. The results are also saved in the `results` folder.
+Each message shows **right** or **WRONG**, and what the bot found. The results are also saved in the `results` folder.
 
 ### Get the newest version of the code
 
