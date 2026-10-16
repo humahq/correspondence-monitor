@@ -139,7 +139,7 @@ From the study documents. Please confirm with your CRA before acting on it.
 | Group space, normal chat | Stays quiet. It still checks every message and posts an alert for a real problem. |
 | Group space, talking to the bot (@mention it, start with "bot,", or reply in one of its alert threads) | Always answers, in the thread. With nothing wrong: "I checked this against the protocol and found no problem." |
 | Group space, serious harm reported | Always gives the Serious Adverse Event warning. |
-| 1-on-1 chat with the bot | Always replies: an answer, "Thanks. I found 1 problem to check and raised it: Item #…", or "Thanks for letting me know." Only for people on the study's people list (Peter and Eliot are there as testers: they can clear and disregard, and get no alert emails). |
+| 1-on-1 chat with the bot | Always replies: an answer, the problem itself (what's wrong, why, what to do; the CRA is emailed, nothing is posted in the group), or "Thanks for letting me know." The bot account must accept a new 1-on-1 chat once before it can reply. Only for people on the study's people list (Peter and Eliot are there as testers: they can clear and disregard, and get no alert emails). |
 | Email | Unchanged: answers questions, emails alerts. |
 
 ### The bot remembers each patient

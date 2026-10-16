@@ -54,8 +54,10 @@ A message with nothing wrong (for example `G-913-002 baseline visit done today, 
 Start a direct chat with **Huma bot** in Google Chat. There it always replies:
 
 - a question gets an answer;
-- a site update with a problem gets "Thanks. I found 1 problem to check and raised it: Item #…";
+- a site update with a problem gets the problem itself: what's wrong, why, and what to do. The CRA gets an email. Nothing is posted in the group, because you said it privately;
 - anything else gets "Thanks for letting me know."
+
+The first time you message the bot 1-on-1, it may not reply until John accepts the chat on the bot's side. If it stays silent, tell John.
 
 ### Mark an alert as done
 
