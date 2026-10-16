@@ -66,8 +66,8 @@ def check(name: str, msg_id: int) -> list[str]:
         errors.append("expected a copy nudge after the thread was re-read")
     if exp["kind"] == "out_of_scope":
         sent = db.q("SELECT template_id FROM outbox WHERE item_id=?", (match[0]["id"],)) if match else []
-        if [s["template_id"] for s in sent] != ["email-safety-redirect"]:
-            errors.append(f"safety item must only send the redirect, sent {[s['template_id'] for s in sent]}")
+        if sent:
+            errors.append(f"safety item must send nothing, sent {[s['template_id'] for s in sent]}")
     return errors
 
 

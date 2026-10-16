@@ -15,7 +15,8 @@ for who in "$@"; do
   echo "granting $who ..."
   "${G[@]}" compute instances add-iam-policy-binding "$NAME" --zone "$ZONE" \
     --member "$m" --role roles/compute.osAdminLogin >/dev/null
-  "${G[@]}" compute instances add-iam-policy-binding "$NAME" --zone "$ZONE" \
+  # read-only, project-wide: gcloud compute ssh reads the project (compute.projects.get) before it connects
+  "${G[@]}" projects add-iam-policy-binding "$PROJECT" --condition None \
     --member "$m" --role roles/compute.viewer >/dev/null
   # only opens the tunnel; logging in still needs the instance-level role above
   "${G[@]}" projects add-iam-policy-binding "$PROJECT" --condition None \

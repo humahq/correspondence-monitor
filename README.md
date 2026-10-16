@@ -65,7 +65,7 @@ The bot tells people by their **role** in the study. Right now the roles use Joh
 | **Immediate** (a consent problem, or a problem planned within 48 hours) | Its own post in **DNL343 URGENT** and **DNL343 Study Updates**, an email to the CRA, and an email to the sponsor lead. If a site coordinator wrote the message, they get a short careful note too. |
 | **Medium** (a problem that already happened, or one planned later) | A post in **DNL343 Study Updates** and an email to the CRA, with the sponsor lead in CC. It goes in the sponsor lead's daily summary. |
 | **Low** (for example, a visit a few days outside its window) | A post in **DNL343 Study Updates**, an email to the CRA (subject "For your to-do list"), the CRA's to-do list and the daily summary. |
-| **Safety** (a death, side effects, falls, hospital visits) | Only the person who wrote gets a reply: "please take it to the medical monitor". Nothing is judged. |
+| **Safety** (a death, side effects, falls, hospital visits) | Nobody is emailed. The bot records it as "safety information received; not reviewed" (it shows in the item list and daily summary). Nothing is judged. |
 | **Nothing wrong, or not about the study** | Nobody. The bot stays quiet. |
 | **A general question** ("what is the Week 4 window?") | Nobody. The bot does not answer questions (yet). |
 
@@ -122,7 +122,7 @@ In chat the bot answers in the thread, for example "Done: #20 cleared, by John H
 
 **What it will NOT do, by design:**
 
-- **Safety:** no judging of side effects, deaths or hospital visits. It replies "please take it to the medical monitor".
+- **Safety:** no judging of side effects, deaths or hospital visits. It records the message and sends nothing.
 - **Old news:** no alert on past events that were already dealt with.
 - **Missing information:** no alert just because something wasn't mentioned.
 - **Questions:** no answers to protocol questions.
@@ -225,7 +225,7 @@ Anything you do is recorded under your own name.
 2. **Study model.** `cormon ingest` reads the documents into sections. `cormon/guide.py` writes short **topic briefs** (each line cites its section). `cormon/checks.py` holds the **code checks**: dates, times and numbers with their limits, each with a quote from the document.
 3. **Reader** (`cormon/reader.py`, chosen by `checker:` in `study.yaml`). For each patient in the message: scope (which visits and sections apply), date notes worked out in code, an AI judge reads the topic briefs, the code checks run on facts taken from the message, duplicates are merged, and a second AI confirms each finding against the original section.
 4. **Evidence.** The protocol quote is looked up sentence by sentence in the real documents. It is never a heading, another visit's line, or the bot's own summary, and a schedule table shows only the visit's own cell. Words that can't be proven are not shown, and the finding becomes "please check".
-5. **Safety boundary.** Safety events are recorded as out of scope, routed nowhere, and the sender is told to take them to the medical monitor.
+5. **Safety boundary.** Safety events are recorded as out of scope and routed nowhere (`out_of_scope: []` in `config/routing.yaml`).
 6. **Triage.** Tiers (low / medium / immediate) come from `config/triage.yaml`, a first-match rule list.
 7. **Routing.** `config/routing.yaml` says where each tier goes. `config/templates.yaml` holds the message layouts. The problems of one message are sent as one alert (`routing.route_items`); immediate ones go alone. Replies ("cleared", "disregard", "#N") are matched to the alert by email headers or by chat thread.
 8. **Record.** Every message, decision, send and operator action goes to an append-only log.
