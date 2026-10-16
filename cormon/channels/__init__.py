@@ -31,11 +31,17 @@ def study_for_person(addr: str | None) -> str | None:
     """The study a direct chat belongs to: the sender's study, or the only study there is."""
     from .. import config
 
+    from .. import db
+
     all_studies = list(config.studies().values())
-    for s in all_studies:
-        p = s.person_by_email(addr)
-        if p is not None or (addr and any((x.teams_upn or "").lower() == addr for x in s.people)):
-            return s.study_id
+    theirs = [s.study_id for s in all_studies if s.person_by_email(addr) is not None
+              or (addr and any((x.teams_upn or "").lower() == addr for x in s.people))]
+    if len(theirs) > 1:  # on several studies: the one whose group space they wrote in last
+        last = db.q1("SELECT study_id FROM messages WHERE lower(from_addr)=? AND visibility='channel' AND study_id IN "
+                     f"({','.join('?' * len(theirs))}) ORDER BY id DESC LIMIT 1", ((addr or "").lower(), *theirs))
+        return last["study_id"] if last else theirs[0]
+    if theirs:
+        return theirs[0]
     return all_studies[0].study_id if len(all_studies) == 1 else None
 
 

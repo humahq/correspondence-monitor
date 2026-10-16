@@ -155,6 +155,8 @@ def _shown(p: dict) -> dict:
         m = _EARLIER.match(piece.strip())
         if m:
             earlier.append({"when": m.group(1), "words": piece.strip()[m.end():]})
+        elif piece.strip() and earlier:  # the earlier message's own quote can have gaps too
+            earlier[-1]["words"] += f" ... {piece.strip()}"
         elif piece.strip():
             now.append(piece.strip())
     return dict(p, message_quote=" ... ".join(now) or p.get("message_quote") or "", earlier_quotes=earlier,

@@ -437,7 +437,7 @@ class _FakeGoogle:
         self.spaces, self.posted = spaces, []
 
     def _reply(self, data):
-        return type("R", (), {"raise_for_status": lambda s: None, "json": lambda s: data})()
+        return type("R", (), {"status_code": 200, "raise_for_status": lambda s: None, "json": lambda s: data})()
 
     def get(self, url, params=None, timeout=None):
         if url.endswith("/userinfo"):
@@ -1151,6 +1151,10 @@ def test_the_alert_shows_earlier_messages_apart_and_no_footnote_marks():
     assert p["earlier_quotes"] == [{"when": "16 Oct 2026 16:38",
                                     "words": "baseline visit and first dose done 9/1, all fine."}]
     assert p["doc_quote"] == "Week 4 / Clinic / Day 28 ± 7"
+    gaps = drafting._shown({"message_quote": "G-960-001 week 4 visit done today. ... (earlier message, 16 Oct 2026 "
+                                             "18:48) baseline visit ... done 9/1", "doc_quote": ""})
+    assert gaps["message_quote"] == "G-960-001 week 4 visit done today."
+    assert gaps["earlier_quotes"] == [{"when": "16 Oct 2026 18:48", "words": "baseline visit ... done 9/1"}]
     plain = drafting._shown({"message_quote": "Dose at 09:00 ... PK at 09:20", "doc_quote": ""})
     assert plain["message_quote"] == "Dose at 09:00 ... PK at 09:20" and plain["earlier_quotes"] == []
 
@@ -1236,3 +1240,33 @@ def test_group_chatter_gets_only_the_serious_harm_warning(monkeypatch):
     assert asked == [answers.REPORTING_QUESTION, "When is the next visit?"]
     asked.clear()
     assert answers.answer_message(study, {}, "When is G-1's next visit?", harm_only=True) == [] and not asked
+
+
+def test_a_direct_chat_belongs_to_the_study_the_person_last_wrote_in(monkeypatch):
+    from cormon import config
+    from cormon.channels import study_for_person
+    one = lambda sid: type("S", (), {"study_id": sid, "people": [],
+                                     "person_by_email": lambda self, e: object() if e == "john@huma.ai" else None})()
+    monkeypatch.setattr(config, "studies", lambda: {"A": one("A"), "B": one("B")})
+    assert study_for_person("john@huma.ai") == "A"
+    db.ex("INSERT INTO messages (channel, external_id, thread_key, study_id, route, visibility, from_addr, body_text,"
+          " sent_at, received_at, status) VALUES ('teams','m1','t','B','study','channel','john@huma.ai','x','',"
+          "'','processed')")
+    assert study_for_person("john@huma.ai") == "B"
+    assert study_for_person("nobody@x.org") is None
+
+
+def test_a_refused_threaded_chat_reply_is_sent_plain():
+    from cormon.channels.gchat import GoogleChatChannel
+    sent = []
+    class R:
+        def __init__(self, code): self.status_code, self.text = code, "PERMISSION_DENIED"
+        def json(self): return {"name": "spaces/D/messages/1"}
+    class Session:
+        def post(self, url, json, params=None, timeout=0):
+            sent.append((json, params))
+            return R(403 if "thread" in json else 200)
+    ch = GoogleChatChannel(session=Session())
+    out = ch.send({"body": "Thanks for letting me know.",
+                   "meta": {"target": {"space": "spaces/D", "thread": "spaces/D/threads/t"}}})
+    assert out["external_ref"] == "spaces/D/messages/1" and sent[-1] == ({"text": "Thanks for letting me know."}, None)

@@ -80,7 +80,7 @@ people:
     roles: [tester]
     sites: ["*"]
   - id: eliot-tester
-    name: Eliot
+    name: Eliot Levitt
     email: eliot@huma.ai
     roles: [tester]
     sites: ["*"]

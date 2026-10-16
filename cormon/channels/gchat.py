@@ -90,7 +90,8 @@ class GoogleChatChannel:
 
     def _post(self, url: str, body: dict, **params) -> dict:
         r = self.http.post(CHAT + url, json=body, params=params or None, timeout=30)
-        r.raise_for_status()
+        if r.status_code >= 400:
+            raise RuntimeError(f"{r.status_code} from Google Chat: {r.text[:300]}")
         return r.json()
 
     @property
@@ -197,7 +198,13 @@ class GoogleChatChannel:
         if target.get("thread"):
             body["thread"] = {"name": target["thread"]}
             params["messageReplyOption"] = "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
-        res = self._post(f"/{space}/messages", body, **params)
+        try:
+            res = self._post(f"/{space}/messages", body, **params)
+        except RuntimeError as e:
+            if not target.get("thread") or not str(e).startswith("403"):
+                raise
+            # a 1-on-1 chat can refuse a threaded reply; the plain message reaches the same person
+            res = self._post(f"/{space}/messages", {"text": body["text"]})
         return {"external_ref": res.get("name"), "web_url": None}
 
     def list_spaces(self) -> list[dict]:
