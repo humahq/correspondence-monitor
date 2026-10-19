@@ -1,7 +1,7 @@
 """Google Chat adapter over the Chat API, signed in as the bot user (bot@huma.ai).
 
 Takes the place of Teams when `channels.teams: gchat`: the study channel and the alert channel are Chat
-spaces the bot is a member of, and direct messages to the bot are read as well. Run `cormon auth gchat`
+spaces the bot is a member of, and direct messages to the bot and group chats it is added to are read as well. Run `cormon auth gchat`
 once and sign in as the bot account.
 """
 
@@ -137,6 +137,16 @@ class GoogleChatChannel:
                 break
         return out
 
+    def _spaces(self, filter: str) -> list[str]:
+        out, token = [], None
+        for _ in range(10):
+            data = self._get("/spaces", filter=filter, pageSize=100, **({"pageToken": token} if token else {}))
+            out += [s["name"] for s in data.get("spaces", [])]
+            token = data.get("nextPageToken")
+            if not token:
+                break
+        return out
+
     def _to_inbound(self, m: dict, *, study_id: str | None, visibility: str) -> Inbound | None:
         sender = m.get("sender") or {}
         if sender.get("type") != "HUMAN" or sender.get("name") == self.me or m.get("deleteTime"):
@@ -165,6 +175,8 @@ class GoogleChatChannel:
         out: list[Inbound] = []
         newest = since
         seen: set[str] = set()
+        configured = {(study.teams.get(k) or {}).get("space") for study in config.studies().values()
+                      for k in ("study_channel", "alert_channel")}
         for study in config.studies().values():
             space = (study.teams.get("study_channel") or {}).get("space")
             if not space or space in seen:
@@ -182,6 +194,17 @@ class GoogleChatChannel:
                     inb = self._to_inbound(m, study_id=None, visibility="direct")
                     if inb:
                         inb.study_id = study_for_person(inb.from_addr)
+                        out.append(inb)
+                        newest = max(newest, _time(m["createTime"]))
+        if settings.get("gchat.read_group_chats", True):
+            # any group chat or space someone added the bot to; the study and alert spaces are read above or not
+            for name in self._spaces('spaceType = "GROUP_CHAT" OR spaceType = "SPACE"'):
+                if name in configured:
+                    continue
+                for m in self._messages(name, since):
+                    inb = self._to_inbound(m, study_id=None, visibility="group")
+                    if inb:
+                        inb.study_id = study_for_person(inb.from_addr, known_only=True)
                         out.append(inb)
                         newest = max(newest, _time(m["createTime"]))
         db.set_state("gchat_since", (newest + timedelta(minutes=10)).isoformat())

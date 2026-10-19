@@ -445,7 +445,8 @@ class _FakeGoogle:
         if "/people/" in url:
             return self._reply({"emailAddresses": [{"value": f"user{url.rsplit('/', 1)[1]}@site.org"}]})
         if url.endswith("/spaces"):
-            return self._reply({"spaces": [{"name": n} for n in self.spaces if n.startswith("spaces/dm")]})
+            kind = "spaces/dm" if "DIRECT_MESSAGE" in params["filter"] else "spaces/g"
+            return self._reply({"spaces": [{"name": n} for n in self.spaces if n.startswith(kind)]})
         return self._reply({"messages": self.spaces[url.split("/v1/", 1)[1].rsplit("/messages", 1)[0]]})
 
     def post(self, url, json=None, params=None, timeout=None):
@@ -1291,3 +1292,48 @@ def test_a_problem_told_to_the_bot_1_on_1_is_not_posted_in_the_group():
     assert kept(finding, "quiet") == kept(finding, "addressed") == kept(finding, "email") == \
         ["clearing_list", "teams_study_channel", "teams_alert_channel", "email"]
     assert kept(news, "quiet") == ["clearing_list", "email"] and len(kept(news, "addressed")) == 4
+
+
+def test_group_chats_the_bot_is_added_to_are_read_for_people_on_a_study(monkeypatch):
+    from cormon import config
+    from cormon.channels.gchat import GoogleChatChannel
+
+    study = config.study("NCT04098666")
+    monkeypatch.setattr(study, "teams", {"study_channel": {"space": "spaces/S1"},
+                                         "alert_channel": {"space": "spaces/gAlert"}})
+    monkeypatch.setattr(study, "person_by_email", lambda e: object() if e == "user7@site.org" else None)
+    monkeypatch.setattr(config, "studies", lambda: {study.study_id: study})
+    db.set_state("gchat_since", "2026-10-12T10:00:00+00:00")
+    msg = lambda name, user, t: {"name": name, "sender": {"name": f"users/{user}", "type": "HUMAN"},
+                                 "createTime": t, "text": "bot, which criteria are hardest?",
+                                 "thread": {"name": name.split("/messages/")[0] + "/threads/T"}}
+    fake = _FakeGoogle({
+        "spaces/S1": [],
+        "spaces/gPeter": [msg("spaces/gPeter/messages/1", 7, "2026-10-12T10:05:00Z"),
+                          msg("spaces/gPeter/messages/2", 9, "2026-10-12T10:06:00Z")],   # not on the study
+        "spaces/gAlert": [msg("spaces/gAlert/messages/3", 7, "2026-10-12T10:07:00Z")],  # the alert room: not read
+    })
+    got = GoogleChatChannel(session=fake).fetch()
+    assert [(i.external_id, i.visibility, i.study_id) for i in got] == [
+        ("spaces/gPeter/messages/1", "group", "NCT04098666"), ("spaces/gPeter/messages/2", "group", None)]
+
+
+def test_a_group_chats_alert_stays_in_that_chat(monkeypatch):
+    from cormon import routing
+    from cormon.channels import study_for_person
+    group = {"channel": "teams", "visibility": "group", "thread_key": "teams:spaces/G/threads/T"}
+    assert routing.group_thread(group) == {"space": "spaces/G", "thread": "spaces/G/threads/T", "key": "group"}
+    assert routing.group_thread(dict(group, visibility="channel")) is None
+    entries = [{"destination": "clearing_list"}, {"destination": "teams_study_channel"},
+               {"destination": "teams_alert_channel"}, {"destination": "email", "to_role": "cra"}]
+    kept = lambda msg, es=entries: [e["destination"] for e in routing._in_group(msg, es)]
+    assert kept(group) == ["clearing_list", "teams_alert_channel", "email"]
+    assert kept(group, entries[:2]) == ["clearing_list", "teams_study_channel"]
+    assert kept(dict(group, visibility="channel")) == [e["destination"] for e in entries]
+    study = type("S", (), {"teams": {"alert_channel": {"name": "DNL343 URGENT"}}})()
+    assert routing._routed_to(study, entries[2:3], {}, group) == "this chat"
+    assert routing._routed_to(study, entries[2:3], {}, dict(group, visibility="channel")) == "the DNL343 URGENT room"
+    # a group message talks to the bot the same way as in the study space
+    assert capture.turn(dict(group, body_text="G-1 week 4 done", headers={})) == "quiet"
+    assert capture.turn(dict(group, body_text="bot, is week 4 late?", headers={})) == "addressed"
+    assert study_for_person("nobody@x.org", known_only=True) is None

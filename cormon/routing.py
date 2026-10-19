@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from email.utils import make_msgid
 
 from . import capture, config, db, drafting, items, settings
@@ -78,6 +79,8 @@ def _routed_to(study: Study, entries: list[dict], item: dict, msg: dict) -> str:
             for axis, p, addr in _resolve_people(study, e, item, msg):
                 label = study.role_label(axis) if axis in {r["id"] for r in study.roles} else axis
                 names.append(f"{p.name if p else addr} ({label})")
+        elif e["destination"] == "teams_alert_channel" and group_thread(msg):
+            names.append("this chat")
         elif e["destination"] == "teams_alert_channel":
             room = (study.teams.get("alert_channel") or {}).get("name")
             names.append(f"the {room} room" if room else "the alert room")
@@ -125,6 +128,23 @@ def _chat_posts(item: dict, turn: str, entries: list[dict]) -> list[dict]:
     return entries
 
 
+def group_thread(msg: dict) -> dict | None:
+    """The thread of a message in a group chat the bot was added to, where its chat post goes instead."""
+    m = re.fullmatch(r"teams:((spaces/[^/]+)/threads/[^/]+)", msg.get("thread_key") or "")
+    if msg.get("visibility") != "group" or not m:
+        return None
+    return {"space": m.group(2), "thread": m.group(1), "key": "group"}
+
+
+def _in_group(msg: dict, entries: list[dict]) -> list[dict]:
+    """A group chat's talk stays in it: one chat post there (the alert's, if any), none in the study's rooms."""
+    if not group_thread(msg):
+        return entries
+    posts = [e for e in entries if e["destination"].startswith("teams_")]
+    keep = next((e for e in posts if e["destination"] == "teams_alert_channel"), posts[0] if posts else None)
+    return [e for e in entries if not e["destination"].startswith("teams_") or e is keep]
+
+
 def route_items(item_ids: list[int]) -> list[int]:
     """One message's new problems: a single email per person and a single post, led by the most serious one.
     Each problem stays its own item (its own tier, to-do entry and clearing)."""
@@ -154,7 +174,7 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
     entries = _one_post_per_room(study, _entries(rconf, item))
 
     msg = capture.message(item["last_message_id"] if force else item["first_message_id"])
-    entries = _chat_posts(item, capture.turn(msg), entries)
+    entries = _in_group(msg, _chat_posts(item, capture.turn(msg), entries))
     routed_to = ", ".join(dict.fromkeys(
         n for it in [item] + others
         for n in _routed_to(study, _one_post_per_room(study, _entries(rconf, it)), it, msg).split(", ")))
@@ -183,7 +203,7 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
             axis = entry.get("recipient", "study_team")
             tpl = drafting.select(topic, axis, "teams", item["tier"])
             _, body = drafting.render(tpl, context(None))
-            target = teams_target(study, dest)
+            target = group_thread(msg) or teams_target(study, dest)
             created.append(enqueue(
                 purpose=f"teams_{axis}", channel="teams", destination=dest, body=body, item_id=item_id,
                 template_id=tpl["id"], meta={"target": target, "thread_key": item["thread_key"],

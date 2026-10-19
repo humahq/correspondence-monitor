@@ -27,8 +27,9 @@ def email_channel():
     return _cache[("email", mode)]
 
 
-def study_for_person(addr: str | None) -> str | None:
-    """The study a direct chat belongs to: the sender's study, or the only study there is."""
+def study_for_person(addr: str | None, known_only: bool = False) -> str | None:
+    """The study a direct chat belongs to: the sender's study, or the only study there is (not with known_only:
+    a group chat anyone can add the bot to is read only for people on a study)."""
     from .. import config
 
     from .. import db
@@ -42,7 +43,7 @@ def study_for_person(addr: str | None) -> str | None:
         return last["study_id"] if last else theirs[0]
     if theirs:
         return theirs[0]
-    return all_studies[0].study_id if len(all_studies) == 1 else None
+    return all_studies[0].study_id if len(all_studies) == 1 and not known_only else None
 
 
 def teams_channel():
