@@ -1396,6 +1396,8 @@ def test_what_the_bot_does_not_do_is_turned_down_in_fixed_words(monkeypatch):
     run(("opinion", "the weather"))
     assert posted[-1] == f"{asks.OPINION} The study documents don't cover the weather, so please ask your CRA."
     assert attached[-1] == []
+    run(("task", ""))
+    assert posted[-1] == f"{asks.LEAD['task']} The study documents don't cover that." and attached[-1] == []
 
 
 def test_the_facts_file_has_the_protocols_words_and_a_question_for_another_ai():
@@ -1405,8 +1407,27 @@ def test_the_facts_file_has_the_protocols_words_and_a_question_for_another_ai():
          "sums": [], "quotes": [["Section 5.1", "Slow vital capacity (SVC) of at least 50% of predicted"]]}])}
     out = answers.facts_file(page, "HEALEY Regimen G")
     assert '- Section 5.1: "Slow vital capacity (SVC) of at least 50% of predicted"' in out
-    assert "Using only the facts above from the HEALEY Regimen G documents, help with this: Which criteria will be " \
-        "hardest?" in out and "Asked: Which criteria will be hardest?" in out
+    assert "Using only the facts and protocol sections above from the HEALEY Regimen G documents, help with this: " \
+        "Which criteria will be hardest?" in out and "Asked: Which criteria will be hardest?" in out
+    assert "in full" not in out and "Left out" not in out
+
+
+def test_the_facts_file_holds_whole_protocol_sections_up_to_a_size_limit(monkeypatch):
+    from cormon import answers, guide
+    secs = [{"id": f"m:{n}", "kind": "section", "number": n, "title": t, "text": x, "doc_id": "m", "topics": ["eligibility"]}
+            for n, t, x in [("5.2.1", "Inclusion", "1. ALS.\n2. Age 18 or older."), ("5.2.2", "Exclusion", "1. Unstable."),
+                            ("9.9", "Huge", "x" * answers.FACTS_CHARS)]]
+    monkeypatch.setattr(guide, "load", lambda sid: secs)
+    monkeypatch.setattr(answers.reader, "view", lambda study, items: items)
+    monkeypatch.setattr(answers, "answer_one", lambda *a: {
+        "question": "q", "text": "t", "sums": [], "found": True,
+        "quotes": [("5.2.2 Exclusion", "Unstable.")],
+        "chosen": ["m:5.2.1", "m:9.9", "m:5.2.2"]})
+    a = answers.facts(type("S", (), {"study_id": "s"})(), {}, "eligibility", "e")
+    assert a["sections"] == [("5.2.2 Exclusion", "1. Unstable."), ("5.2.1 Inclusion", "1. ALS.\n2. Age 18 or older.")]
+    assert a["left_out"] == ["9.9 Huge"]
+    out = answers.facts_file({"message_text": "hardest?", "answers": db.js([a])}, "G")
+    assert "#### 5.2.1 Inclusion\n\n1. ALS.\n2. Age 18 or older." in out and "Left out to keep this file short" in out
 
 
 def test_a_facts_file_is_attached_to_the_chat_post_and_checked_like_the_text():

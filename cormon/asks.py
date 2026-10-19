@@ -29,7 +29,8 @@ List each request the message makes of the bot, with its kind:
 - improper: asks for help to break the study's rules or hide something (change, backdate, delete or redact
   records, hide an event, skip reporting, make up data).
 - other: anything else (site news, thanks, greetings, requests for a person rather than the bot).
-topic: for opinion or task, the study topic the documents' facts would be about, in a few words; otherwise "".
+topic: for opinion or task, the study topic the documents' facts would be about, in a few words. "" when the
+request has nothing to do with the study (the weather, music, sport, general news), and for every other kind.
 Return no requests when the message asks nothing of the bot."""
 
 KINDS = ["study", "opinion", "task", "about_bot", "improper", "other"]
@@ -71,7 +72,10 @@ def decline(study: Study, msg: dict, text: str, use_cache: bool = True) -> dict 
     lines = list(dict.fromkeys(DECLINE[k] for k in kinds if k in DECLINE))
     files = []
     for r in (r for r in reqs if r["kind"] in LEAD):
-        topic = r["topic"] or r["request"]
+        topic = r["topic"].strip()
+        if not topic:
+            lines.append(f"{LEAD[r['kind']]} The study documents don't cover that.")
+            continue
         a = answers.facts(study, msg, topic, text, use_cache)
         if not a:
             lines.append(f"{LEAD[r['kind']]} The study documents don't cover {topic}, so please ask your CRA.")

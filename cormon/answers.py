@@ -27,6 +27,7 @@ ASKED = re.compile(r"\?|^\s*(?:what|when|how|which|where|why|who|is|are|can|coul
                    r"would|will)\b", re.I | re.M)
 MAX_QUESTIONS = 3
 FOOTER = "From the study documents. Please confirm with your CRA before acting on it."
+FACTS_CHARS = 40000  # whole protocol sections in a facts file, so another AI can be pasted all of it
 
 FIND_SYSTEM = """You read a message a clinical-trial site sent to the study monitor and list the questions in it
 that the study documents (protocol, lab manual, consent, visit schedule) or the participant's visit dates could
@@ -322,7 +323,8 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
     # an answer that says the protocol is silent but gives its proven numbers is still shown
     return {"question": q["question"], "participant": pid, "text": found["text"], "quotes": found["proven"][:4],
             "sums": found["sums"], "found": bool(found["proven"]), "serious": bool(res["serious_event"]),
-            "traced": found["traced"], "picked": [i["id"] for i in secs + checklists]}
+            "traced": found["traced"], "picked": [i["id"] for i in secs + checklists],
+            "chosen": [x for x in dict.fromkeys(picked_ids) if x in known and known[x]["kind"] == "section"]}
 
 
 def _proof(res: dict, q: dict, secs: list[dict], checklists: list[dict], sources: list[dict], visits: list[dict],
@@ -497,7 +499,19 @@ def facts(study: Study, msg: dict, topic: str, email: str, use_cache: bool = Tru
     sources = [i for i in every if i["kind"] == "section"]
     q = {"question": f"What do the study documents say about {topic}?", "participant": "", "harm": False}
     a = answer_one(study, msg, q, reader.view(study, every), sources, email, use_cache)
-    return a if a["found"] else None
+    if not a["found"]:
+        return None
+    by_heading = {reader._heading(s): s for s in sources}
+    by_id = {s["id"]: s for s in sources}
+    order = [by_heading[h] for h, _ in a["quotes"] if h in by_heading] + [by_id[x] for x in a["chosen"]]
+    a["sections"], a["left_out"], size = [], [], 0
+    for s in {s["id"]: s for s in order}.values():
+        if size + len(s["text"]) > FACTS_CHARS:
+            a["left_out"].append(reader._heading(s))
+            continue
+        a["sections"].append((reader._heading(s), s["text"]))
+        size += len(s["text"])
+    return a
 
 
 def facts_file(page: dict, study_title: str) -> str:
@@ -510,9 +524,15 @@ def facts_file(page: dict, study_title: str) -> str:
         out += [f"- {what}: {r}" for what, r in a.get("sums", [])]
         out += ["### The protocol's words (found word for word in the documents)", ""]
         out += [f"- {h}: \"{w}\"" for h, w in a["quotes"]] + [""]
+        if a.get("sections"):
+            out += ["### The protocol sections, in full (word for word)", ""]
+            for h, text in a["sections"]:
+                out += [f"#### {h}", "", text, ""]
+        if a.get("left_out"):
+            out += ["Left out to keep this file short (see the protocol): " + "; ".join(a["left_out"]), ""]
     out += ["## To ask another AI", "",
-            f"Using only the facts above from the {study_title} documents, help with this: {asked}",
-            "", FOOTER]
+            f"Using only the facts and protocol sections above from the {study_title} documents, "
+            f"help with this: {asked}", "", FOOTER]
     return "\n".join(out)
 
 
