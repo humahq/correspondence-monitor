@@ -44,7 +44,8 @@ DECLINE = {
     "about_bot": "I can't share that. I only answer questions about the study from its documents.",
 }
 LEAD = {  # what the bot does not do itself, but can give the documents' facts for, to use with another AI
-    "opinion": "I can't judge that for you. I can only say what the study documents state.",
+    "opinion": "I can't judge that for you. A question like this depends on things about your site that I don't "
+               "know, such as your team, your patients and how you work. I only know what the study documents say.",
     "task": "I can't do that myself. I answer questions about the study from its documents and check messages "
             "for problems.",
 }
