@@ -137,11 +137,13 @@ From the study documents. Please confirm with your CRA before acting on it.
 | Where | What the bot does |
 |---|---|
 | Group space, normal chat | Stays quiet. It still checks every message and posts an alert for a real problem. |
-| Group space, talking to the bot (@mention it, start with "bot,", or reply in one of its alert threads) | Always answers, in the thread. With nothing wrong: "I checked this against the protocol and found no problem." |
+| Group space, talking to the bot (@mention it, start with "bot,", or reply in a thread the bot started or that began by talking to it) | Always answers, in the thread. With nothing wrong: "I checked this against the protocol and found no problem." |
 | Group space, serious harm reported | Always gives the Serious Adverse Event warning. |
 | 1-on-1 chat with the bot | Always replies: an answer, the problem itself (what's wrong, why, what to do; the CRA is emailed, nothing is posted in the group), or "Thanks for letting me know." The bot account must accept a new 1-on-1 chat once before it can reply. Only for people on the study's people list (Peter and Eliot are there as testers: they can clear and disregard, and get no alert emails). |
 | Any other group chat or space the bot is added to | Same rules as the group space. Its alerts are posted only in that chat (the CRA is still emailed), never in the study's rooms. Read only for people on a study's people list; anyone else is ignored. Turn off with `gchat.read_group_chats: false`. |
 | Email | Unchanged: answers questions, emails alerts. |
+
+When someone talks to the bot in chat, it first sorts what they ask (`cormon/asks.py`). Study questions are answered as before. For anything else, code picks the reply from fixed words. A request to hide or change records gets "I can't help with that" (and any problem in it is still raised). A question about the bot itself (passwords, settings, its database, other people's messages) gets "I can't share that". A task it doesn't do (slides, code, emails) gets "I can't do that". A request for its opinion ("which criteria will be hardest?") gets the protocol's words on the topic as a file, to read or to give to another AI. A question about the rules that names no participant and reports nothing done or planned ("what happens if they take St. John's wort?") is answered and raises no alert. Every outgoing message is checked last: anything that looks like a key, password, server path or setting name is replaced by "I can't share that". Turn the sorting off with `answers.sort_requests: false`.
 
 ### The bot remembers each patient
 
