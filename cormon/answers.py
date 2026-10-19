@@ -463,7 +463,7 @@ def _post(study: Study, msg: dict, text: str, files: list[dict] | None = None) -
     subject = msg.get("subject") or "your question"
     meta = {"thread_key": msg["thread_key"], "in_reply_to": msg.get("rfc_message_id"),
             "references": (msg.get("refs") or []) + ([msg["rfc_message_id"]] if msg.get("rfc_message_id") else []),
-            "gmail_thread": msg["thread_key"].split(":", 1)[1]}
+            "gmail_thread": msg["thread_key"].split(":", 1)[1], **({"files": files} if files else {})}
     return routing.enqueue(purpose="question_answer", channel="email", destination="email", body=text,
                            subject=subject if subject.lower().startswith("re:") else f"Re: {subject}",
                            message_id=msg["id"], from_addr=routing.from_alias(study, msg), to=[sender], meta=meta,

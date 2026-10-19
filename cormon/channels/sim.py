@@ -67,6 +67,8 @@ def build_mime(row: dict) -> EmailMessage:
     msg.set_content(row["body"].replace("**", ""))
     if "**" in row["body"] or "\n> " in row["body"]:
         msg.add_alternative(email_html(row["body"]), subtype="html")
+    for f in meta.get("files") or []:
+        msg.add_attachment(f["text"], subtype="markdown", filename=f["name"])
     return msg
 
 

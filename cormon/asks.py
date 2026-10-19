@@ -4,7 +4,9 @@ The bot answers questions from the study documents and checks messages for probl
 sorts each request into a kind. Code chooses the reply, from fixed words: a request to hide or change records, or
 one about the bot's own workings (settings, passwords, its database), is turned down. A request for judgment
 ("which criteria will be hardest?") or a task the bot does not do (slides, code) gets the protocol's words on the
-topic as an attached file, with a question the person can give to another AI.
+topic as an attached file, with a question the person can give to another AI. In a group chat no document facts
+are sent (they would reach everyone in it): the bot offers them in a 1-on-1 chat instead. An email reply goes to
+its sender only, so email is treated like a 1-on-1 chat.
 """
 
 from __future__ import annotations
@@ -44,12 +46,23 @@ DECLINE = {
     "about_bot": "I can't share that. I only answer questions about the study from its documents.",
 }
 LEAD = {  # what the bot does not do itself, but can give the documents' facts for, to use with another AI
-    "opinion": "I can't judge that for you. A question like this depends on things about your site that I don't "
-               "know, such as your team, your patients and how you work. I only know what the study documents say.",
+    "opinion": "I can't judge that for you. It needs an opinion, or knowledge I don't have, such as about your site, "
+               "your team or your patients. I only know what the study documents say.",
     "task": "I can't do that myself. I answer questions about the study from its documents and check messages "
             "for problems.",
 }
 OPINION = LEAD["opinion"]
+ONE_ON_ONE = "Message me 1-on-1 and I can send you what the study documents say on it."
+GROUP = {  # a group chat: no document facts, so nothing from the documents reaches everyone in it
+    "opinion": "I can't judge that here. It needs an opinion, or knowledge I don't have, such as about your site, "
+               f"your team or your patients. {ONE_ON_ONE}",
+    "task": f"I can't do that here. I answer questions about the study from its documents. {ONE_ON_ONE}",
+}
+
+
+def private(msg: dict) -> bool:
+    """Only the person who asked sees the reply: a 1-on-1 chat, or an email (the reply goes to its sender only)."""
+    return msg.get("channel") != "teams" or msg.get("visibility") == "direct"
 
 
 def sort(text: str, use_cache: bool = True) -> list[dict]:
@@ -76,6 +89,9 @@ def decline(study: Study, msg: dict, text: str, use_cache: bool = True) -> dict 
         topic = r["topic"].strip()
         if not topic:
             lines.append(f"{LEAD[r['kind']]} The study documents don't cover that.")
+            continue
+        if not private(msg):
+            lines.append(GROUP[r["kind"]])
             continue
         a = answers.facts(study, msg, topic, text, use_cache)
         if not a:

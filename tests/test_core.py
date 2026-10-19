@@ -1377,7 +1377,7 @@ def test_what_the_bot_does_not_do_is_turned_down_in_fixed_words(monkeypatch):
         "question": "q", "text": "t", "sums": [], "quotes": []} if topic in ("eligibility criteria", "enrollment")
         else None)
     study = type("S", (), {"study_id": "x", "title": "Study X"})()
-    msg = {"id": 1, "channel": "teams"}
+    msg = {"id": 1, "channel": "teams", "visibility": "direct"}
     run = lambda *reqs: (monkeypatch.setattr(asks, "sort", lambda text, use_cache=True: [
         {"request": "r", "kind": k, "topic": t} for k, t in reqs]), asks.decline(study, msg, "m"))[1]
     assert run(("study", "")) is None and run() is None and run(("other", "")) is None and not posted
@@ -1398,6 +1398,27 @@ def test_what_the_bot_does_not_do_is_turned_down_in_fixed_words(monkeypatch):
     assert attached[-1] == []
     run(("task", ""))
     assert posted[-1] == f"{asks.LEAD['task']} The study documents don't cover that." and attached[-1] == []
+    msg.update(visibility="group")                  # a group chat: no document facts, an offer of a 1-on-1 chat
+    run(("opinion", "eligibility criteria"), ("task", "enrollment"))
+    assert posted[-1] == f"{asks.GROUP['opinion']}\n\n{asks.GROUP['task']}" and attached[-1] == []
+    assert "answers/" not in posted[-1]
+    run(("improper", ""))
+    assert posted[-1] == asks.DECLINE["improper"]
+    msg.update(channel="email", visibility="cc")    # an email reply goes to its sender only
+    run(("opinion", "eligibility criteria"))
+    assert attached[-1][0]["name"] == "facts-eligibility-criteria.md"
+    assert "Facts from the protocol: https://x/answers/tok.md" in posted[-1]
+
+
+def test_an_email_reply_carries_the_facts_file_as_an_attachment():
+    from cormon.channels.sim import build_mime
+    row = {"from_addr": "bot@x.org", "to_addrs": ["site@x.org"], "cc_addrs": [], "subject": "Re: q", "body": "Hi",
+           "meta": {"files": [{"name": "facts.md", "text": "# Facts\nAge 18 or older."}]}}
+    msg = build_mime(row)
+    files = [p for p in msg.iter_attachments()]
+    assert [(p.get_filename(), p.get_content_type()) for p in files] == [("facts.md", "text/markdown")]
+    assert "Age 18 or older." in files[0].get_content() and msg.get_body(("plain",)).get_content().strip() == "Hi"
+    assert not list(build_mime(dict(row, meta={})).iter_attachments())
 
 
 def test_the_facts_file_has_the_protocols_words_and_a_question_for_another_ai():

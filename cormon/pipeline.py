@@ -669,7 +669,8 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
         summary["turn"] = turn
         text = f"{msg.get('subject') or ''}\n\n{msg.get('body_text') or ''}"
         declined = None
-        if reader_route and not rerun and turn in ("direct", "addressed") and asks.enabled():
+        to_bot = turn in ("direct", "addressed") or (turn == "email" and msg.get("visibility") == "to")
+        if reader_route and not rerun and to_bot and asks.enabled():
             try:
                 declined = asks.decline(study, msg, text, use_cache=use_cache)
                 if declined:
