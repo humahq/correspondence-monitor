@@ -140,6 +140,7 @@ From the study documents. Please confirm with your CRA before acting on it.
 | Group space, talking to the bot (@mention it, start with "bot,", or reply in one of its alert threads) | Always answers, in the thread. With nothing wrong: "I checked this against the protocol and found no problem." |
 | Group space, serious harm reported | Always gives the Serious Adverse Event warning. |
 | 1-on-1 chat with the bot | Always replies: an answer, the problem itself (what's wrong, why, what to do; the CRA is emailed, nothing is posted in the group), or "Thanks for letting me know." The bot account must accept a new 1-on-1 chat once before it can reply. Only for people on the study's people list (Peter and Eliot are there as testers: they can clear and disregard, and get no alert emails). |
+| Any other group chat or space the bot is added to | Same rules as the group space. Its alerts are posted only in that chat (the CRA is still emailed), never in the study's rooms. Read only for people on a study's people list; anyone else is ignored. Turn off with `gchat.read_group_chats: false`. |
 | Email | Unchanged: answers questions, emails alerts. |
 
 ### The bot remembers each patient

@@ -59,6 +59,10 @@ Start a direct chat with **Huma bot** in Google Chat. There it always replies:
 
 The first time you message the bot 1-on-1, it may not reply until John accepts the chat on the bot's side. If it stays silent, tell John.
 
+### Add the bot to your own group chat
+
+Make a group chat (or use one you have), and add **Huma bot**. It follows the same rules as the study space: tag it (`@Huma bot`) or start with "bot," to ask it something. Otherwise it stays quiet, unless someone reports serious harm. Its alerts stay in that chat; nothing is posted in the study space.
+
 ### Mark an alert as done
 
 Reply in the alert's thread (or reply to the alert email):
