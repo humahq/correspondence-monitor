@@ -670,18 +670,26 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
         text = f"{msg.get('subject') or ''}\n\n{msg.get('body_text') or ''}"
         declined = None
         to_bot = turn in ("direct", "addressed") or (turn == "email" and msg.get("visibility") == "to")
-        if reader_route and not rerun and to_bot and asks.enabled():
+        for_people = False  # an email the bot is only copied on: its opinion or task requests are for the people
+        if reader_route and not rerun and asks.enabled() and (to_bot or answers.asks_something(text)):
             try:
-                declined = asks.decline(study, msg, text, use_cache=use_cache)
-                if declined:
-                    summary["declined"] = declined["kinds"]
+                if to_bot:
+                    declined = asks.decline(study, msg, text, use_cache=use_cache)
+                    if declined:
+                        summary["declined"] = declined["kinds"]
+                elif turn == "email":
+                    kinds = [r["kind"] for r in asks.sort(text, use_cache)]
+                    for_people = bool(kinds) and "study" not in kinds
+                    if for_people:
+                        db.audit("question_left_to_people", entity_type="message", entity_id=msg_id,
+                                 study_id=study.study_id, kinds=kinds)
             except Exception as e:
                 db.audit("request_sort_failed", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                          error=str(e)[:500])
         if reader_route and not rerun:
             try:  # an answer that fails must not stop the problems from going out
                 said = answers.reply(study, msg, text, use_cache=use_cache,
-                                     harm_only=turn == "quiet" or bool(declined and declined["only"]))
+                                     harm_only=turn == "quiet" or for_people or bool(declined and declined["only"]))
                 if said:
                     summary["answered"] = len(said["answers"])
             except Exception as e:

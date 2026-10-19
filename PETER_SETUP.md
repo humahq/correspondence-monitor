@@ -63,6 +63,8 @@ The first time you message the bot 1-on-1, it may not reply until John accepts t
 
 Make a group chat (or use one you have), and add **Huma bot**. It follows the same rules as the study space: tag it (`@Huma bot`) or start with "bot," to ask it something. Otherwise it stays quiet, unless someone reports serious harm. Its alerts stay in that chat; nothing is posted in the study space.
 
+If you ask for its opinion ("which criteria will be hardest?") or a task (slides, code) in a group chat, it says it can't, and offers to send the protocol's facts in a 1-on-1 chat. Ask it 1-on-1 (or by email) and it attaches them as a file you can give to another AI.
+
 ### Mark an alert as done
 
 Reply in the alert's thread (or reply to the alert email):

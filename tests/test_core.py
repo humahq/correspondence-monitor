@@ -1419,6 +1419,9 @@ def test_an_email_reply_carries_the_facts_file_as_an_attachment():
     assert [(p.get_filename(), p.get_content_type()) for p in files] == [("facts.md", "text/markdown")]
     assert "Age 18 or older." in files[0].get_content() and msg.get_body(("plain",)).get_content().strip() == "Hi"
     assert not list(build_mime(dict(row, meta={})).iter_attachments())
+    styled = build_mime(dict(row, body="**Facts** are attached.\n\n> quoted"))   # html body and a file together
+    assert styled.get_content_type() == "multipart/mixed" and styled.get_body(("html",)) is not None
+    assert [p.get_filename() for p in styled.iter_attachments()] == ["facts.md"]
 
 
 def test_the_facts_file_has_the_protocols_words_and_a_question_for_another_ai():
