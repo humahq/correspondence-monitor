@@ -1368,7 +1368,7 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
             pid = part["participant"] or None
             event = {"participant_id": pid, "event_type": "other", "description": f["problem"],
                      "quote": f["email_quote"], "temporality": "current" if f["status"] == "done" else "planned",
-                     "event_datetime": None, "polarity": "problem", "source": "body", "facts": []}
+                     "status": f["status"], "event_datetime": None, "polarity": "problem", "source": "body", "facts": []}
             rule = {"id": sec["id"], "pattern_class": f["pattern_class"], "doc_id": sec["doc_id"],
                     "text": f"{_heading(sec)}".strip() or f["problem"], "check_type": "judgment"}
             meta.append((dict(f, participant=pid or ""), rec))

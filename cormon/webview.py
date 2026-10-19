@@ -8,7 +8,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import config, db, items, settings
-from .drafting import also_broken, local_time
+from .drafting import also_broken, local_time, sender_ctx
 from .triage import TIER_LABELS
 
 CSS = """body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:860px;margin:32px auto;
@@ -30,7 +30,7 @@ _NO_QUOTE = "Exact words not found: please read this section of the study docume
 
 def _also(study, ev: dict) -> str:
     parts = [f"""<p class="muted">{_e(a['where'])}</p><blockquote>{_e(a['doc_quote'] or _NO_QUOTE)}</blockquote>
-<p class="muted">Site wrote: "{_e(a['message_quote'])}"</p>""" for a in also_broken(study, ev)]
+<p class="muted">{_e(sender_ctx(study, ev)['wrote'])}: "{_e(a['message_quote'])}"</p>""" for a in also_broken(study, ev)]
     return f"<h2>It also goes against this rule</h2>{''.join(parts)}" if parts else ""
 
 
@@ -117,7 +117,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, render_item(items.get(row["id"])))
         if self.path.startswith("/answers/"):
             token = self.path.split("/answers/", 1)[1].split("?")[0]
-            row = db.q1("SELECT * FROM answer_pages WHERE link_token=?", (token,))
+            as_file = token.endswith(".md")
+            row = db.q1("SELECT * FROM answer_pages WHERE link_token=?", (token.removesuffix(".md"),))
+            if row and as_file:
+                from . import answers
+                return self._send(200, answers.facts_file(dict(row), config.study(row["study_id"]).title),
+                                  "text/markdown; charset=utf-8")
             if row:
                 return self._send(200, render_answers(dict(row)))
         return self._send(404, "not found", "text/plain")

@@ -342,20 +342,29 @@ _CALLED = re.compile(r"^\W*(?:(?:hey|hi|hello|ok|okay)\s+)?(?:huma\s+)?bot\b", r
 
 def turn(msg: dict) -> str:
     """Whether a chat message is talking to the bot: "direct" (a 1-on-1 chat), "addressed" (in a group: it
-    @mentions the bot, starts "bot, ...", or replies in a thread the bot started without @mentioning someone
-    else), "quiet" (other group chat), or "email"."""
+    @mentions the bot, starts "bot, ...", or replies without @mentioning someone else in a thread the bot started
+    or one that began by talking to the bot), "quiet" (other group chat), or "email"."""
     if msg.get("channel") != "teams":
         return "email"
     if msg.get("visibility") == "direct":
         return "direct"
     h = msg.get("headers") or {}
-    if h.get("_cormon_to_bot") or _CALLED.match(msg.get("body_text") or ""):
+    if _to_bot(h, msg.get("body_text")):
         return "addressed"
     m = re.fullmatch(r"teams:(spaces/[^/]+)/threads/([^/]+)", msg.get("thread_key") or "")
-    if m and not h.get("_cormon_mentions") and db.q1(
-            "SELECT 1 FROM outbox WHERE channel='teams' AND external_ref=?", (f"{m[1]}/messages/{m[2]}.{m[2]}",)):
+    if not m or h.get("_cormon_mentions"):
+        return "quiet"
+    if db.q1("SELECT 1 FROM outbox WHERE channel='teams' AND external_ref=?", (f"{m[1]}/messages/{m[2]}.{m[2]}",)):
+        return "addressed"
+    first = db.q1("SELECT id, headers, body_text FROM messages WHERE thread_key=? ORDER BY id LIMIT 1",
+                  (msg["thread_key"],))
+    if first and first["id"] != msg.get("id") and _to_bot(db.unjs(first["headers"], {}), first["body_text"]):
         return "addressed"
     return "quiet"
+
+
+def _to_bot(headers: dict, text: str | None) -> bool:
+    return bool(headers.get("_cormon_to_bot") or _CALLED.match(text or ""))
 
 
 def message(msg_id: int) -> dict:

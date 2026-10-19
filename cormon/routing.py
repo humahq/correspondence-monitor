@@ -9,10 +9,32 @@ from . import capture, config, db, drafting, items, settings
 from .config import Person, Study
 
 
+_INTERNAL = [
+    ("a private key", r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    ("an API key", r"\bsk-[A-Za-z0-9_-]{16,}|\bAIza[0-9A-Za-z_-]{30,}|\bya29\.[0-9A-Za-z_-]{20,}"),
+    ("a password or key", r"(?i)\b(?:password|passwd|secret|api[_ -]?key|access[_ -]?token|client[_ -]?secret)"
+                          r"\s*(?:is|[:=])\s*\S+"),
+    ("a server path", r"(?<![\w.:/])/(?:opt|etc|home|var|usr|root|srv)/[\w.-]+/"),
+    ("a secrets file", r"\bsecrets/[\w.-]+"),
+    ("a setting's name", r"\b[A-Z][A-Z0-9]*_(?:API_KEY|SECRET|TOKEN|PASSWORD)\b"),
+]
+BLOCKED = "I can't share that. I only answer questions about the study from its documents."
+
+
+def internal(text: str | None) -> list[str]:
+    """What in an outgoing message looks like the bot's own workings (keys, passwords, server paths, settings)."""
+    return [what for what, pat in _INTERNAL if re.search(pat, text or "")]
+
+
 def enqueue(*, purpose: str, channel: str, destination: str, body: str, item_id: int | None = None,
             message_id: int | None = None, template_id: str | None = None, from_addr: str | None = None,
             to: list[str] | None = None, cc: list[str] | None = None, subject: str | None = None,
             meta: dict | None = None, status: str = "queued", study_id: str | None = None) -> int:
+    found = internal(body) + internal(subject)
+    if found:  # whatever wrote it, nothing of the bot's own workings goes out
+        db.audit("outgoing_blocked", entity_type="message" if message_id else "item", entity_id=message_id or item_id,
+                 study_id=study_id, purpose=purpose, found=sorted(set(found)))
+        body, subject = BLOCKED, (subject and "Message withheld")
     rfc_id = make_msgid(domain=settings.get("mailbox.address", "bot@huma.ai").split("@")[1]) \
         if channel == "email" else None
     oid = db.ex(

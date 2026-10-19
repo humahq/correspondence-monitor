@@ -6,7 +6,7 @@ import re
 
 from dateutil import parser as dtparser
 
-from . import (answers, capture, checks, config, db, events, guide, items, matching, reader, routing, settings,
+from . import (answers, asks, capture, checks, config, db, events, guide, items, matching, reader, routing, settings,
                textutil, triage)
 from .config import Study
 from . import drafting
@@ -255,6 +255,10 @@ def _answer_in_chat(study: Study, msg: dict, text: str, purpose: str = "instruct
                     meta={"target": {"space": m.group(2), "thread": m.group(1), "key": "study_channel"}})
 
 
+CAN_HELP = ("I couldn't find anything I can answer here. I answer questions about the study from its documents "
+            "(visit windows, eligibility, medicines, samples, reporting) and check messages for problems.")
+
+
 def _acknowledge(study: Study, msg: dict, summary: dict, trial_related: bool) -> None:
     """A reply when someone talks to the bot and nothing else answered them: the problems it raised, or that
     it found none. A 1-on-1 chat always gets one; a group chat only when the bot was asked."""
@@ -278,6 +282,8 @@ def _acknowledge(study: Study, msg: dict, summary: dict, trial_related: bool) ->
         text = f"This is already raised: {names(raised)}."
     elif trial_related and (msg.get("visibility") != "direct" or answers.asks_something(msg.get("body_text"))):
         text = "I checked this against the protocol and found no problem."
+    elif answers.asks_something(msg.get("body_text")):
+        text = CAN_HELP
     else:
         text = "Thanks for letting me know."
     _answer_in_chat(study, msg, text, purpose="chat_acknowledgement")
@@ -306,6 +312,13 @@ def _target_item(msg: dict) -> int | None:
         if len(rows) == 1:
             return rows[0]["id"]
     return None
+
+
+def _only_a_question(event: dict, pid: str | None, events: list[dict]) -> bool:
+    """A finding read from a question about the rules, about no participant, in a message reporting nothing done
+    or planned: the question is answered, it is not a problem at the site."""
+    return (event.get("status") == "asked" and not pid
+            and all(e["temporality"] == "hypothetical" for e in events))
 
 
 def _code_step(said: dict, ai_step: str | None) -> str | None:
@@ -534,6 +547,11 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
             hit = set()
             for f in found:
                 pid = _pid(f.event.get("participant_id"))
+                if _only_a_question(f.event, pid, data["events"]):
+                    summary["hypothetical"] += 1   # a question about the rules is answered, not raised
+                    db.audit("general_question_no_alert", entity_type="message", entity_id=msg_id,
+                             study_id=study.study_id, problem=f.extra.get("headline"))
+                    continue
                 if _already_raised(study, f, pid, msg_id):
                     continue
                 hit.add(pid)
@@ -649,10 +667,20 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
 
         turn = capture.turn(msg)
         summary["turn"] = turn
+        text = f"{msg.get('subject') or ''}\n\n{msg.get('body_text') or ''}"
+        declined = None
+        if reader_route and not rerun and turn in ("direct", "addressed") and asks.enabled():
+            try:
+                declined = asks.decline(study, msg, text, use_cache=use_cache)
+                if declined:
+                    summary["declined"] = declined["kinds"]
+            except Exception as e:
+                db.audit("request_sort_failed", entity_type="message", entity_id=msg_id, study_id=study.study_id,
+                         error=str(e)[:500])
         if reader_route and not rerun:
             try:  # an answer that fails must not stop the problems from going out
-                said = answers.reply(study, msg, f"{msg.get('subject') or ''}\n\n{msg.get('body_text') or ''}",
-                                     use_cache=use_cache, harm_only=turn == "quiet")
+                said = answers.reply(study, msg, text, use_cache=use_cache,
+                                     harm_only=turn == "quiet" or bool(declined and declined["only"]))
                 if said:
                     summary["answered"] = len(said["answers"])
             except Exception as e:
@@ -660,7 +688,8 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 db.audit("question_answer_failed", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                          error=str(e)[:500])
         if (turn in ("direct", "addressed") and not rerun and not summary.get("answered")
-                and not summary.get("answer_failed") and not summary.get("instruction")):
+                and not summary.get("answer_failed") and not summary.get("instruction")
+                and not (declined and declined["only"] and not summary["items_created"])):
             _acknowledge(study, msg, summary, data["trial_related"])
 
         if rerun:

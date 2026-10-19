@@ -26,7 +26,7 @@ templates:
       {%- for p in problems %}<br>{{ p.n }}. {{ p.next_step or "Check this with the site." }}{% endfor %}</p>
       <p>──────────</p>
       {%- for p in problems %}
-      <p><b>Evidence for problem {{ p.n }}</b><br>Site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):<br><code>{{ p.message_quote }}</code>{% for e in p.earlier_quotes %}<br>Earlier message ({{ e.when }}):<br><code>{{ e.words }}</code>{% endfor %}<br>Study rule:<br>{% if p.doc_quote %}<code>{{ p.doc_quote }}</code><br><i>From: {{ p.where }}</i>{% else %}<i>exact words not found, please read this section: {{ p.where }}</i>{% endif %}
+      <p><b>Evidence for problem {{ p.n }}</b><br>{{ finding.wrote | default('Site wrote') }} ({{ finding.sender_name }}, {{ finding.message_date }}):<br><code>{{ p.message_quote }}</code>{% for e in p.earlier_quotes %}<br>Earlier message ({{ e.when }}):<br><code>{{ e.words }}</code>{% endfor %}<br>Study rule:<br>{% if p.doc_quote %}<code>{{ p.doc_quote }}</code><br><i>From: {{ p.where }}</i>{% else %}<i>exact words not found, please read this section: {{ p.where }}</i>{% endif %}
       {%- if p.unsure %}<br><i>Why not sure: {{ p.unsure_reason }}</i>{% endif %}</p>
       {%- endfor %}
       {%- if finding.earlier %}
@@ -42,7 +42,7 @@ templates:
     body: |
       <p><b>Good news · {{ study.short_name }} · {{ item.participant_id or "study" }} · {{ item.site }}</b></p>
       <p>{{ item.title }}</p>
-      <p><b>What the site wrote</b> ({{ finding.sender_name }}, {{ finding.message_date }}):<br><i>"{{ finding.message_quote }}"</i></p>
+      <p><b>{% if finding.sender_is_site | default(true) %}What the site wrote{% else %}What the {{ finding.sender_role | lower }} wrote{% endif %}</b> ({{ finding.sender_name }}, {{ finding.message_date }}):<br><i>"{{ finding.message_quote }}"</i></p>
       <p>Item #{{ item.id }} · added to the CRA's to-do list</p>
 
   # ---------------- Teams: alert channel (immediate only) ----------------
@@ -59,7 +59,7 @@ templates:
       {%- for p in problems %}<br>{{ p.n }}. {{ p.next_step or "Check this with the site." }}{% endfor %}</p>
       <p>──────────</p>
       {%- for p in problems %}
-      <p><b>Evidence for problem {{ p.n }}</b><br>Site wrote:<br><code>{{ p.message_quote }}</code>{% for e in p.earlier_quotes %}<br>Earlier message ({{ e.when }}):<br><code>{{ e.words }}</code>{% endfor %}<br>Study rule:<br>{% if p.doc_quote %}<code>{{ p.doc_quote }}</code><br><i>From: {{ p.where }}</i>{% else %}<i>exact words not found, please read this section: {{ p.where }}</i>{% endif %}</p>
+      <p><b>Evidence for problem {{ p.n }}</b><br>{{ finding.wrote | default('Site wrote') }}:<br><code>{{ p.message_quote }}</code>{% for e in p.earlier_quotes %}<br>Earlier message ({{ e.when }}):<br><code>{{ e.words }}</code>{% endfor %}<br>Study rule:<br>{% if p.doc_quote %}<code>{{ p.doc_quote }}</code><br><i>From: {{ p.where }}</i>{% else %}<i>exact words not found, please read this section: {{ p.where }}</i>{% endif %}</p>
       {%- endfor %}
       <p>Item #{{ item.id }} · <a href="{{ item.link }}">details</a></p>
 
@@ -90,7 +90,7 @@ templates:
       {%- for p in problems %}
 
       **Evidence for problem {{ p.n }}**
-      Site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
+      {{ finding.wrote | default('Site wrote') }} ({{ finding.sender_name }}, {{ finding.message_date }}):
       > {{ p.message_quote | replace("\n", " ") }}
       {%- for e in p.earlier_quotes %}
       Earlier message ({{ e.when }}):
@@ -143,7 +143,7 @@ templates:
       {%- for p in problems %}
 
       **Evidence for problem {{ p.n }}**
-      Site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
+      {{ finding.wrote | default('Site wrote') }} ({{ finding.sender_name }}, {{ finding.message_date }}):
       > {{ p.message_quote | replace("\n", " ") }}
       {%- for e in p.earlier_quotes %}
       Earlier message ({{ e.when }}):
@@ -196,7 +196,7 @@ templates:
       {%- for p in problems %}
 
       **Evidence for problem {{ p.n }}**
-      Site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
+      {{ finding.wrote | default('Site wrote') }} ({{ finding.sender_name }}, {{ finding.message_date }}):
       > {{ p.message_quote | replace("\n", " ") }}
       {%- for e in p.earlier_quotes %}
       Earlier message ({{ e.when }}):
@@ -240,7 +240,7 @@ templates:
       {%- endif %}
       {%- endfor %}
 
-      **What to do** (today): please call {{ people.crc.name }} at {{ item.site }}, then:
+      **What to do** (today): please call {% if finding.sender_is_site | default(true) %}{{ people.crc.name }} at {{ item.site }}{% else %}{{ finding.sender_name }} ({{ finding.sender_role }}), who sent it{% endif %}, then:
       {%- for p in problems %}
       {{ p.n }}. {{ p.next_step or "Check this with the site." }}
       {%- endfor %}
@@ -249,7 +249,7 @@ templates:
       {%- for p in problems %}
 
       **Evidence for problem {{ p.n }}**
-      Site wrote ({{ finding.sender_name }}, {{ finding.message_date }}):
+      {{ finding.wrote | default('Site wrote') }} ({{ finding.sender_name }}, {{ finding.message_date }}):
       > {{ p.message_quote | replace("\n", " ") }}
       {%- for e in p.earlier_quotes %}
       Earlier message ({{ e.when }}):
@@ -271,7 +271,7 @@ templates:
       (Part of this is from an earlier email: {{ finding.earlier }}.)
       {%- endif %}
 
-      The site has been told only that a possible issue was noted and that you have been informed. {{ people.clinops_lead.name }} (sponsor) has been told you are in touch with the site.
+      {% if finding.sender_is_site | default(true) %}The site has been told only that a possible issue was noted and that you have been informed. {% endif %}{{ people.clinops_lead.name }} (sponsor) has been told you are in touch with the site.
 
       Details: {{ item.link }}
       {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}Reply "disregard" to have me drop this, or "cleared" once resolved.{% endif %}
@@ -292,7 +292,9 @@ templates:
 
       What was routed:
       - {{ people.cra.name }} (CRA) has the context and has been asked to call the site today.
+      {%- if finding.sender_is_site | default(true) %}
       - {{ people.crc.name }} (site coordinator) was told a possible issue was noted and that their monitor has been informed.
+      {%- endif %}
 
       The study rule ({{ finding.where }}){% if finding.doc_quote %}: "{{ finding.doc_quote }}"{% else %}: exact words not found, please read this section.{% endif %}
       {%- for a in also %}

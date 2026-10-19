@@ -75,6 +75,15 @@ def people_ctx(study: Study, site: str | None) -> dict:
     }
 
 
+def sender_ctx(study: Study, ev: dict) -> dict:
+    """Who wrote the message, as the alert names them: site staff ("Site wrote"; also anyone not on the people
+    list) or their study role (a sponsor or study team member is not the site)."""
+    p = study.person_by_email(ev.get("sender_email"))
+    site = p is None or bool(set(p.roles) & set(study.raw.get("site_roles", ["crc"])))
+    role = study.role_label(p.roles[0]) if p and p.roles else ""
+    return {"sender_is_site": site, "sender_role": role, "wrote": "Site wrote" if site else f"{role} wrote"}
+
+
 def item_context(study: Study, item: dict, recipient: Person | None, routed_to: str = "") -> dict:
     ev = item["evidence"] if isinstance(item["evidence"], dict) else db.unjs(item["evidence"], {})
     pattern = study.pattern(item.get("pattern_class") or "") or {}
@@ -101,6 +110,7 @@ def item_context(study: Study, item: dict, recipient: Person | None, routed_to: 
             "message_subject": ev.get("message_subject") or "(no subject)",
             "message_date": local_time(ev.get("message_date")),
             "sender_name": ev.get("sender_name") or ev.get("sender_email") or "unknown sender",
+            **sender_ctx(study, ev),
             "unsure": ev.get("certainty") == "unsure",
             "unsure_reason": ev.get("unsure_reason") or "",
             "earlier": (f"{ev['earlier']['date']}, \"{ev['earlier']['subject']}\"" if ev.get("earlier") else ""),

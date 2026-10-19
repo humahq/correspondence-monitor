@@ -490,6 +490,30 @@ def answer_message(study: Study, msg: dict, email: str, use_cache: bool = True,
     return answers
 
 
+def facts(study: Study, msg: dict, topic: str, email: str, use_cache: bool = True) -> dict | None:
+    """The documents' proven words on a topic, for a question the bot does not judge itself; None when none."""
+    every = guide.load(study.study_id)
+    sources = [i for i in every if i["kind"] == "section"]
+    q = {"question": f"What do the study documents say about {topic}?", "participant": "", "harm": False}
+    a = answer_one(study, msg, q, reader.view(study, every), sources, email, use_cache)
+    return a if a["found"] else None
+
+
+def facts_file(page: dict, study_title: str) -> str:
+    """An answer page as a plain file of facts, with the protocol's words and a question for another AI."""
+    out = [f"# Facts from the study documents", f"Study: {study_title}", "",
+           f"Asked: {page['message_text'].strip()}", ""]
+    for a in json.loads(page["answers"]):
+        out += [f"## {a['question']}", "", a["text"], ""]
+        out += [f"- {what}: {r}" for what, r in a.get("sums", [])]
+        out += ["### The protocol's words (found word for word in the documents)", ""]
+        out += [f"- {h}: \"{w}\"" for h, w in a["quotes"]] + [""]
+    out += ["## To ask another AI", "",
+            f"Using only the facts above from the {study_title} documents, answer: {page['message_text'].strip()}",
+            "", FOOTER]
+    return "\n".join(out)
+
+
 def reply(study: Study, msg: dict, email: str, use_cache: bool = True, harm_only: bool = False) -> dict | None:
     """Answer the message's questions, if it asks any the documents could answer. Returns a trace, or None."""
     answers = answer_message(study, msg, email, use_cache, harm_only)

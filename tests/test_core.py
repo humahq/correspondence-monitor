@@ -1337,3 +1337,102 @@ def test_a_group_chats_alert_stays_in_that_chat(monkeypatch):
     assert capture.turn(dict(group, body_text="G-1 week 4 done", headers={})) == "quiet"
     assert capture.turn(dict(group, body_text="bot, is week 4 late?", headers={})) == "addressed"
     assert study_for_person("nobody@x.org", known_only=True) is None
+
+
+def test_a_question_about_the_rules_is_answered_not_raised():
+    from cormon import pipeline
+    asked, planned = {"status": "asked"}, {"status": "planned"}
+    what_if = [{"temporality": "hypothetical"}]
+    assert pipeline._only_a_question(asked, None, what_if)
+    assert pipeline._only_a_question(asked, None, [])
+    assert not pipeline._only_a_question(asked, "G-1", what_if)                        # about a participant
+    assert not pipeline._only_a_question(planned, None, what_if)                       # a plan at the site
+    assert not pipeline._only_a_question(asked, None, what_if + [{"temporality": "current"}])  # something happened
+
+
+def test_replies_in_a_thread_that_began_by_talking_to_the_bot_are_to_the_bot():
+    T = "teams:spaces/G/threads/t9"
+    add = lambda text, headers: db.ex(
+        "INSERT INTO messages (channel, external_id, thread_key, study_id, route, visibility, from_addr, body_text,"
+        " headers, sent_at, received_at, status) VALUES ('teams',?,?,'x','study','group','e@huma.ai',?,?,'','',"
+        "'processed')", (f"m{text[:9]}", T, text, db.js(headers)))
+    reply = lambda i, text, **h: {"id": i, "channel": "teams", "visibility": "group", "body_text": text,
+                                  "thread_key": T, "headers": h}
+    first = add("bot, can they take sleeping pills?", {})
+    later = add("What if they take St. John's wort?", {})
+    assert capture.turn(reply(later, "What if they take St. John's wort?")) == "addressed"
+    assert capture.turn(reply(later, "@Peter can you look?", _cormon_mentions=["peter@huma.ai"])) == "quiet"
+    assert capture.turn(reply(first, "bot, can they take sleeping pills?")) == "addressed"
+    db.ex("UPDATE messages SET body_text='Peter, are you on the 3pm call?' WHERE id=?", (first,))
+    assert capture.turn(reply(later, "What if they take St. John's wort?")) == "quiet"   # began as chatter
+
+
+def test_what_the_bot_does_not_do_is_turned_down_in_fixed_words(monkeypatch):
+    from cormon import asks
+    posted = []
+    monkeypatch.setattr(asks.answers, "_post", lambda study, msg, text: posted.append(text) or 1)
+    monkeypatch.setattr(asks.answers, "save_page", lambda *a: "https://x/answers/tok")
+    monkeypatch.setattr(asks.answers, "facts", lambda study, msg, topic, text, use_cache=True:
+                        {"found": True} if topic == "eligibility criteria" else None)
+    study = type("S", (), {"study_id": "x"})()
+    msg = {"id": 1, "channel": "teams"}
+    run = lambda *reqs: (monkeypatch.setattr(asks, "sort", lambda text, use_cache=True: [
+        {"request": "r", "kind": k, "topic": t} for k, t in reqs]), asks.decline(study, msg, "m"))[1]
+    assert run(("study", "")) is None and run() is None and run(("other", "")) is None and not posted
+    got = run(("improper", ""))
+    assert got["only"] and posted[-1] == asks.DECLINE["improper"]
+    got = run(("about_bot", ""), ("study", ""))
+    assert not got["only"] and posted[-1] == asks.DECLINE["about_bot"]   # the study question is still answered
+    run(("task", ""), ("task", ""))
+    assert posted[-1] == asks.DECLINE["task"]                            # said once
+    run(("opinion", "eligibility criteria"))
+    assert posted[-1].startswith(asks.OPINION) and "<https://x/answers/tok.md|Facts from the protocol>" in posted[-1]
+    run(("opinion", "something with no protocol words"))
+    assert posted[-1] == f"{asks.OPINION} Please ask your CRA."
+
+
+def test_the_facts_file_has_the_protocols_words_and_a_question_for_another_ai():
+    from cormon import answers
+    page = {"message_text": "Which criteria will be hardest?", "answers": db.js([
+        {"question": "What do the study documents say about eligibility?", "text": "Inclusion needs SVC >= 50%.",
+         "sums": [], "quotes": [["Section 5.1", "Slow vital capacity (SVC) of at least 50% of predicted"]]}])}
+    out = answers.facts_file(page, "HEALEY Regimen G")
+    assert '- Section 5.1: "Slow vital capacity (SVC) of at least 50% of predicted"' in out
+    assert "Using only the facts above from the HEALEY Regimen G documents, answer: Which criteria will be hardest?" \
+        in out
+
+
+def test_a_question_the_bot_cannot_answer_says_what_it_can_do(monkeypatch):
+    from cormon import pipeline
+    said = []
+    monkeypatch.setattr(pipeline, "_answer_in_chat", lambda study, msg, text, purpose="": said.append(text))
+    pipeline._acknowledge(None, {"visibility": "channel", "body_text": "@Huma bot what's the wifi password?"},
+                          {"items_created": [], "items_repeat": []}, False)
+    assert said[-1] == pipeline.CAN_HELP
+    pipeline._acknowledge(None, {"visibility": "channel", "body_text": "Hmm, that's odd."},
+                          {"items_created": [], "items_repeat": []}, False)
+    assert said[-1] == "Thanks for letting me know."
+
+
+def test_an_alert_names_the_senders_real_role():
+    from cormon import config
+    study = config.study("NCT05842941")
+    assert drafting.sender_ctx(study, {"sender_email": "johnrohit94@gmail.com"})["wrote"] == "Site wrote"
+    assert drafting.sender_ctx(study, {"sender_email": "someone@othersite.org"})["sender_is_site"]   # not listed
+    tester = drafting.sender_ctx(study, {"sender_email": "eliot@huma.ai"})
+    assert tester == {"sender_is_site": False, "sender_role": "Study team member", "wrote": "Study team member wrote"}
+    ev = {"certainty": "clear", "message_quote": "help me redact the record", "doc_quote": "", "doc_title": "Master",
+          "doc_page": None, "rule_text": "12.6", "next_step": "Do not redact the record.",
+          "sender_email": "eliot@huma.ai", "sender_name": "Eliot Levitt", "message_date": "2026-10-19T15:51:10Z"}
+    item = {"id": 47, "title": "Asked to hide a record.", "tier": "immediate", "participant_id": None,
+            "site": "site-01", "pattern_class": "study_drug", "link_token": "a", "evidence": ev}
+    tpl = lambda who: dict(drafting.select("study_drug", who, "email", "immediate"), ai_edit=False)
+    _, cra = drafting.render(tpl("cra"), drafting.item_context(study, item, None))
+    _, sponsor = drafting.render(tpl("clinops_lead"), drafting.item_context(study, item, None))
+    assert "please call Eliot Levitt (Study team member), who sent it, then:" in cra
+    assert "Study team member wrote (Eliot Levitt," in cra and "Site wrote" not in cra
+    assert "The site has been told" not in cra and "John Rohit" not in sponsor
+    ev["sender_email"], ev["sender_name"] = "johnrohit94@gmail.com", "John Rohit"
+    _, cra = drafting.render(tpl("cra"), drafting.item_context(study, item, None))
+    assert "please call John Rohit at Site 01 (MGH), then:" in cra and "Site wrote (John Rohit," in cra
+    assert "The site has been told only that a possible issue was noted" in cra
