@@ -1369,12 +1369,14 @@ def test_replies_in_a_thread_that_began_by_talking_to_the_bot_are_to_the_bot():
 
 def test_what_the_bot_does_not_do_is_turned_down_in_fixed_words(monkeypatch):
     from cormon import asks
-    posted = []
-    monkeypatch.setattr(asks.answers, "_post", lambda study, msg, text: posted.append(text) or 1)
+    posted, attached = [], []
+    monkeypatch.setattr(asks.answers, "_post", lambda study, msg, text, files=None:
+                        posted.append(text) or attached.append(files) or 1)
     monkeypatch.setattr(asks.answers, "save_page", lambda *a: "https://x/answers/tok")
-    monkeypatch.setattr(asks.answers, "facts", lambda study, msg, topic, text, use_cache=True:
-                        {"found": True} if topic == "eligibility criteria" else None)
-    study = type("S", (), {"study_id": "x"})()
+    monkeypatch.setattr(asks.answers, "facts", lambda study, msg, topic, text, use_cache=True: {
+        "question": "q", "text": "t", "sums": [], "quotes": []} if topic in ("eligibility criteria", "enrollment")
+        else None)
+    study = type("S", (), {"study_id": "x", "title": "Study X"})()
     msg = {"id": 1, "channel": "teams"}
     run = lambda *reqs: (monkeypatch.setattr(asks, "sort", lambda text, use_cache=True: [
         {"request": "r", "kind": k, "topic": t} for k, t in reqs]), asks.decline(study, msg, "m"))[1]
@@ -1383,23 +1385,59 @@ def test_what_the_bot_does_not_do_is_turned_down_in_fixed_words(monkeypatch):
     assert got["only"] and posted[-1] == asks.DECLINE["improper"]
     got = run(("about_bot", ""), ("study", ""))
     assert not got["only"] and posted[-1] == asks.DECLINE["about_bot"]   # the study question is still answered
-    run(("task", ""), ("task", ""))
-    assert posted[-1] == asks.DECLINE["task"]                            # said once
+    assert attached[-1] == []                                           # nothing attached to a refusal
     run(("opinion", "eligibility criteria"))
     assert posted[-1].startswith(asks.OPINION) and "<https://x/answers/tok.md|Facts from the protocol>" in posted[-1]
-    run(("opinion", "something with no protocol words"))
-    assert posted[-1] == f"{asks.OPINION} Please ask your CRA."
+    assert "use another AI" in posted[-1] and attached[-1][0]["name"] == "facts-eligibility-criteria.md"
+    assert "# Facts from the study documents" in attached[-1][0]["text"]
+    run(("task", "enrollment"))
+    assert posted[-1].startswith(asks.LEAD["task"]) and "attached file" in posted[-1]
+    assert attached[-1][0]["name"] == "facts-enrollment.md"
+    run(("opinion", "the weather"))
+    assert posted[-1] == f"{asks.OPINION} The study documents don't cover the weather, so please ask your CRA."
+    assert attached[-1] == []
 
 
 def test_the_facts_file_has_the_protocols_words_and_a_question_for_another_ai():
     from cormon import answers
-    page = {"message_text": "Which criteria will be hardest?", "answers": db.js([
+    page = {"message_text": "@Huma bot Which criteria will be hardest?", "answers": db.js([
         {"question": "What do the study documents say about eligibility?", "text": "Inclusion needs SVC >= 50%.",
          "sums": [], "quotes": [["Section 5.1", "Slow vital capacity (SVC) of at least 50% of predicted"]]}])}
     out = answers.facts_file(page, "HEALEY Regimen G")
     assert '- Section 5.1: "Slow vital capacity (SVC) of at least 50% of predicted"' in out
-    assert "Using only the facts above from the HEALEY Regimen G documents, answer: Which criteria will be hardest?" \
-        in out
+    assert "Using only the facts above from the HEALEY Regimen G documents, help with this: Which criteria will be " \
+        "hardest?" in out and "Asked: Which criteria will be hardest?" in out
+
+
+def test_a_facts_file_is_attached_to_the_chat_post_and_checked_like_the_text():
+    from cormon import routing
+    from cormon.channels.gchat import GoogleChatChannel
+    calls = []
+    class R:
+        def __init__(self, code, data): self.status_code, self.text, self._d = code, "x", data
+        def json(self): return self._d
+    class Session:
+        fail = False
+        def post(self, url, json=None, data=None, params=None, headers=None, timeout=0):
+            calls.append((url, json, data, params))
+            if "attachments:upload" in url:
+                return R(500, {}) if self.fail else R(200, {"attachmentDataRef": {"resourceName": "r1"}})
+            return R(200, {"name": "spaces/G/messages/1"})
+    s = Session()
+    row = {"body": "Facts are attached.", "meta": {"target": {"space": "spaces/G", "thread": "spaces/G/threads/t"},
+                                                   "files": [{"name": "facts.md", "text": "# Facts"}]}}
+    GoogleChatChannel(session=s).send(row)
+    up, msg = calls[-2], calls[-1]
+    assert up[0].endswith("/upload/v1/spaces/G/attachments:upload") and up[3] == {"uploadType": "multipart"}
+    assert b'{"filename": "facts.md"}' in up[2] and b"# Facts" in up[2]
+    assert msg[1]["attachment"] == [{"attachmentDataRef": {"resourceName": "r1"}}]
+    s.fail = True
+    GoogleChatChannel(session=s).send(row)
+    assert "attachment" not in calls[-1][1] and calls[-1][1]["text"] == "Facts are attached."   # still sent
+    oid = routing.enqueue(purpose="question_answer", channel="teams", destination="teams_study_channel", body="ok",
+                          meta={"files": [{"name": "f.md", "text": "server at /opt/cormon/data/x"}]})
+    row = db.q1("SELECT body, meta FROM outbox WHERE id=?", (oid,))
+    assert row["body"] == routing.BLOCKED and "files" not in db.unjs(row["meta"])
 
 
 def test_a_question_the_bot_cannot_answer_says_what_it_can_do(monkeypatch):

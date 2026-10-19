@@ -446,14 +446,15 @@ def save_page(study: Study, msg: dict, email: str, answers: list[dict]) -> str:
     return f"{settings.get('web.base_url', 'http://localhost:8080').rstrip('/')}/answers/{token}"
 
 
-def _post(study: Study, msg: dict, text: str) -> int | None:
+def _post(study: Study, msg: dict, text: str, files: list[dict] | None = None) -> int | None:
     if msg.get("channel") == "teams":
         m = re.fullmatch(r"teams:((spaces/[^/]+)/threads/[^/]+)", msg.get("thread_key") or "")
         if not m:
             return None
         return routing.enqueue(purpose="question_answer", channel="teams", destination="teams_study_channel",
                                body=text, message_id=msg["id"], study_id=study.study_id,
-                               meta={"target": {"space": m.group(2), "thread": m.group(1), "key": "study_channel"}})
+                               meta={"target": {"space": m.group(2), "thread": m.group(1), "key": "study_channel"},
+                                     **({"files": files} if files else {})})
     sender = msg.get("from_addr")
     if not sender or sender.lower() == (settings.get("mailbox.address") or "").lower():
         return None
@@ -501,15 +502,16 @@ def facts(study: Study, msg: dict, topic: str, email: str, use_cache: bool = Tru
 
 def facts_file(page: dict, study_title: str) -> str:
     """An answer page as a plain file of facts, with the protocol's words and a question for another AI."""
-    out = [f"# Facts from the study documents", f"Study: {study_title}", "",
-           f"Asked: {page['message_text'].strip()}", ""]
+    asked = re.sub(r"^\W*(?:(?:hey|hi|hello|ok|okay)\s+)?@?(?:huma\s+)?bot\b[\s,:]*", "", page["message_text"].strip(),
+                   flags=re.I) or page["message_text"].strip()
+    out = [f"# Facts from the study documents", f"Study: {study_title}", "", f"Asked: {asked}", ""]
     for a in json.loads(page["answers"]):
         out += [f"## {a['question']}", "", a["text"], ""]
         out += [f"- {what}: {r}" for what, r in a.get("sums", [])]
         out += ["### The protocol's words (found word for word in the documents)", ""]
         out += [f"- {h}: \"{w}\"" for h, w in a["quotes"]] + [""]
     out += ["## To ask another AI", "",
-            f"Using only the facts above from the {study_title} documents, answer: {page['message_text'].strip()}",
+            f"Using only the facts above from the {study_title} documents, help with this: {asked}",
             "", FOOTER]
     return "\n".join(out)
 

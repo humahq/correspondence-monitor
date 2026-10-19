@@ -30,11 +30,13 @@ def enqueue(*, purpose: str, channel: str, destination: str, body: str, item_id:
             message_id: int | None = None, template_id: str | None = None, from_addr: str | None = None,
             to: list[str] | None = None, cc: list[str] | None = None, subject: str | None = None,
             meta: dict | None = None, status: str = "queued", study_id: str | None = None) -> int:
-    found = internal(body) + internal(subject)
+    files = (meta or {}).get("files") or []
+    found = internal(body) + internal(subject) + [w for f in files for w in internal(f.get("text"))]
     if found:  # whatever wrote it, nothing of the bot's own workings goes out
         db.audit("outgoing_blocked", entity_type="message" if message_id else "item", entity_id=message_id or item_id,
                  study_id=study_id, purpose=purpose, found=sorted(set(found)))
         body, subject = BLOCKED, (subject and "Message withheld")
+        meta = {k: v for k, v in meta.items() if k != "files"} if files else meta
     rfc_id = make_msgid(domain=settings.get("mailbox.address", "bot@huma.ai").split("@")[1]) \
         if channel == "email" else None
     oid = db.ex(

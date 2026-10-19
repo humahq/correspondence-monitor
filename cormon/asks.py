@@ -1,13 +1,15 @@
 """What a message talking to the bot asks it to do, when that is not a question the study documents answer.
 
 The bot answers questions from the study documents and checks messages for problems; nothing else. The AI only
-sorts each request into a kind. Code chooses the reply, from fixed words: a request to hide or change records, one
-about the bot's own workings (settings, passwords, its database), or a task it does not do (slides, code) is turned
-down. A request for judgment ("which criteria will be hardest?") gets the protocol's words on the topic, as a file
-the person can read or give to another AI.
+sorts each request into a kind. Code chooses the reply, from fixed words: a request to hide or change records, or
+one about the bot's own workings (settings, passwords, its database), is turned down. A request for judgment
+("which criteria will be hardest?") or a task the bot does not do (slides, code) gets the protocol's words on the
+topic as an attached file, with a question the person can give to another AI.
 """
 
 from __future__ import annotations
+
+import re
 
 from . import answers, db, llm, settings
 from .config import Study
@@ -27,7 +29,7 @@ List each request the message makes of the bot, with its kind:
 - improper: asks for help to break the study's rules or hide something (change, backdate, delete or redact
   records, hide an event, skip reporting, make up data).
 - other: anything else (site news, thanks, greetings, requests for a person rather than the bot).
-topic: for opinion, the study topic the documents' facts would be about, in a few words; otherwise "".
+topic: for opinion or task, the study topic the documents' facts would be about, in a few words; otherwise "".
 Return no requests when the message asks nothing of the bot."""
 
 KINDS = ["study", "opinion", "task", "about_bot", "improper", "other"]
@@ -39,10 +41,13 @@ SORT_SCHEMA = llm.obj({"requests": {"type": "array", "items": llm.obj({
 DECLINE = {
     "improper": "I can't help with that. Study records must stay complete and accurate. Please talk to your CRA.",
     "about_bot": "I can't share that. I only answer questions about the study from its documents.",
-    "task": "I can't do that. I answer questions about the study from its documents and check messages for "
-            "problems. Please ask your CRA.",
 }
-OPINION = "I can't judge that for you. I can only say what the study documents state."
+LEAD = {  # what the bot does not do itself, but can give the documents' facts for, to use with another AI
+    "opinion": "I can't judge that for you. I can only say what the study documents state.",
+    "task": "I can't do that myself. I answer questions about the study from its documents and check messages "
+            "for problems.",
+}
+OPINION = LEAD["opinion"]
 
 
 def sort(text: str, use_cache: bool = True) -> list[dict]:
@@ -60,19 +65,24 @@ def decline(study: Study, msg: dict, text: str, use_cache: bool = True) -> dict 
     every request is a study question or there is none. only: no study question is left to answer."""
     reqs = sort(text, use_cache)
     kinds = [r["kind"] for r in reqs]
-    if not any(k in DECLINE or k == "opinion" for k in kinds):
+    if not any(k in DECLINE or k in LEAD for k in kinds):
         return None
     chat = msg.get("channel") == "teams"
     lines = list(dict.fromkeys(DECLINE[k] for k in kinds if k in DECLINE))
-    for r in (r for r in reqs if r["kind"] == "opinion"):
-        a = answers.facts(study, msg, r["topic"] or r["request"], text, use_cache)
-        if a:
-            url = answers.save_page(study, msg, text, [a]) + ".md"
-            lines.append(f"{OPINION} The protocol's words on {r['topic'] or 'this'} are in this file, to read "
-                         f"or to give to another AI: {_link(url, 'Facts from the protocol', chat)}")
-        else:
-            lines.append(f"{OPINION} Please ask your CRA.")
-    oid = answers._post(study, msg, "\n\n".join(lines))
+    files = []
+    for r in (r for r in reqs if r["kind"] in LEAD):
+        topic = r["topic"] or r["request"]
+        a = answers.facts(study, msg, topic, text, use_cache)
+        if not a:
+            lines.append(f"{LEAD[r['kind']]} The study documents don't cover {topic}, so please ask your CRA.")
+            continue
+        url = answers.save_page(study, msg, text, [a]) + ".md"
+        files.append({"name": f"facts-{re.sub(r'[^a-z0-9]+', '-', topic.lower()).strip('-')[:40] or 'study'}.md",
+                      "text": answers.facts_file({"message_text": text, "answers": db.js([a])}, study.title)})
+        lines.append(f"{LEAD[r['kind']]} If you'd like to use another AI, the study documents' facts on {topic} "
+                     f"are in the attached file, with a question to give it "
+                     f"(also here: {_link(url, 'Facts from the protocol', chat)}).")
+    oid = answers._post(study, msg, "\n\n".join(lines), files)
     db.audit("request_declined", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
              outbox_id=oid, requests=reqs)
     return {"only": "study" not in kinds, "outbox_id": oid, "kinds": kinds}

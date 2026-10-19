@@ -8,6 +8,7 @@ once and sign in as the bot account.
 from __future__ import annotations
 
 import html
+import json
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -16,6 +17,7 @@ from ..capture import Inbound
 from . import study_for_person
 
 CHAT = "https://chat.googleapis.com/v1"
+UPLOAD = "https://chat.googleapis.com/upload/v1"
 PEOPLE = "https://people.googleapis.com/v1"
 SCOPES = [
     "openid",
@@ -217,6 +219,9 @@ class GoogleChatChannel:
         if not space:
             raise RuntimeError(f"Google Chat space for {target.get('key', 'channel')} is not set in study.yaml")
         body: dict = {"text": chat_text(row["body"])}
+        files = [ref for f in (row.get("meta") or {}).get("files") or [] if (ref := self._upload(space, f))]
+        if files:
+            body["attachment"] = files
         params = {}
         if target.get("thread"):
             body["thread"] = {"name": target["thread"]}
@@ -229,6 +234,24 @@ class GoogleChatChannel:
             # a 1-on-1 chat can refuse a threaded reply; the plain message reaches the same person
             res = self._post(f"/{space}/messages", {"text": body["text"]})
         return {"external_ref": res.get("name"), "web_url": None}
+
+    def _upload(self, space: str, f: dict) -> dict | None:
+        """A file posted with the message; None when the upload fails (the message still goes, its link stands)."""
+        boundary = "cormon-file-boundary"
+        data = (f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
+                + json.dumps({"filename": f["name"]})
+                + f"\r\n--{boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" + f["text"]
+                + f"\r\n--{boundary}--\r\n").encode()
+        try:
+            r = self.http.post(f"{UPLOAD}/{space}/attachments:upload", data=data, params={"uploadType": "multipart"},
+                               headers={"Content-Type": f"multipart/related; boundary={boundary}"}, timeout=60)
+            if r.status_code >= 400:
+                raise RuntimeError(f"{r.status_code} {r.text[:200]}")
+            return r.json()
+        except Exception as e:
+            db.audit("chat_file_upload_failed", entity_type="space", entity_id=space, file=f["name"],
+                     error=str(e)[:300])
+            return None
 
     def list_spaces(self) -> list[dict]:
         out, token = [], None
