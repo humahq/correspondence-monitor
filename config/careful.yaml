@@ -1,0 +1,35 @@
+# People the bot must be careful with. A principal investigator or another doctor who feels criticised in
+# front of others may stop working with the sponsor. Each rule names study roles (ids from a study's role list).
+#
+# When someone with one of these roles is in a chat (on its member list, or has written in it):
+#   in_group: private   an alert that could read as criticism of them is not posted there. It goes by email to
+#                       the report_to roles instead (anyone already emailed that alert is not emailed again).
+#   tone: calm          answers to them are worded with the tone below, and a reply that could read as blaming
+#                       them is reworded before it is posted.
+#   words               words that name these people in a message ("the PI"), besides their names and role labels.
+#   calm_reply          what a careful person who wrote a problem is told instead (default: the one below).
+# Messages about reporting serious harm ("Contact the PI and the Medical Monitor now") are always sent.
+#
+# A study adds rules, or changes one by its id, with a `careful:` list in its study.yaml, for example
+#   careful:
+#     - { id: physicians, report_to: [cra] }
+#     - { id: pharmacists, label: pharmacists, roles: [pharmacist], in_group: private, tone: calm, report_to: [cra] }
+# `enabled: false` turns a rule off for that study.
+
+calm_reply: Thank you for letting me know. I have shared this with the study team so they can follow up.
+
+tones:
+  calm: |-
+    The reader is a senior doctor on the study (for example the principal investigator). Write calmly, warmly and
+    without judgment: say what the study documents say, never that the reader or their team did something wrong,
+    broke a rule, missed something or made a mistake, and no "you should have". If what they describe does not
+    match the documents, give only what the documents say, without calling it a deviation, an error or a violation.
+
+rules:
+  - id: physicians
+    label: doctors
+    roles: [pi, sub_investigator]
+    in_group: private
+    tone: calm
+    report_to: [cra, clinops_lead]
+    words: [PI, PIs, Sub-I, principal investigator, sub-investigator, co-investigator]
