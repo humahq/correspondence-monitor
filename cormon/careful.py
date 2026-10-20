@@ -128,6 +128,13 @@ def _numbers(s: str) -> set[str]:
     return set(re.findall(r"\d+(?:\.\d+)?", s))
 
 
+def _ask(study: Study, here: list[tuple[Person, dict]], about_msg: str, text: str) -> dict:
+    return llm.structured("careful_check", CHECK_SYSTEM,
+                          f"These people are in this chat: {_who(study, here)}. Is this message OK to post here, "
+                          f"or could it be read as criticising, blaming or embarrassing any of them?\n\n"
+                          f"{about_msg}MESSAGE TO POST:\n{text}", CHECK_SCHEMA, "careful_check")
+
+
 def _reword(study: Study, text: str, about: list[tuple[Person, dict]], why: str) -> str | None:
     """The post reworded calmly; None when the AI fails or its wording adds a number or drops a link."""
     try:
@@ -197,10 +204,7 @@ def _check(study: Study, here: list[tuple[Person, dict]], room: dict, target: di
         about_msg = (f"IT IS ABOUT THIS MESSAGE, WRITTEN BY {sender.name if sender else source.get('from_name') or writer}:"
                      f"\n{source.get('body_text') or ''}\n\n" if source else "")
         try:
-            ai = llm.structured("careful_check", CHECK_SYSTEM,
-                                f"These people are in this chat: {_who(study, here)}. Is this message OK to post here, "
-                                f"or could it be read as criticising, blaming or embarrassing any of them?\n\n"
-                                f"{about_msg}MESSAGE TO POST:\n{text}", CHECK_SCHEMA, "careful_check")
+            ai = _ask(study, here, about_msg, text)
         except Exception as e:
             error = str(e)[:300]
         if ai:
@@ -216,7 +220,14 @@ def _check(study: Study, here: list[tuple[Person, dict]], room: dict, target: di
         action, status = "withhold", "withheld"
     elif critical and not alert:
         action = "reword"
-        out = _reword(study, text, hit or here, reason) or calm_reply((hit or here)[0][1])
+        out = _reword(study, text, hit or here, reason)
+        alone = (source or {}).get("visibility") == "direct"   # nobody else reads a 1-on-1: the answer goes
+        try:
+            again = bool(out) and (alone or not ai or _ask(study, here, about_msg, out)["ok"])
+        except Exception:
+            again = False
+        if not again:  # in a group the facts themselves can blame: then only the calm line goes
+            out = calm_reply((hit or here)[0][1])
     room_name = target.get("name") or ("this group chat" if target.get("key") == "group" else "the chat")
     db.audit("careful_check", entity_type="item" if item_id else "message", entity_id=item_id or message_id,
              study_id=study_id, space=target["space"], room=room_name, purpose=purpose, present=_who(study, here),

@@ -2032,12 +2032,14 @@ def test_a_doctor_asking_in_a_group_gets_a_calm_answer(monkeypatch):
     site = answers.answer_message(study, capture.message(crc_mid), "bot, can CSF be drawn after the first dose?")
     assert "tone" not in site[0] and calls[-1][1] == answers.PLAIN_SYSTEM   # nobody else's prompt changes
     # the reply is checked before it is posted; one that could embarrass the doctor is reworded calmly
-    calls = _ai(monkeypatch, careful_check={"ok": False, "about": ["Eliot Levitt"], "why": "Says he is wrong."},
-                careful_reword={"text": "The protocol has baseline CSF collected before the first dose."})
+    reworded = "The protocol has baseline CSF collected before the first dose."
+    calls = _ai(monkeypatch, careful_check=lambda u: {"ok": reworded in u.split("MESSAGE TO POST:")[1],
+                                                      "about": ["Eliot Levitt"], "why": "Says he is wrong."},
+                careful_reword={"text": reworded})
     oid = answers._post(study, capture.message(mid), "No, that is a deviation. CSF must come before the first dose.")
     row = db.q1("SELECT body, status FROM outbox WHERE id=?", (oid,))
-    assert row["body"] == "The protocol has baseline CSF collected before the first dose." and row["status"] == "queued"
-    assert [c[0] for c in calls] == ["careful_check", "careful_reword"]
+    assert row["body"] == reworded and row["status"] == "queued"
+    assert [c[0] for c in calls] == ["careful_check", "careful_reword", "careful_check"]
     assert "Eliot Levitt (Principal investigator)" in calls[0][2]
     check = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='careful_check' ORDER BY id DESC")["details"])
     assert check["decision"] == "reword" and check["members_complete"] is False
@@ -2046,6 +2048,16 @@ def test_a_doctor_asking_in_a_group_gets_a_calm_answer(monkeypatch):
         careful_reword={"text": "CSF is collected 2 days before the first dose."})
     oid = answers._post(study, capture.message(mid), "You drew it after the dose, which breaks the rule.")
     assert db.q1("SELECT body FROM outbox WHERE id=?", (oid,))["body"] == careful.CALM_REPLY
+    # a rewording that still blames him when checked again ("drawn before Dr. Levitt consented") is not used
+    _ai(monkeypatch, careful_check={"ok": False, "about": ["Eliot Levitt"], "why": "Says he consented late."},
+        careful_reword={"text": "Consent comes first, and the bloods were drawn before Dr. Levitt consented."})
+    oid = answers._post(study, capture.message(mid), "No, Dr. Levitt consented late, a deviation.")
+    assert db.q1("SELECT body FROM outbox WHERE id=?", (oid,))["body"] == careful.CALM_REPLY
+    # 1-on-1 nobody else reads it: the calm rewording goes, so the doctor still gets the answer
+    one = _chat_message("bot, I consented after the bloods, ok?", DOC, space="spaces/D", visibility="direct",
+                        thread="T7")
+    oid = answers._post(study, capture.message(one), "No, Dr. Levitt consented late, a deviation.")
+    assert db.q1("SELECT body FROM outbox WHERE id=?", (oid,))["body"].startswith("Consent comes first")
     # serious harm: the warning to contact the PI always goes, with no AI check
     calls = _ai(monkeypatch)
     oid = answers._post(study, capture.message(mid), f"⚠️ {answers.SERIOUS_LINE}\n\nReport it within 24 hours.")
