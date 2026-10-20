@@ -131,6 +131,8 @@ From the study documents. Please confirm with your CRA before acting on it.
 - If the message says someone may be seriously hurt (death, hospital stay), the reply starts with "This may be a Serious Adverse Event. Contact the PI and the Medical Monitor now." and gives the reporting deadline.
 - Patient dates (like the window above) are worked out by code, from dates the site gave in **earlier** messages.
 - It does not answer messages meant for a person ("can you send kits?", "are you free at 3?").
+- It remembers the conversation: the last 20 messages (up to 30 minutes) of the same chat space or email thread, its own replies included. So "and week 8?" or "sorry, I meant 014" is understood. It never uses another chat.
+- If one fact would settle the question (a baseline date, which participant, which visit or medicine), it asks for it: "To tell if the Week 12 visit on 3 Oct was in window, what was the baseline date?" Reply in the same chat ("4 July") and it answers the first question with it. It never asks for names, birth dates or contact details, and never about dose changes, how severe an event is or whether it is related to the drug (the investigator decides those).
 
 ### When the bot speaks in chat
 
@@ -339,7 +341,31 @@ cormon export-rules FOLDER            Word + Excel of the rules; the Excel has "
 cormon rules-decide SHEET.xlsx        apply the "Team decision" column (keep / remove); decisions survive a rebuild
 cormon rules-decide --rule ID --decision keep|remove [--note "..."]   decide one rule
 cormon reset --yes                    archive the database, start fresh (study model kept)
+cormon outbox [--send ID]             outgoing messages; send or resend one now
+cormon backup [--check FILE]          back up the database now and check the copy (also done daily)
+cormon restore FILE --yes             replace the database with a checked backup (stop the service first)
+cormon purge [--days N] --yes         clear message text older than N days (data.retention_days)
+cormon forget-participant STUDY PID --yes   delete the dates and events remembered for one participant
 ```
+
+### Alerts arrive once
+- Each outgoing message is taken by one sender only, so two senders never send it twice. The same draft queued twice within 6 hours is kept once (`cormon draft ID --force` resends on purpose).
+- A failed send is tried again after 30 seconds, 2, 10 and 30 minutes and 2 hours; then it is marked failed.
+- If the service stops mid-send, the bot asks the channel whether the message went out (each chat post carries its own id; each email's id is looked up in Sent Mail). Sent: marked sent. Not sent: sent again. Can't tell: marked failed for a person to decide, never sent twice.
+- A site message left half-read is read once more; a second stop marks it an error. An alert made but never sent goes out 10 minutes later.
+- Anything that fails for good is emailed once to `system.ops_emails` (or each study's clinops lead), with the command that fixes it.
+- The database is backed up daily to `data/backups/` (last `system.backup_keep`, default 7). A backup counts only after the copy passes an integrity check and holds the same rows as the live database.
+
+### Who can do what
+- **Email sender check.** Gmail checks SPF, DKIM and DMARC on each email. Only the topmost result from Google counts. An email that fails is still checked for problems, but it can't clear or hide an alert; the attempt is logged and the alert's details page warns that the sender check failed.
+- **Study scope.** "cleared" or "disregard" only changes alerts of the study the message came in on. The check is inside the code that changes alerts, so no path can skip it.
+- **Sign-in for item and answer pages** (off until set up). With `web.login.enabled: true`, a page opens only for someone signed in with Google whose email is on that study's people list, or in `web.login.allowed_domains` (default huma.ai). Every view and refusal is logged. Setup: in Google Cloud console, APIs & Services, Credentials, create an OAuth client ID of type "Web application" with the redirect URI `<web.base_url>/auth/callback`; put its id in `web.login.client_id` and its secret in Secret Manager (`web.login.secret: {project, name}`). While the consent screen is in testing, add each study person as a test user.
+
+### Patient data
+- Dates of birth, phone numbers, social security and medical record numbers are masked in the audit log and in every message the bot sends (numbers in the study documents themselves, like a safety hotline, stay). Participant study ids stay: they are coded, not personal.
+- The system log (journal) holds no message text.
+- Message text, attachments and remembered participant dates are cleared after `data.retention_days`. Off until set: how long to keep them is the sponsor's decision. Alerts keep their short quote as the monitoring record.
+- Message text is sent to the AI model provider to be read; that needs the provider's data agreement to cover patient data.
 
 Use `--as NAME` (or `CORMON_OPERATOR`) to set the identity recorded for an action. Operator and CRA values are marked as such and are never overwritten by a later automatic pass. An override that would leave an item inconsistent is refused and explained; `--force` applies it anyway and records that.
 
