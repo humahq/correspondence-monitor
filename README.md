@@ -57,6 +57,7 @@ The bot tells people by their **role** in the study. Right now the roles use Joh
 | **CRA** | The sponsor's monitor for the site. Gets the bot's alerts and decides what to do. | `johnernest978@gmail.com` |
 | **Sponsor lead (ClinOps)** | Runs the study for the sponsor. Gets urgent alerts and the daily summary. | `john@huma.ai` |
 | **Medical monitor** | The doctor who handles safety. The bot never alerts them; it tells people to contact them. | none |
+| **Principal investigator (PI)** | The doctor in charge at the site. The bot is careful with them (see "Doctors in the chat"). | `eliot@huma.ai` (for testing) |
 | **The bot (email)** | Reads every email it is copied on. | `bot+NCT05842941@huma.ai` |
 | **The bot (chat)** | Reads and posts in the study's chat spaces. | spaces **DNL343 Study Updates** and **DNL343 URGENT** |
 
@@ -146,6 +147,27 @@ From the study documents. Please confirm with your CRA before acting on it.
 | Email | Unchanged: answers questions, emails alerts. |
 
 When someone talks to the bot (in chat, or by email with the bot in To), it first sorts what they ask (`cormon/asks.py`). Study questions are answered as before. For anything else, code picks the reply from fixed words. A request to hide or change records gets "I can't help with that" (and any problem in it is still raised). A question about the bot itself (passwords, settings, its database, other people's messages) gets "I can't share that". A task it doesn't do (slides, code, emails) gets "I can't do that". A request for its opinion ("which criteria will be hardest?") gets "I can't judge that" and, in a 1-on-1 chat or an email, the whole protocol sections on the topic as an attached file, to read or to give to another AI. In a group chat no file, link or protocol text is sent: the bot offers it in a 1-on-1 chat instead. An email reply goes only to its sender, so email counts as 1-on-1. In an email the bot is only copied on, opinion and task requests are left to the people; it still answers study questions and warns about serious harm. A question about the rules that names no participant and reports nothing done or planned ("what happens if they take St. John's wort?") is answered and raises no alert. Every outgoing message is checked last: anything that looks like a key, password, server path or setting name is replaced by "I can't share that". Turn the sorting off with `answers.sort_requests: false`.
+
+### Doctors in the chat
+
+Principal investigators and other doctors matter most to a sponsor. If the bot embarrasses one in front of others, they may stop working with the sponsor. So the bot is careful when one of them is in a chat.
+
+- **Who is a doctor.** A person whose role in `study.yaml` is `pi` (Principal investigator) or `sub_investigator` (Sub-investigator). Eliot has the `pi` role too, for testing. These roles get no alert emails.
+- **Who is in a chat.** The chat's member list from Google Chat (kept 10 minutes), plus everyone who has written there. If the list can't be read, only the people who wrote there are known, and the log says the list may be incomplete.
+- **Alerts.** Before an alert is posted in a chat with a doctor in it, the bot checks if it could read as criticism of them. It checks with code first: the doctor wrote the message, or the alert names them ("Dr. Levitt", "the PI"). Then it asks the AI. If it could, the alert is **not posted** there. It goes by email to the CRA and the sponsor lead instead. Someone who already got the alert by email is not emailed again. If the AI check fails, the alert is kept out, to be safe.
+- **Replies.** A doctor who talks to the bot always gets a reply, worded calmly. If the bot found a problem in what the doctor wrote, it does not say they broke a rule. It replies "Thank you for letting me know. I have shared this with the study team so they can follow up." and the study team gets the alert privately. Any other reply that could read as blaming a doctor in the chat is reworded calmly first.
+- **Safety always goes.** "This may be a Serious Adverse Event. Contact the PI and the Medical Monitor now." is never held back.
+- **Chats with no doctor in them:** nothing changes, and no extra AI call is made.
+- **See what happened:** the item's details page ("How the bot reached this") says who was in the chat and what the bot did. The log has `careful_check`, `post_withheld_careful` and `reported_privately`.
+
+**To add a careful role** (for example a pharmacist): add the role to the study's `roles:` and to the people who have it, then add a rule to `config/careful.yaml` (for every study) or a `careful:` list in the study's `study.yaml` (that study only; a rule with the same `id` changes the general one):
+
+```
+careful:
+  - { id: pharmacists, label: pharmacists, roles: [pharmacist], in_group: private, tone: calm, report_to: [cra] }
+```
+
+The calm reply and the calm wording are in `config/careful.yaml` and can be edited there. Test with the real AI: `CORMON_HOME=practice7 .venv/bin/python tests/scenarios/doctor/run.py`.
 
 ### The bot remembers each patient
 

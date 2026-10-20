@@ -72,7 +72,30 @@ def _how(item: dict, ev: dict) -> str:
                  f"{_e(item['tier_reason'])}")
     if ev.get("next_step"):
         steps.append(f"<b>Next step.</b> {_e(ev['next_step'])}")
+    if careful := _careful(item.get("id")):
+        steps.append(f"<b>Careful with doctors.</b> {careful}")
     return "<h2>How the bot reached this</h2><ol>" + "".join(f"<li>{s}</li>" for s in steps) + "</ol>"
+
+
+_DECIDED = {"send": "posted it", "reword": "reworded it calmly", "withhold": "did not post it"}
+
+
+def _careful(item_id) -> str:
+    """What the careful check (careful.py) decided for this item's chat posts, and who was told privately."""
+    said = []
+    for r in db.q("SELECT action, details FROM audit_log WHERE entity_type='item' AND entity_id=? AND action IN"
+                  " ('careful_check','reported_privately') ORDER BY id", (str(item_id),)):
+        d = db.unjs(r["details"], {})
+        if r["action"] == "careful_check":
+            said.append(f"In {_e(d.get('room') or 'the chat')} were {_e(d.get('present'))}, so the bot "
+                        f"{_DECIDED.get(d.get('decision'), _e(d.get('decision')))}: {_e(d.get('reason'))}."
+                        + ("" if d.get("members_complete", True) else " (The chat's member list could not be read, "
+                                                                        "so only people who had written there were known.)"))
+        elif d.get("already_emailed"):
+            said.append(f"{_e(d.get('to'))} already had this alert by email.")
+        else:
+            said.append(f"Sent privately to {_e(d.get('to'))} by email.")
+    return " ".join(said)
 
 
 def render_item(item: dict) -> str:

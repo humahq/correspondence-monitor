@@ -1964,3 +1964,256 @@ def test_numbers_marked_unconfirmed_make_no_brief_rule():
                                  "\n4. Give within 15 minutes."}
     assert packs.unconfirmed([sec]) == {"ph:5": {"30", "50"}}
     assert packs.unconfirmed([{"id": "p:1", "text": "Confirm the kit number in IRT."}]) == {}
+
+
+# ---------------------------------------------------------------- doctors: careful.py, rooms.py
+
+DOC, CRC, CRA, LEAD = "eliot@huma.ai", "johnrohit94@gmail.com", "johnernest978@gmail.com", "john@huma.ai"
+
+
+def _rooms(monkeypatch, members=None, channel=None):
+    """The chat simulator as the channel (or `channel`), with members listed per space."""
+    import json
+    from cormon import rooms
+    from cormon.channels.sim import SimTeams
+    rooms.forget()
+    monkeypatch.setattr(rooms, "teams_channel", lambda: channel or SimTeams())
+    if members is not None:
+        path = db.settings.data_dir() / "sim" / "teams_members.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(members))
+
+
+def _ai(monkeypatch, **replies):
+    """llm.structured answering each task from `replies` (a dict, a function of the prompt, or an error)."""
+    from cormon import llm
+    calls = []
+    def fake(task, system, user, schema, name, **kw):
+        calls.append((task, system, user))
+        got = replies[task]
+        if isinstance(got, Exception):
+            raise got
+        return got(user) if callable(got) else got
+    monkeypatch.setattr(llm, "structured", fake)
+    return calls
+
+
+def _chat_message(text, frm, space="spaces/G", visibility="group", thread="T1"):
+    return db.ex("INSERT INTO messages (channel, external_id, thread_key, study_id, route, visibility, from_addr,"
+                 " body_text, headers, sent_at, received_at, status) VALUES ('teams',?,?,?,'study',?,?,?,'{}',?,?,"
+                 "'processed')", (f"{space}/messages/{thread}{text[:6]}", f"teams:{space}/threads/{thread}",
+                                  "NCT05842941", visibility, frm, text, "2026-10-20T10:00:00+00:00", db.now()))
+
+
+def _alert(text, frm=CRC, space="spaces/G", visibility="group", thread="T1", tier="low"):
+    """A finding raised from a chat message, routed as the pipeline does; returns (item id, outbox rows)."""
+    from cormon import config, routing
+    study = config.study("NCT05842941")
+    mid = _chat_message(text, frm, space, visibility, thread)
+    ev = {"message_quote": text, "doc_quote": "CSF is collected before the first dose.", "doc_title": "Appendix G",
+          "rule_text": "6.1 Baseline Visit", "next_step": "Record a protocol deviation.", "certainty": "clear",
+          "sender_email": frm, "sender_name": study.person_by_email(frm).name, "message_date": "2026-10-20T10:00:00Z",
+          "channel": "teams", "visibility": visibility}
+    item_id, _ = items.upsert(study=study, thread_key=f"teams:{space}/threads/{thread}", message_id=mid,
+                              dedup_key=f"k{mid}", kind="finding", pattern_class="sample_handling", rule_id=None,
+                              participant_id="G-701-001", site="site-01", polarity="problem",
+                              title="Baseline CSF was drawn after the first dose.", tier=tier, tier_reason="test",
+                              evidence=ev, reasoning="r")
+    routing.route_item(item_id)
+    rows = [dict(r, to_addrs=db.unjs(r["to_addrs"], []), cc_addrs=db.unjs(r["cc_addrs"], []), meta=db.unjs(r["meta"]))
+            for r in db.q("SELECT * FROM outbox WHERE item_id=? ORDER BY id", (item_id,))]
+    return item_id, rows
+
+
+def test_an_alert_about_a_doctor_in_the_chat_is_not_posted_there_but_sent_privately(monkeypatch):
+    from cormon import outbox, webview
+    _rooms(monkeypatch, {"spaces/G": [DOC, CRC]})
+    calls = _ai(monkeypatch)
+    item_id, rows = _alert("G-701-001: Dr. Levitt asked us to give the first dose before the CSF draw, so we did.")
+    chat = [r for r in rows if r["channel"] == "teams"]
+    assert len(chat) == 1 and chat[0]["status"] == "withheld" and chat[0]["meta"]["careful"]["about"] == ["Eliot Levitt"]
+    assert not calls   # code saw the doctor named: no AI needed
+    mail = {(r["purpose"], r["to_addrs"][0], r["status"]) for r in rows if r["channel"] == "email"}
+    assert mail == {("email_cra", CRA, "queued"), ("careful_report_clinops_lead", LEAD, "queued")}  # CRA not twice
+    report = next(r for r in rows if r["purpose"] == "careful_report_clinops_lead")
+    assert "not posted in any chat" in report["body"] and "Eliot Levitt (Principal investigator)" in report["body"]
+    assert "Baseline CSF was drawn after the first dose." in report["body"]
+    logged = [(r["action"], db.unjs(r["details"])) for r in db.q("SELECT action, details FROM audit_log WHERE action IN"
+              " ('careful_check','post_withheld_careful','reported_privately') ORDER BY id")]
+    assert [a for a, _ in logged] == ["careful_check", "post_withheld_careful", "reported_privately",
+                                      "reported_privately"]
+    assert logged[0][1]["decision"] == "withhold" and logged[0][1]["named"] == ["Eliot Levitt"]
+    assert logged[2][1]["to"] == CRA and logged[2][1]["already_emailed"]
+    how = webview._how(items.get(item_id), items.get(item_id)["evidence"])
+    assert "did not post it" in how and "Sent privately to john@huma.ai" in how and "johnernest978" in how
+    sent = []
+    monkeypatch.setattr(outbox, "_adapter", lambda ch: type("A", (), {"send": lambda s, r: sent.append(r["id"]) or {}})())
+    outbox.dispatch()
+    assert chat[0]["id"] not in sent and len(sent) == 2   # a withheld post is never sent
+
+
+def test_an_alert_not_about_the_doctor_is_posted_after_the_ai_check(monkeypatch):
+    _rooms(monkeypatch, {"spaces/G": [DOC, CRC]})
+    calls = _ai(monkeypatch, careful_check={"ok": True, "about": [], "why": "About the coordinator's own work."})
+    _, rows = _alert("G-701-002 baseline CSF drawn at 10:40, first dose was 9:15.")
+    chat = next(r for r in rows if r["channel"] == "teams")
+    assert chat["status"] == "queued" and chat["meta"]["careful"]["about"] == []
+    assert [r["purpose"] for r in rows if r["channel"] == "email"] == ["email_cra"]   # nothing private to add
+    (task, system, user), = calls
+    assert task == "careful_check" and user.startswith(
+        "These people are in this chat: Eliot Levitt (Principal investigator). Is this message OK to post here, "
+        "or could it be read as criticising, blaming or embarrassing any of them?")
+    assert "WRITTEN BY John Rohit" in user and "MESSAGE TO POST:" in user and "<p>" not in user
+    # the AI check failing keeps the alert out, to be safe
+    _ai(monkeypatch, careful_check=RuntimeError("LLM call failed"))
+    _, rows = _alert("G-701-003 baseline CSF drawn at 11:00, first dose was 9:00.", thread="T2")
+    assert next(r for r in rows if r["channel"] == "teams")["status"] == "withheld"
+    assert {r["purpose"] for r in rows if r["channel"] == "email"} == {"email_cra", "careful_report_clinops_lead"}
+
+
+def test_a_doctor_asking_in_a_group_gets_a_calm_answer(monkeypatch):
+    from cormon import answers, careful, config, llm
+    study = config.study("NCT05842941")
+    _rooms(monkeypatch)   # no member list: who wrote in the room is known
+    monkeypatch.setattr(answers.guide, "checker", lambda s: {})
+    monkeypatch.setattr(answers, "find", lambda text, use_cache=True, earlier=None: [
+        {"question": "Can CSF be drawn after the first dose?", "participant": "", "harm": False}])
+    monkeypatch.setattr(answers.guide, "load", lambda sid: [])
+    monkeypatch.setattr(answers.reader, "view", lambda s, every: [])
+    monkeypatch.setattr(answers, "answer_one", lambda st, m, q, *a, **k: {
+        "question": q["question"], "text": "No. Baseline CSF is collected before the first dose.", "found": True,
+        "traced": True, "quotes": [("6.1", "CSF is collected before the first dose.")], "sums": [], "ask": ""})
+    calls = _ai(monkeypatch, answer_plain={"text": "CSF is collected before the first dose."})
+    mid = _chat_message("bot, can CSF be drawn after the first dose?", DOC)
+    doc = answers.answer_message(study, capture.message(mid), "bot, can CSF be drawn after the first dose?")
+    assert doc[0]["tone"] == "calm" and calls[-1][1] == answers.PLAIN_SYSTEM + "\n" + careful.tone("calm")
+    assert "never that the reader or their team did something wrong" in calls[-1][1]
+    crc_mid = _chat_message("bot, can CSF be drawn after the first dose?", CRC, thread="T9")
+    site = answers.answer_message(study, capture.message(crc_mid), "bot, can CSF be drawn after the first dose?")
+    assert "tone" not in site[0] and calls[-1][1] == answers.PLAIN_SYSTEM   # nobody else's prompt changes
+    # the reply is checked before it is posted; one that could embarrass the doctor is reworded calmly
+    reworded = "The protocol has baseline CSF collected before the first dose."
+    calls = _ai(monkeypatch, careful_check=lambda u: {"ok": reworded in u.split("MESSAGE TO POST:")[1],
+                                                      "about": ["Eliot Levitt"], "why": "Says he is wrong."},
+                careful_reword={"text": reworded})
+    oid = answers._post(study, capture.message(mid), "No, that is a deviation. CSF must come before the first dose.")
+    row = db.q1("SELECT body, status FROM outbox WHERE id=?", (oid,))
+    assert row["body"] == reworded and row["status"] == "queued"
+    assert [c[0] for c in calls] == ["careful_check", "careful_reword", "careful_check"]
+    assert "Eliot Levitt (Principal investigator)" in calls[0][2]
+    check = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='careful_check' ORDER BY id DESC")["details"])
+    assert check["decision"] == "reword" and check["members_complete"] is False
+    # a rewording that adds a number is not used: the calm line goes instead
+    _ai(monkeypatch, careful_check={"ok": False, "about": [], "why": "Blames him."},
+        careful_reword={"text": "CSF is collected 2 days before the first dose."})
+    oid = answers._post(study, capture.message(mid), "You drew it after the dose, which breaks the rule.")
+    assert db.q1("SELECT body FROM outbox WHERE id=?", (oid,))["body"] == careful.CALM_REPLY
+    # a rewording that still blames him when checked again ("drawn before Dr. Levitt consented") is not used
+    _ai(monkeypatch, careful_check={"ok": False, "about": ["Eliot Levitt"], "why": "Says he consented late."},
+        careful_reword={"text": "Consent comes first, and the bloods were drawn before Dr. Levitt consented."})
+    oid = answers._post(study, capture.message(mid), "No, Dr. Levitt consented late, a deviation.")
+    assert db.q1("SELECT body FROM outbox WHERE id=?", (oid,))["body"] == careful.CALM_REPLY
+    # 1-on-1 nobody else reads it: the calm rewording goes, so the doctor still gets the answer
+    one = _chat_message("bot, I consented after the bloods, ok?", DOC, space="spaces/D", visibility="direct",
+                        thread="T7")
+    oid = answers._post(study, capture.message(one), "No, Dr. Levitt consented late, a deviation.")
+    assert db.q1("SELECT body FROM outbox WHERE id=?", (oid,))["body"].startswith("Consent comes first")
+    # serious harm: the warning to contact the PI always goes, with no AI check
+    calls = _ai(monkeypatch)
+    oid = answers._post(study, capture.message(mid), f"⚠️ {answers.SERIOUS_LINE}\n\nReport it within 24 hours.")
+    assert answers.SERIOUS_LINE in db.q1("SELECT body FROM outbox WHERE id=?", (oid,))["body"] and not calls
+
+
+def test_a_doctor_1_on_1_with_a_problem_gets_a_calm_reply_and_the_alert_goes_privately(monkeypatch):
+    from cormon import config, pipeline
+    study = config.study("NCT05842941")
+    _rooms(monkeypatch, {"spaces/D": [DOC]})
+    calls = _ai(monkeypatch, careful_check={"ok": True, "about": [], "why": "Polite thanks."})
+    item_id, rows = _alert("Gave G-701-004 the first dose this morning; we'll do the CSF draw this afternoon.",
+                           frm=DOC, space="spaces/D", visibility="direct")
+    assert not [r for r in rows if r["channel"] == "teams"]   # nothing in any group chat, as before
+    assert {(r["purpose"], r["to_addrs"][0]) for r in rows} == {("email_cra", CRA),
+                                                               ("careful_report_clinops_lead", LEAD)}
+    report = next(r for r in rows if r["purpose"] == "careful_report_clinops_lead")
+    assert "told the bot about it in a 1-on-1 chat" in report["body"]
+    msg = capture.message(items.get(item_id)["first_message_id"])
+    summary = {"items_created": [item_id], "items_repeat": []}
+    pipeline._acknowledge(study, msg, summary, True)
+    assert summary["acknowledged"] == ("Thank you for letting me know. I have shared this with the study team so "
+                                       "they can follow up.")
+    row = db.q1("SELECT body, status FROM outbox WHERE purpose='chat_acknowledgement'")
+    assert row["body"] == summary["acknowledged"] and row["status"] == "queued"
+    assert [c[0] for c in calls] == ["careful_check"]
+    # a coordinator 1-on-1 is still told the problem itself
+    crc_item, _ = _alert("G-701-005 first dose given before the CSF draw.", frm=CRC, space="spaces/C",
+                         visibility="direct", thread="T3")
+    summary = {"items_created": [crc_item], "items_repeat": []}
+    pipeline._acknowledge(study, capture.message(items.get(crc_item)["first_message_id"]), summary, True)
+    assert summary["acknowledged"].startswith("Thanks. I found 1 problem:")
+
+
+def test_with_no_doctor_in_the_chat_nothing_changes_and_no_ai_is_asked(monkeypatch):
+    from cormon import config, rooms, routing
+    _rooms(monkeypatch, {"spaces/G": [CRC, CRA]})
+    calls = _ai(monkeypatch)
+    _, rows = _alert("G-702-001: Dr. Levitt says the CSF was drawn after the first dose.")
+    chat = next(r for r in rows if r["channel"] == "teams")
+    assert chat["status"] == "queued" and "careful" not in chat["meta"] and not calls
+    assert [r["purpose"] for r in rows if r["channel"] == "email"] == ["email_cra"]
+    assert not db.q("SELECT 1 FROM audit_log WHERE action LIKE 'careful%' OR action='reported_privately'")
+    # a study with no careful people does not even look up the room
+    monkeypatch.setattr(rooms, "members", lambda space: (_ for _ in ()).throw(AssertionError("looked up")))
+    map_study = config.study("NCT04098666")
+    oid = routing.enqueue(purpose="question_answer", channel="teams", destination="teams_study_channel", body="ok",
+                          study_id=map_study.study_id, meta={"target": {"space": "spaces/G", "key": "study_channel"}})
+    assert db.q1("SELECT body, status FROM outbox WHERE id=?", (oid,))["body"] == "ok" and not calls
+
+
+def test_a_rooms_member_list_falls_back_to_who_wrote_there_when_the_api_fails(monkeypatch):
+    from cormon import rooms
+    from cormon.channels.gchat import GoogleChatChannel
+    asked = []
+    class Down:
+        def members(self, space):
+            asked.append(space)
+            raise RuntimeError("403 PERMISSION_DENIED")
+    _rooms(monkeypatch, channel=Down())
+    _chat_message("week 4 done", DOC, space="spaces/G")
+    _chat_message("ok", CRC, space="spaces/Gx")   # another space whose name starts the same
+    got = rooms.members("spaces/G")
+    assert got == {"emails": {DOC}, "complete": False, "error": "403 PERMISSION_DENIED"}
+    assert rooms.members("spaces/G")["emails"] == {DOC} and asked == ["spaces/G"]   # the failure is kept a while
+    assert db.q("SELECT 1 FROM audit_log WHERE action='room_members_failed'")
+    _rooms(monkeypatch, {"spaces/G": [CRA]})
+    assert rooms.members("spaces/G") == {"emails": {DOC, CRA}, "complete": True, "error": None}
+    # Google Chat: each human member's email, the bot and apps left out
+    class Session:
+        def get(self, url, params=None, timeout=None):
+            data = {"memberships": [{"member": {"name": "users/7", "type": "HUMAN"}},
+                                    {"member": {"name": "users/100", "type": "BOT"}}]} if url.endswith("/members") \
+                else {"emailAddresses": [{"value": "Dr.Who@Site.org"}]}
+            return type("R", (), {"raise_for_status": lambda s: None, "json": lambda s: data})()
+    assert GoogleChatChannel(session=Session()).members("spaces/G") == ["dr.who@site.org"]
+
+
+def test_careful_rules_grow_from_a_file_and_a_study_can_add_or_change_them(monkeypatch):
+    from cormon import careful, config
+    study = config.study("NCT05842941")
+    assert [(r["id"], r["roles"], r["report_to"]) for r in careful.rules(study)] == \
+        [("physicians", ["pi", "sub_investigator"], ["cra", "clinops_lead"])]
+    eliot = study.person_by_email(DOC)
+    assert eliot.roles == ["tester", "pi"] and careful.rule_for(study, eliot)["tone"] == "calm"
+    assert careful.reader_rule(study, CRC) is None and careful.reader_rule(None, DOC) is None
+    monkeypatch.setitem(study.raw, "careful", [
+        {"id": "physicians", "report_to": ["cra"]},
+        {"id": "pharmacists", "label": "pharmacists", "roles": ["pharmacist"], "in_group": "private",
+         "report_to": ["clinops_lead"]}])
+    got = {r["id"]: r for r in careful.rules(study)}
+    assert got["physicians"]["report_to"] == ["cra"] and got["physicians"]["roles"] == ["pi", "sub_investigator"]
+    pharm = config.Person(id="ph", name="Ana Diaz", email="ana@site.org", roles=["pharmacist"], sites=["*"])
+    assert careful.rule_for(study, pharm)["id"] == "pharmacists"   # any role a sponsor names, not only doctors
+    assert careful.named(study, "Ana said the kit was fine", [(pharm, got["pharmacists"])]) == ["Ana Diaz"]
+    assert careful.named(study, "ask the PI to re-consent", [(eliot, got["physicians"])]) == ["Eliot Levitt"]
+    assert careful.named(study, "pick up the kits", [(eliot, got["physicians"])]) == []
+    monkeypatch.setitem(study.raw, "careful", [{"id": "physicians", "enabled": False}])
+    assert careful.rules(study) == [] and careful.rule_for(study, eliot) is None

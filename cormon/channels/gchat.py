@@ -95,6 +95,7 @@ class GoogleChatChannel:
         self.http = session
         self._me = None
         self._users: dict[str, str] = {}
+        self._app = None
 
     def _get(self, url: str, **params) -> dict:
         r = self.http.get(url if url.startswith("http") else CHAT + url, params=params or None, timeout=30)
@@ -283,6 +284,37 @@ class GoogleChatChannel:
             db.audit("chat_file_upload_failed", entity_type="space", entity_id=space, file=f["name"],
                      error=str(e)[:300])
             return None
+
+    def _members_http(self):
+        """The Chat app's own sign-in (chat.bot scope) when gchat.app_key_file names its key, else the bot account's."""
+        key = settings.get("gchat.app_key_file")
+        if not key:
+            return self.http
+        if self._app is None:
+            from google.auth.transport.requests import AuthorizedSession
+            from google.oauth2 import service_account
+
+            creds = service_account.Credentials.from_service_account_file(
+                str(settings.resolve(key)), scopes=["https://www.googleapis.com/auth/chat.bot"])
+            self._app = AuthorizedSession(creds)
+        return self._app
+
+    def members(self, space: str) -> list[str]:
+        """The email of each person in a space (spaces.members.list). Raises when the list can't be read."""
+        http, out, token = self._members_http(), [], None
+        for _ in range(10):
+            r = http.get(f"{CHAT}/{space}/members", params={"pageSize": 100, **({"pageToken": token} if token else {})},
+                         timeout=30)
+            r.raise_for_status()
+            data = r.json()
+            for m in data.get("memberships", []):
+                user = m.get("member") or {}
+                if user.get("type") == "HUMAN" and user.get("name") and (email := self._email_for(user["name"])):
+                    out.append(email)
+            token = data.get("nextPageToken")
+            if not token:
+                break
+        return out
 
     def list_spaces(self) -> list[dict]:
         out, token = [], None

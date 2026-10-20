@@ -2,6 +2,7 @@
 
 Email: drop .eml files in data/sim/inbox; sent mail is written to data/sim/outbox.
 Teams: drop .json files in data/sim/teams_inbox; posts are appended to data/sim/teams/<channel>.md.
+Who is in each chat space: data/sim/teams_members.json, {"spaces/X": ["a@site.org", ...]}.
 """
 
 from __future__ import annotations
@@ -124,6 +125,12 @@ class SimTeams:
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(f"\n---\n<!-- outbox {row['id']} · {stamp} -->\n{row['body']}\n")
         return {"external_ref": f"sim-teams:{name}:{row['id']}", "web_url": None}
+
+    def members(self, space: str) -> list[str] | None:
+        """The space's members as listed in teams_members.json; None for a space it does not list."""
+        path = _dir() / "teams_members.json"
+        listed = json.loads(path.read_text()) if path.exists() else {}
+        return listed.get(space)
 
     def find_sent(self, row: dict) -> dict | bool:
         name = ((row.get("meta") or {}).get("target") or {}).get("key", "direct")

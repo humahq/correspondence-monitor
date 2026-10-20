@@ -75,6 +75,9 @@ roles:
   - { id: cra, label: Clinical research associate }
   - { id: clinops_lead, label: Sponsor ClinOps lead }
   - { id: medical_monitor, label: Medical monitor }
+  # doctors at the site: the bot is careful with them (config/careful.yaml); no routing rule emails them
+  - { id: pi, label: Principal investigator }
+  - { id: sub_investigator, label: Sub-investigator }
   # testers may clear and disregard alerts and chat with the bot 1-on-1; no routing rule emails them
   - { id: tester, label: Study team member }
 
@@ -110,7 +113,7 @@ people:
   - id: eliot-tester
     name: Eliot Levitt
     email: eliot@huma.ai
-    roles: [tester]
+    roles: [tester, pi]   # pi for testing how the bot treats doctors
     sites: ["*"]
 
 pattern_classes:

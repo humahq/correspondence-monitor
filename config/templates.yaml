@@ -323,6 +323,51 @@ templates:
 
       {{ study.monitor_signature }}
 
+  # ---------------- Email: an alert kept private because a doctor can read the chat (config/careful.yaml) ----------------
+  - id: email-careful-report
+    topic: careful_report
+    recipient: "*"
+    channel: email
+    severity: "*"
+    subject: "[{{ study.short_name }}] Private: {{ item.title }}{% if problems | length > 1 %} (+{{ problems | length - 1 }} more){% endif %} (Item #{{ item.id }})"
+    body: |
+      {{ recipient.first_name }},
+
+      This alert was not posted in any chat and is sent to you privately: {{ careful.why }}.
+      Please follow it up directly and calmly, without raising it in front of others.
+
+      **{{ problems | length }} problem{{ "s" if problems | length > 1 }} for {{ item.participant_id or "participant not named" }} at {{ item.site }} ({{ item.tier_label }}):**
+      {%- for p in problems %}
+      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (please check: not sure){% endif %}
+      {%- if p.detail %}
+      {{ p.detail }}
+      {%- endif %}
+      {%- endfor %}
+
+      **What to do:**
+      {%- for p in problems %}
+      {{ p.n }}. {{ p.next_step or "Check this with the site." }}
+      {%- endfor %}
+
+      ──────────
+      {%- for p in problems %}
+
+      **Evidence for problem {{ p.n }}**
+      {{ finding.wrote | default('Site wrote') }} ({{ finding.sender_name }}, {{ finding.message_date }}):
+      > {{ p.message_quote | replace("\n", " ") }}
+      Study rule:
+      {%- if p.doc_quote %}
+      > {{ p.doc_quote | replace("\n", " ") }}
+      From: {{ p.where }}
+      {%- else %}
+      (exact words not found, please read this section: {{ p.where }})
+      {%- endif %}
+      {%- endfor %}
+
+      Details: {{ item.link }}
+
+      {{ study.monitor_signature }}
+
   # ---------------- Out of scope: safety ----------------
   - id: email-safety-redirect
     topic: safety_out_of_scope
