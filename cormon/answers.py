@@ -20,7 +20,7 @@ from datetime import date, datetime
 
 from dateutil.relativedelta import relativedelta
 
-from . import capture, conversation, db, guide, llm, memory, reader, routing, settings
+from . import capture, careful, conversation, db, guide, llm, memory, reader, routing, settings
 from .config import Study
 
 ASKED = re.compile(r"\?|^\s*(?:what|when|how|which|where|why|who|is|are|can|could|should|do|does|did|may|must|"
@@ -478,10 +478,13 @@ def plain(a: dict, reader_role: str, use_cache: bool = True) -> str:
 
 
 def _plain_said(a: dict, reader_role: str, use_cache: bool) -> str:
+    """a["tone"] (a careful reader, see careful.py) adds that tone's wording rule to PLAIN_SYSTEM."""
     facts = "\n".join([a["text"]] + [f"{what}: {r}" for what, r in a.get("sums", [])])
     words = "\n".join(f"- {w}" for _, w in a["quotes"]) or "- none"
+    rule = careful.tone(a.get("tone"))
     try:
-        said = _clean(llm.structured("answer_plain", PLAIN_SYSTEM, f"READER: {reader_role}\n\nQUESTION: "
+        said = _clean(llm.structured("answer_plain", PLAIN_SYSTEM + (f"\n{rule}" if rule else ""),
+                                     f"READER: {reader_role}\n\nQUESTION: "
                                      f"{a['question']}\n\nCHECKED ANSWER:\n{facts}\n\nPROTOCOL'S WORDS:\n{words}"
                                      + ("\n\nThis is a serious event." if a.get("serious") else ""),
                                      PLAIN_SCHEMA, "reply", use_cache=use_cache)["text"])
@@ -579,7 +582,10 @@ def answer_message(study: Study, msg: dict, email: str, use_cache: bool = True,
     answers = [a for a in answers if a["question"] != REPORTING_QUESTION or a["serious"]]
     who = study.person_by_email(msg.get("from_addr"))
     role = study.role_label(who.roles[0]) if who and who.roles else "study site staff"
+    tone = (careful.reader_rule(study, msg.get("from_addr")) or {}).get("tone")
     for a in answers:
+        if tone:
+            a["tone"] = tone
         a["plain"] = plain(a, role, use_cache)
     return answers
 

@@ -6,7 +6,7 @@ import hashlib
 import re
 from email.utils import make_msgid
 
-from . import capture, config, db, drafting, items, phi, settings
+from . import capture, careful, config, db, drafting, items, phi, settings
 from .config import Person, Study
 
 REPEAT_HOURS = 6
@@ -35,7 +35,9 @@ def enqueue(*, purpose: str, channel: str, destination: str, body: str, item_id:
             meta: dict | None = None, status: str = "queued", study_id: str | None = None,
             again: bool = False) -> int:
     """Queue one outgoing message. The same draft queued again within REPEAT_HOURS (a message read a second
-    time after a crash) returns the first row instead, unless `again` (an operator resending on purpose)."""
+    time after a crash) returns the first row instead, unless `again` (an operator resending on purpose).
+    Every chat post passes the careful check here (careful.py): in a room with a doctor it may be reworded, or
+    kept out ('withheld') for routing to report privately."""
     idem = hashlib.sha256(db.js([item_id, message_id, purpose, channel, destination, to or [], cc or [],
                                  subject, body, (meta or {}).get("target")]).encode()).hexdigest()
     if not again:
@@ -45,6 +47,10 @@ def enqueue(*, purpose: str, channel: str, destination: str, body: str, item_id:
             db.audit("draft_repeat_skipped", entity_type="item" if item_id else "outbox",
                      entity_id=item_id or first["id"], study_id=study_id, outbox_id=first["id"], purpose=purpose)
             return first["id"]
+    said = careful.check_post(study_id=study_id, purpose=purpose, body=body, item_id=item_id, message_id=message_id,
+                              meta=meta) if channel == "teams" else None
+    if said:
+        body, meta, status = said["body"], dict(meta or {}, careful=said["note"]), said["status"] or status
     files = (meta or {}).get("files") or []
     found = internal(body) + internal(subject) + [w for f in files for w in internal(f.get("text"))]
     if found:  # whatever wrote it, nothing of the bot's own workings goes out
@@ -74,6 +80,10 @@ def enqueue(*, purpose: str, channel: str, destination: str, body: str, item_id:
     db.audit("draft_created", entity_type="item" if item_id else "outbox", entity_id=item_id or oid,
              study_id=study_id, outbox_id=oid, purpose=purpose, channel=channel, destination=destination,
              template=template_id, to=to, cc=cc, subject=subject, status=status)
+    if said and said["action"] == "withhold":
+        db.audit("post_withheld_careful", entity_type="item" if item_id else "outbox", entity_id=item_id or oid,
+                 study_id=study_id, outbox_id=oid, room=said["note"]["room"], about=said["note"]["about"],
+                 why=said["note"]["why"])
     return oid
 
 
@@ -283,6 +293,7 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
             continue
         db.audit("routing_unknown_destination", entity_type="item", entity_id=item_id,
                  study_id=study.study_id, destination=dest)
+    created += careful.report_privately(study, item, others, msg, created, context)
 
     for it in [item] + others:
         db.ex("UPDATE items SET routed=1, updated_at=? WHERE id=?", (db.now(), it["id"]))

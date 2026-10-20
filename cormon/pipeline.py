@@ -6,8 +6,8 @@ import re
 
 from dateutil import parser as dtparser
 
-from . import (answers, asks, capture, checks, config, conversation, db, events, guide, items, matching, reader,
-               routing, senders, settings, textutil, triage)
+from . import (answers, asks, capture, careful, checks, config, conversation, db, events, guide, items, matching,
+               reader, routing, senders, settings, textutil, triage)
 from .config import Study
 from . import drafting
 from .drafting import item_link, local_time
@@ -261,12 +261,16 @@ CAN_HELP = ("I couldn't find anything I can answer here. I answer questions abou
 
 def _acknowledge(study: Study, msg: dict, summary: dict, trial_related: bool) -> None:
     """A reply when someone talks to the bot and nothing else answered them: the problems it raised, or that
-    it found none. A 1-on-1 chat always gets one; a group chat only when the bot was asked."""
+    it found none. A 1-on-1 chat always gets one; a group chat only when the bot was asked. A careful person
+    (careful.py) who wrote a problem is not told they broke a rule: the study team is told privately instead."""
     raised = [it for it in (items.get(i) for i in summary["items_created"] + summary["items_repeat"])
               if it and it["kind"] == "finding" and it["state"] != "suppressed" and it["counts"]]
     new = [it for it in raised if it["id"] in summary["items_created"]]
     names = lambda its: ", ".join(f'<a href="{item_link(it)}">Item #{it["id"]}</a>' for it in its)
-    if new and msg.get("visibility") == "direct":  # said only here: the problems themselves, not a pointer
+    rule = careful.reader_rule(study, msg.get("from_addr")) if raised else None
+    if rule:
+        text = careful.calm_reply(rule)
+    elif new and msg.get("visibility") == "direct":  # said only here: the problems themselves, not a pointer
         shown = [p for it in new for p in drafting.problems(study, it, it["evidence"])]
         lines = [f"Thanks. I found {len(shown)} problem{'s' if len(shown) > 1 else ''}:"]
         for n, p in enumerate(shown, 1):
