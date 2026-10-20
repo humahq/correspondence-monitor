@@ -206,10 +206,30 @@ def cmd_status(args):
         "SELECT id, subject AS summary, status FROM messages WHERE status IN ('new','processing','error') ORDER BY id")]
     q += [dict(r, what="outbox") for r in db.q(
         "SELECT id, purpose || ' -> ' || COALESCE(to_addrs, destination) AS summary, status FROM outbox"
-        " WHERE status IN ('queued','held','failed') ORDER BY id")]
+        " WHERE status IN ('queued','sending','held','failed') ORDER BY id")]
     table(q, [("what", "kind", 8), ("id", "id", 5), ("status", "status", 10), ("summary", "summary", 80)])
     print("\nrecent activity:")
     cmd_log(argparse.Namespace(item=None, message=None, limit=args.limit, verbose=False))
+
+
+def cmd_backup(args):
+    from . import backup
+    if args.check:
+        res = backup.check(Path(args.check))
+    else:
+        res = backup.make()
+    print(f"{'OK' if res['ok'] else 'FAILED'}: {res['path']}  rows: {res['counts']}")
+    for p in res["problems"]:
+        print(f"  - {p}")
+
+
+def cmd_restore(args):
+    from . import backup
+    if not args.yes:
+        print("Stop the service first (sudo systemctl stop cormon), then run again with --yes.")
+        return
+    res = backup.restore(Path(args.file))
+    print(f"restored {res['restored']}; the old database is kept as {res['kept']}  rows: {res['counts']}")
 
 
 def cmd_pause(args):
@@ -669,6 +689,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("status", help="state, queue and recent activity"); s.add_argument("--limit", type=int, default=15)
     s.set_defaults(fn=cmd_status)
+    s = sub.add_parser("backup", help="back up the database now and check the copy")
+    s.add_argument("--check", metavar="FILE", help="only check an existing backup"); s.set_defaults(fn=cmd_backup)
+    s = sub.add_parser("restore", help="replace the database with a checked backup (service stopped)")
+    s.add_argument("file"); s.add_argument("--yes", action="store_true"); s.set_defaults(fn=cmd_restore)
     s = sub.add_parser("pause", help="pause processing and sending"); s.add_argument("--reason"); s.set_defaults(fn=cmd_pause)
     sub.add_parser("resume", help="resume processing").set_defaults(fn=cmd_resume)
 

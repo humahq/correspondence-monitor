@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
 from . import settings
@@ -334,13 +334,23 @@ MIGRATIONS = {
     ("rules", "unless"): "ALTER TABLE rules ADD COLUMN unless TEXT",
     # the source a guide item was read from: document version and file hash; for a pack, its sources' versions
     ("guide", "version"): "ALTER TABLE guide ADD COLUMN version TEXT",
+    # the same draft queued twice (a message read again after a crash) is sent once
+    ("outbox", "idem_key"): "ALTER TABLE outbox ADD COLUMN idem_key TEXT",
+    # a failed send waits longer before each new try
+    ("outbox", "next_try_at"): "ALTER TABLE outbox ADD COLUMN next_try_at TEXT",
+    # when a sender took the row; a row left 'sending' long after was interrupted
+    ("outbox", "claimed_at"): "ALTER TABLE outbox ADD COLUMN claimed_at TEXT",
+    ("messages", "processing_at"): "ALTER TABLE messages ADD COLUMN processing_at TEXT",
 }
+INDEXES = ["CREATE INDEX IF NOT EXISTS ix_outbox_idem ON outbox(idem_key)"]
 
 
 def _migrate(c: sqlite3.Connection) -> None:
     for (table, column), sql in MIGRATIONS.items():
         if column not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
             c.execute(sql)
+    for sql in INDEXES:
+        c.execute(sql)
 
 
 def q(sql: str, params: Iterable[Any] = ()) -> list[sqlite3.Row]:
@@ -354,6 +364,15 @@ def q1(sql: str, params: Iterable[Any] = ()) -> sqlite3.Row | None:
 def ex(sql: str, params: Iterable[Any] = ()) -> int:
     cur = conn().execute(sql, tuple(params))
     return cur.lastrowid
+
+
+def changed(sql: str, params: Iterable[Any] = ()) -> int:
+    """Run an UPDATE and return how many rows it changed (1 means this caller won the row)."""
+    return conn().execute(sql, tuple(params)).rowcount
+
+
+def later(minutes: float) -> str:
+    return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat(timespec="seconds")
 
 
 def js(value: Any) -> str:

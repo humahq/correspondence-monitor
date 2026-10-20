@@ -91,6 +91,10 @@ class SimEmail:
         path.write_bytes(bytes(msg))
         return {"external_ref": str(path.name), "rfc_message_id": row.get("rfc_message_id")}
 
+    def find_sent(self, row: dict) -> dict | bool:
+        path = _dir("outbox") / f"{row['id']:05d}_{row['purpose']}.eml"
+        return {"external_ref": path.name, "rfc_message_id": row.get("rfc_message_id")} if path.exists() else False
+
 
 class SimTeams:
     def fetch(self) -> list[Inbound]:
@@ -120,3 +124,9 @@ class SimTeams:
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(f"\n---\n<!-- outbox {row['id']} · {stamp} -->\n{row['body']}\n")
         return {"external_ref": f"sim-teams:{name}:{row['id']}", "web_url": None}
+
+    def find_sent(self, row: dict) -> dict | bool:
+        name = ((row.get("meta") or {}).get("target") or {}).get("key", "direct")
+        path = _dir("teams") / f"{name}.md"
+        posted = path.exists() and f"<!-- outbox {row['id']} · " in path.read_text(encoding="utf-8")
+        return {"external_ref": f"sim-teams:{name}:{row['id']}", "web_url": None} if posted else False

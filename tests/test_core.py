@@ -1,6 +1,7 @@
 """Fast checks that need no network or model calls."""
 
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -1566,3 +1567,164 @@ def test_an_alert_names_the_senders_real_role():
     _, cra = drafting.render(tpl("cra"), drafting.item_context(study, item, None))
     assert "please call John Rohit at Site 01 (MGH), then:" in cra and "Site wrote (John Rohit," in cra
     assert "The site has been told only that a possible issue was noted" in cra
+
+
+def _queued(body="Alert", **kw):
+    from cormon import routing
+    return routing.enqueue(purpose="email_cra", channel="email", destination="email", body=body, subject="S",
+                           to=["cra@x"], **kw)
+
+
+class _Adapter:
+    def __init__(self, fail=False, found=None):
+        self.fail, self.found, self.sent = fail, found, []
+
+    def send(self, row):
+        if self.fail:
+            raise RuntimeError("smtp down")
+        self.sent.append(row["id"])
+        return {"external_ref": f"ref{row['id']}"}
+
+    def find_sent(self, row):
+        return self.found
+
+
+def test_a_queued_message_is_sent_once_even_with_two_senders(monkeypatch):
+    from cormon import outbox
+    ad = _Adapter()
+    monkeypatch.setattr(outbox, "_adapter", lambda ch: ad)
+    a, b = _queued("one"), _queued("two")
+    db.ex("UPDATE outbox SET status='sending', claimed_at=? WHERE id=?", (db.now(), b))  # another sender took it
+    assert outbox.dispatch()["sent"] == 1 and ad.sent == [a]
+    assert outbox.dispatch()["sent"] == 0 and ad.sent == [a]
+    assert db.q1("SELECT status FROM outbox WHERE id=?", (b,))["status"] == "sending"
+
+
+def test_the_same_draft_queued_twice_is_kept_once_unless_resent_on_purpose():
+    a = _queued("same", item_id=None, message_id=5)
+    assert _queued("same", item_id=None, message_id=5) == a
+    assert _queued("different", item_id=None, message_id=5) != a
+    assert _queued("same", item_id=None, message_id=5, again=True) != a
+    db.ex("UPDATE outbox SET status='failed' WHERE id=?", (a,))
+    assert db.q1("SELECT COUNT(*) n FROM outbox WHERE body='same'")["n"] == 2
+    assert db.q("SELECT 1 FROM audit_log WHERE action='draft_repeat_skipped'")
+
+
+def test_a_failed_send_waits_longer_each_time_then_is_marked_failed(monkeypatch):
+    from cormon import outbox
+    ad = _Adapter(fail=True)
+    monkeypatch.setattr(outbox, "_adapter", lambda ch: ad)
+    oid = _queued()
+    assert outbox.dispatch()["failed"] == 1
+    row = db.q1("SELECT * FROM outbox WHERE id=?", (oid,))
+    assert row["status"] == "queued" and row["next_try_at"] > db.now() and row["attempts"] == 1
+    assert outbox.dispatch()["failed"] == 0  # not tried again before its wait is over
+    for _ in outbox.RETRY_MINUTES:
+        db.ex("UPDATE outbox SET next_try_at=NULL WHERE id=?", (oid,))
+        outbox.dispatch()
+    row = db.q1("SELECT * FROM outbox WHERE id=?", (oid,))
+    assert row["status"] == "failed" and row["attempts"] == len(outbox.RETRY_MINUTES) + 1
+    assert "smtp down" in row["last_error"]
+
+
+def test_a_message_left_sending_is_checked_with_the_channel_before_any_resend(monkeypatch):
+    from cormon import outbox
+    ids = [_queued(f"m{i}") for i in range(4)]
+    db.ex("UPDATE outbox SET status='sending', claimed_at=?", (db.later(-60),))
+    db.ex("UPDATE outbox SET claimed_at=? WHERE id=?", (db.now(), ids[3]))  # still being sent right now
+    answers = iter([{"external_ref": "found"}, False, None])
+    monkeypatch.setattr(outbox, "_adapter", lambda ch: _Adapter(found=next(answers)))
+    assert outbox.recover(log=lambda *_: None) == {"confirmed": 1, "requeued": 1, "unknown": 1}
+    status = [db.q1("SELECT status FROM outbox WHERE id=?", (i,))["status"] for i in ids]
+    assert status == ["sent", "queued", "failed", "sending"]
+    assert "cormon outbox --send" in db.q1("SELECT last_error FROM outbox WHERE id=?", (ids[2],))["last_error"]
+
+
+def _message(mid, status="new", processing_at=None):
+    db.ex("INSERT INTO messages (id, channel, external_id, thread_key, study_id, route, visibility, received_at,"
+          " status, processing_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+          (mid, "email", f"e{mid}", f"t{mid}", "S1", "study", "to", db.now(), status, processing_at))
+
+
+def test_a_message_left_half_read_is_read_again_once_then_marked_an_error():
+    from cormon import pipeline
+    _message(1, "processing", db.later(-60))
+    _message(2, "processing", None)  # from before the time was kept: left alone
+    _message(3, "processing", db.now())  # being read right now
+    assert pipeline.recover_messages(log=lambda *_: None) == [1]
+    assert db.q1("SELECT status FROM messages WHERE id=1")["status"] == "new"
+    db.ex("UPDATE messages SET status='processing', processing_at=? WHERE id=1", (db.later(-60),))
+    pipeline.recover_messages(log=lambda *_: None)
+    assert db.q1("SELECT status FROM messages WHERE id=1")["status"] == "error"
+    assert [r["status"] for r in db.q("SELECT status FROM messages WHERE id IN (2,3) ORDER BY id")] == \
+        ["processing", "processing"]
+
+
+def test_an_alert_made_but_never_sent_is_sent_later_and_only_tried_once(monkeypatch):
+    from cormon import pipeline, routing
+    routed = []
+    monkeypatch.setattr(routing, "route_item", lambda i, **kw: routed.append(i) or [])
+    assert pipeline.route_missed(log=lambda *_: None) == []  # first run only notes the start
+    db.set_state("route_missed_since", db.later(-120))
+    _message(1, "processed")
+    for i, made in ((1, db.later(-60)), (2, db.now()), (3, db.later(-180))):
+        db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind,"
+              " polarity, title, tier, evidence, link_token, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              (i, "S1", "t", 1, 1, f"k{i}", "finding", "problem", "x", "medium", "{}", f"l{i}", made, made))
+    assert pipeline.route_missed(log=lambda *_: None) == [1]  # 2 is too new, 3 is from before the check
+    assert pipeline.route_missed(log=lambda *_: None) == [] and routed == [1]
+
+
+def test_something_failed_for_good_is_emailed_once_to_the_ops_lead(monkeypatch):
+    from cormon import config, stuck
+    lead = type("P", (), {"email": "lead@x"})()
+    study = type("S", (), {"people_with_role": lambda self, r: [lead] if r == "clinops_lead" else []})()
+    monkeypatch.setattr(config, "studies", lambda: {"S1": study})
+    assert stuck.problems() == []
+    oid = _queued("lost")
+    db.ex("UPDATE outbox SET status='failed', last_error='smtp down' WHERE id=?", (oid,))
+    warned = stuck.warn(log=lambda *_: None)
+    row = db.q1("SELECT * FROM outbox WHERE id=?", (warned,))
+    assert row["purpose"] == "ops_warning" and db.unjs(row["to_addrs"]) == ["lead@x"]
+    assert f"cormon outbox --send {oid}" in row["body"] and "smtp down" in row["body"]
+    db.ex("UPDATE outbox SET status='failed' WHERE id=?", (warned,))  # a failed warning is not warned about
+    assert stuck.warn(log=lambda *_: None) is None
+
+
+def test_a_backup_is_checked_and_can_be_restored(tmp_path):
+    from cormon import backup
+    _queued("before")
+    made = backup.make()
+    assert made["ok"] and made["counts"]["outbox"] == 1
+    assert backup.check(tmp_path / "backups" / Path(made["path"]).name)["ok"]
+    install = db.get_state("install_id")
+    _queued("after the backup")
+    res = backup.restore(Path(made["path"]))
+    assert [r["body"] for r in db.q("SELECT body FROM outbox")] == ["before"]
+    assert Path(res["kept"]).exists() and db.get_state("install_id") != install
+    bad = tmp_path / "bad.db"
+    bad.write_bytes(b"not a database")
+    with pytest.raises(Exception):
+        backup.restore(bad)
+    assert [r["body"] for r in db.q("SELECT body FROM outbox")] == ["before"]
+
+
+def test_a_chat_post_carries_its_own_id_and_a_repeat_is_recognised():
+    from cormon.channels.gchat import GoogleChatChannel
+    posts, gets = [], []
+    class R:
+        def __init__(self, code, data=None): self.status_code, self.text, self.data = code, "ALREADY_EXISTS", data
+        def json(self): return self.data
+        def raise_for_status(self): pass
+    class Session:
+        def post(self, url, json, params=None, timeout=0):
+            posts.append(params)
+            return R(409) if len(posts) > 1 else R(200, {"name": "spaces/S/messages/1"})
+        def get(self, url, timeout=0):
+            gets.append(url)
+            return R(200, {"name": "spaces/S/messages/1", "text": "Alert"})
+    row = {"id": 42, "body": "Alert", "meta": {"target": {"space": "spaces/S"}}}
+    ch = GoogleChatChannel(session=Session())
+    assert ch.send(row)["external_ref"] == "spaces/S/messages/1"
+    assert posts[0]["messageId"].startswith("client-cormon-") and posts[0]["messageId"].endswith("-42")
+    assert ch.send(row)["external_ref"] == "spaces/S/messages/1" and gets[-1].endswith(posts[0]["messageId"])

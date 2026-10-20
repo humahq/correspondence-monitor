@@ -10,6 +10,7 @@ from __future__ import annotations
 import html
 import json
 import re
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from .. import config, db, settings
@@ -69,6 +70,16 @@ def chat_text(body: str) -> str:
     t = html.unescape(t)
     t = "\n".join(line.strip() for line in t.splitlines())
     return re.sub(r"\n{3,}", "\n\n", t).strip()
+
+
+def message_id(row: dict) -> str:
+    """Our own id for the post an outbox row makes, so a retry is recognised instead of posted twice.
+    The install id changes when a backup is restored, as outbox numbers are then used again."""
+    install = db.get_state("install_id")
+    if not install:
+        install = secrets.token_hex(4)
+        db.set_state("install_id", install)
+    return f"client-cormon-{install}-{row['id']}"
 
 
 def _time(s: str) -> datetime:
@@ -222,18 +233,38 @@ class GoogleChatChannel:
         files = [ref for f in (row.get("meta") or {}).get("files") or [] if (ref := self._upload(space, f))]
         if files:
             body["attachment"] = files
-        params = {}
+        params = {"messageId": message_id(row)} if row.get("id") else {}
         if target.get("thread"):
             body["thread"] = {"name": target["thread"]}
             params["messageReplyOption"] = "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
         try:
             res = self._post(f"/{space}/messages", body, **params)
         except RuntimeError as e:
+            if str(e).startswith("409") and params.get("messageId") and (found := self.find_sent(row)):
+                return found  # this row was already posted (a retry after a stop mid-send)
+            if str(e).startswith("400") and "messageid" in str(e).lower() and params.get("messageId"):
+                db.audit("chat_message_id_refused", entity_type="outbox", entity_id=row["id"], error=str(e)[:300])
+                params.pop("messageId")
+                res = self._post(f"/{space}/messages", body, **params)
+                return {"external_ref": res.get("name"), "web_url": None}
             if not target.get("thread") or not str(e).startswith("403"):
                 raise
             # a 1-on-1 chat can refuse a threaded reply; the plain message reaches the same person
-            res = self._post(f"/{space}/messages", {"text": body["text"]})
+            res = self._post(f"/{space}/messages", {"text": body["text"]},
+                             **({"messageId": params["messageId"]} if params.get("messageId") else {}))
         return {"external_ref": res.get("name"), "web_url": None}
+
+    def find_sent(self, row: dict) -> dict | bool:
+        """The post this row made, found by its own message id; False when there is none."""
+        space = ((row.get("meta") or {}).get("target") or {}).get("space")
+        r = self.http.get(f"{CHAT}/{space}/messages/{message_id(row)}", timeout=30)
+        if r.status_code == 404:
+            return False
+        r.raise_for_status()
+        got = r.json()
+        if " ".join((got.get("text") or "").split())[:200] != " ".join(chat_text(row["body"]).split())[:200]:
+            raise RuntimeError(f"message id {message_id(row)} holds a different message")
+        return {"external_ref": got.get("name"), "web_url": None}
 
     def _upload(self, space: str, f: dict) -> dict | None:
         """A file posted with the message; None when the upload fails (the message still goes, its link stands)."""

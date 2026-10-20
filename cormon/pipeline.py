@@ -415,7 +415,7 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
     msg = capture.message(msg_id)
     summary: dict = {"message_id": msg_id, "route": msg["route"], "items_created": [], "items_repeat": [],
                      "historical": 0, "hypothetical": 0, "prevented": 0, "out_of_scope": 0, "findings": 0}
-    db.ex("UPDATE messages SET status='processing', error=NULL WHERE id=?", (msg_id,))
+    db.ex("UPDATE messages SET status='processing', processing_at=?, error=NULL WHERE id=?", (db.now(), msg_id))
     try:
         if msg["route"] != "study" or not msg["study_id"]:
             db.audit("general_message", entity_type="message", entity_id=msg_id,
@@ -739,6 +739,57 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
         db.ex("UPDATE messages SET status='error', error=? WHERE id=?", (str(e)[:1000], msg_id))
         db.audit("processing_error", entity_type="message", entity_id=msg_id, error=str(e)[:1000])
         raise
+
+
+STUCK_MINUTES = 15
+
+
+def recover_messages(log=print) -> list[int]:
+    """A message left 'processing' (the service stopped mid-read) is read once more; a second stop marks it
+    an error for a person to look at. Re-reading is safe: its alerts are matched to the ones already made and
+    its replies to the ones already queued. Messages from before processing_at was kept are left alone."""
+    out = []
+    for row in db.q("SELECT id FROM messages WHERE status='processing' AND processing_at<?",
+                    (db.later(-STUCK_MINUTES),)):
+        mid = row["id"]
+        if db.q1("SELECT 1 FROM audit_log WHERE action='message_requeued' AND entity_type='message' AND entity_id=?",
+                 (str(mid),)):
+            db.ex("UPDATE messages SET status='error', error=? WHERE id=?",
+                  ("stopped twice while being read; check it, then `cormon rerun`", mid))
+            db.audit("message_stuck", entity_type="message", entity_id=mid)
+            log(f"message {mid} stopped twice while being read: marked error")
+        else:
+            db.ex("UPDATE messages SET status='new' WHERE id=?", (mid,))
+            db.audit("message_requeued", entity_type="message", entity_id=mid, reason="left processing")
+            log(f"message {mid} was left half-read: reading it again")
+        out.append(mid)
+    return out
+
+
+LATE_MINUTES = 10
+
+
+def route_missed(log=print) -> list[int]:
+    """An alert made but never sent (the read stopped between the two) goes out now. Only alerts made since
+    this check first ran, so starting it never sends old alerts."""
+    since = db.get_state("route_missed_since")
+    if not since:
+        db.set_state("route_missed_since", db.now())
+        return []
+    rows = db.q("SELECT i.id FROM items i JOIN messages m ON m.id=i.first_message_id"
+                " WHERE i.routed=0 AND i.state!='suppressed' AND (i.counts=1 OR i.kind='out_of_scope')"
+                " AND i.created_at>=? AND i.created_at<? AND m.status IN ('processed','error')"
+                " AND NOT EXISTS (SELECT 1 FROM audit_log a WHERE a.entity_type='item'"
+                " AND a.entity_id=CAST(i.id AS TEXT) AND a.action='item_routed_late') ORDER BY i.id",
+                (since, db.later(-LATE_MINUTES)))
+    for row in rows:
+        db.audit("item_routed_late", entity_type="item", entity_id=row["id"], reason="made but never sent")
+        try:
+            routing.route_item(row["id"])
+        except Exception as e:
+            db.audit("item_route_failed", entity_type="item", entity_id=row["id"], error=str(e)[:500])
+        log(f"item {row['id']} was never sent: sending it now")
+    return [r["id"] for r in rows]
 
 
 def process_pending(log=print) -> list[dict]:

@@ -266,7 +266,8 @@ def run_case(study, case: Case) -> None:
     classes = {i["pattern_class"] for i in found if i["kind"] == "finding" and i["pattern_class"]}
     if any(i["kind"] == "out_of_scope" for i in found):
         classes.add("out_of_scope")
-    sent = db.q("SELECT purpose, destination, to_addrs FROM outbox WHERE id>? AND purpose != 'digest'", (before_out,))
+    sent = db.q("SELECT purpose, destination, to_addrs FROM outbox WHERE id>? AND purpose NOT IN ('digest','ops_warning')",
+                (before_out,))
     case.result = {
         "message_id": m["id"] if m else None,
         "status": (m["status"] if m else "not captured") + (f": {m['error']}" if m and m["error"] else ""),

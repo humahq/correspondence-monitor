@@ -158,6 +158,27 @@ class ImapChannel:
             smtp.send_message(msg)
         return {"external_ref": row.get("rfc_message_id"), "rfc_message_id": row.get("rfc_message_id")}
 
+    def find_sent(self, row: dict) -> dict | bool | None:
+        """Whether this row's email is in Sent Mail, found by the Message-ID we gave it."""
+        rfc = row.get("rfc_message_id")
+        if not rfc:
+            return None
+        conn = self._connect()
+        try:
+            status, _ = conn.select(f'"{_cfg("sent_folder", "[Gmail]/Sent Mail")}"', readonly=True)
+            if status != "OK":
+                return None
+            status, data = conn.uid("SEARCH", "X-GM-RAW", f'"rfc822msgid:{rfc.strip("<>")}"')
+            if status != "OK":
+                return None
+            found = bool(data and data[0] and data[0].split())
+            return {"external_ref": rfc, "rfc_message_id": rfc} if found else False
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
+
     def check(self) -> dict:
         conn = self._connect()
         try:

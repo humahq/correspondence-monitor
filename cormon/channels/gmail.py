@@ -106,6 +106,16 @@ class GmailChannel:
         headers = {h["name"].lower(): h["value"] for h in meta.get("payload", {}).get("headers", [])}
         return {"external_ref": sent["id"], "rfc_message_id": headers.get("message-id")}
 
+    def find_sent(self, row: dict) -> dict | None:
+        """This row's email in Sent, by the Message-ID we gave it. The Gmail API may replace that id,
+        so not finding it means "can't tell" (None), never "not sent"."""
+        rfc = (row.get("rfc_message_id") or "").strip("<>")
+        if not rfc:
+            return None
+        hits = self.svc.users().messages().list(userId="me", q=f"in:sent rfc822msgid:{rfc}").execute()
+        ref = (hits.get("messages") or [None])[0]
+        return {"external_ref": ref["id"], "rfc_message_id": row["rfc_message_id"]} if ref else None
+
     def send_as_addresses(self) -> list[str]:
         resp = self.svc.users().settings().sendAs().list(userId="me").execute()
         return [s["sendAsEmail"].lower() for s in resp.get("sendAs", [])]

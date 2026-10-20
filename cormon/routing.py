@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from email.utils import make_msgid
 
 from . import capture, config, db, drafting, items, settings
 from .config import Person, Study
+
+REPEAT_HOURS = 6
 
 
 _INTERNAL = [
@@ -29,7 +32,19 @@ def internal(text: str | None) -> list[str]:
 def enqueue(*, purpose: str, channel: str, destination: str, body: str, item_id: int | None = None,
             message_id: int | None = None, template_id: str | None = None, from_addr: str | None = None,
             to: list[str] | None = None, cc: list[str] | None = None, subject: str | None = None,
-            meta: dict | None = None, status: str = "queued", study_id: str | None = None) -> int:
+            meta: dict | None = None, status: str = "queued", study_id: str | None = None,
+            again: bool = False) -> int:
+    """Queue one outgoing message. The same draft queued again within REPEAT_HOURS (a message read a second
+    time after a crash) returns the first row instead, unless `again` (an operator resending on purpose)."""
+    idem = hashlib.sha256(db.js([item_id, message_id, purpose, channel, destination, to or [], cc or [],
+                                 subject, body, (meta or {}).get("target")]).encode()).hexdigest()
+    if not again:
+        first = db.q1("SELECT id FROM outbox WHERE idem_key=? AND created_at>=? AND status!='failed'",
+                      (idem, db.later(-60 * REPEAT_HOURS)))
+        if first:
+            db.audit("draft_repeat_skipped", entity_type="item" if item_id else "outbox",
+                     entity_id=item_id or first["id"], study_id=study_id, outbox_id=first["id"], purpose=purpose)
+            return first["id"]
     files = (meta or {}).get("files") or []
     found = internal(body) + internal(subject) + [w for f in files for w in internal(f.get("text"))]
     if found:  # whatever wrote it, nothing of the bot's own workings goes out
@@ -41,9 +56,10 @@ def enqueue(*, purpose: str, channel: str, destination: str, body: str, item_id:
         if channel == "email" else None
     oid = db.ex(
         "INSERT INTO outbox (item_id, message_id, purpose, channel, destination, template_id, from_addr, to_addrs,"
-        " cc_addrs, subject, body, meta, status, rfc_message_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " cc_addrs, subject, body, meta, status, rfc_message_id, created_at, idem_key)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (item_id, message_id, purpose, channel, destination, template_id, from_addr, db.js(to or []),
-         db.js(cc or []), subject, body, db.js(meta or {}), status, rfc_id, db.now()),
+         db.js(cc or []), subject, body, db.js(meta or {}), status, rfc_id, db.now(), idem),
     )
     db.audit("draft_created", entity_type="item" if item_id else "outbox", entity_id=item_id or oid,
              study_id=study_id, outbox_id=oid, purpose=purpose, channel=channel, destination=destination,
@@ -232,7 +248,7 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
                 purpose=f"teams_{axis}", channel="teams", destination=dest, body=body, item_id=item_id,
                 template_id=tpl["id"], meta={"target": target, "thread_key": item["thread_key"],
                                                 "item_ids": [item_id] + [it["id"] for it in others]},
-                study_id=study.study_id))
+                study_id=study.study_id, again=force and actor != "system"))
             continue
         if dest == "email":
             for axis, person, addr in _resolve_people(study, entry, item, msg):
@@ -253,7 +269,7 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
                     purpose=f"email_{axis}", channel="email", destination="email", body=body,
                     subject=subject, item_id=item_id, template_id=tpl["id"],
                     from_addr=from_alias(study, msg), to=[addr], cc=cc, meta=meta,
-                    status=status, study_id=study.study_id))
+                    status=status, study_id=study.study_id, again=force and actor != "system"))
             continue
         db.audit("routing_unknown_destination", entity_type="item", entity_id=item_id,
                  study_id=study.study_id, destination=dest)

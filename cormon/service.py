@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 import traceback
 
-from . import capture, config, db, digest, outbox, pipeline, settings, webview
+from . import backup, capture, config, db, digest, outbox, pipeline, settings, stuck, webview
 from .channels import email_channel, teams_channel
 
 
@@ -29,19 +29,33 @@ def poll_channels(log=print) -> int:
     return n
 
 
+def _safely(step, log) -> None:
+    """A housekeeping step that fails is logged; it never stops reading or sending."""
+    try:
+        step(log)
+    except Exception as e:
+        db.audit("housekeeping_error", entity_type="service", entity_id=step.__qualname__, error=str(e)[:500])
+        log(f"{step.__qualname__} failed: {e}")
+
+
 def tick(log=print) -> None:
     config.record_config_changes()
     poll_channels(log)  # capture continues while paused, so nothing is dropped
     db.set_state("heartbeat", db.now())
+    _safely(backup.daily, log)
     if outbox.is_paused():
         return
+    _safely(pipeline.recover_messages, log)
     for r in pipeline.process_pending(log):
         if r.get("items_created"):
             log(f"message {r['message_id']}: items {r['items_created']}")
+    _safely(pipeline.route_missed, log)
     if digest.due():
         digest.send()
         digest.mark_sent()
         log("daily digest queued")
+    _safely(outbox.recover, log)
+    _safely(stuck.warn, log)
     res = outbox.dispatch()
     if res["sent"] or res["failed"]:
         log(f"outbox: sent {res['sent']}, failed {res['failed']}")
