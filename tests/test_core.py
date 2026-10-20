@@ -1814,3 +1814,56 @@ def test_a_question_back_is_shown_and_never_asks_for_personal_details(monkeypatc
     from datetime import date
     got = answers.stated_anchors("Was it in window, given that their Baseline was 4 July?", date(2026, 10, 19))
     assert got[0]["dates"] == [{"kind": "baseline", "label": "Baseline (as given in the question)", "date": "2026-07-04"}]
+
+
+def test_pages_need_a_google_sign_in_on_the_studys_people_list(monkeypatch):
+    import http.client, threading, time as _t
+    from http.server import ThreadingHTTPServer
+    from cormon import config, settings, webview, weblogin
+    conf = {"web.login.enabled": True, "web.login.client_id": "cid", "web.base_url": "https://mon.example",
+            "web.login.allowed_domains": ["huma.ai"]}
+    real = settings.get
+    monkeypatch.setattr(settings, "get", lambda k, d=None: conf.get(k, real(k, d)))
+    person = type("P", (), {"email": "Cra@Site.org"})()
+    monkeypatch.setattr(config, "studies", lambda: {"S1": type("S", (), {"people": [person]})()})
+    monkeypatch.setattr(webview, "render_item", lambda item: "THE PAGE")
+    db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind,"
+          " polarity, title, tier, evidence, link_token, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (9, "S1", "t", 1, 1, "k9", "finding", "problem", "x", "medium", "{}", "tok9", db.now(), db.now()))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), webview.Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def get(path, cookie=None):
+        c = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        c.request("GET", path, headers={"Cookie": cookie} if cookie else {})
+        r = c.getresponse()
+        return r.status, dict(r.getheaders()), r.read().decode()
+    try:
+        status, head, _ = get("/items/tok9")
+        assert status == 302 and head["Location"].startswith(weblogin.AUTH) and "client_id=cid" in head["Location"]
+        state = weblogin.parse_qs(weblogin.urlparse(head["Location"]).query)["state"][0]
+        claims = {"aud": "cid", "iss": "https://accounts.google.com", "email_verified": True,
+                  "exp": _t.time() + 60, "email": "cra@site.org"}
+        monkeypatch.setattr(weblogin, "exchange", lambda code: dict(claims))
+        status, head, _ = get(f"/auth/callback?code=c&state={state}")
+        assert status == 302 and head["Location"] == "/items/tok9" and "Secure" in head["Set-Cookie"]
+        cookie = head["Set-Cookie"].split(";", 1)[0]
+        assert get("/items/tok9", cookie)[2] == "THE PAGE"
+        outsider = weblogin._sign({"email": "someone@else.org", "exp": _t.time() + 60})
+        status, _, body = get("/items/tok9", f"{weblogin.COOKIE}={outsider}")
+        assert status == 403 and "not on this study's people list" in body
+        staff = weblogin._sign({"email": "peter@huma.ai", "exp": _t.time() + 60})
+        assert get("/items/tok9", f"{weblogin.COOKIE}={staff}")[2] == "THE PAGE"
+        forged = cookie[:-4] + "0000"
+        assert get("/items/tok9", forged)[0] == 302
+        expired = weblogin._sign({"email": "cra@site.org", "exp": _t.time() - 1})
+        assert get("/items/tok9", f"{weblogin.COOKIE}={expired}")[0] == 302
+        claims["aud"] = "someone-elses-app"
+        assert get(f"/auth/callback?code=c&state={state}")[0] == 403
+        assert get("/auth/callback?code=c&state=bad")[0] == 400
+        actions = [r["action"] for r in db.q("SELECT action FROM audit_log WHERE entity_type IN ('item','web')")]
+        assert {"signed_in", "page_viewed", "page_refused", "sign_in_refused"} <= set(actions)
+        conf["web.login.enabled"] = False
+        assert get("/items/tok9")[2] == "THE PAGE"
+    finally:
+        server.shutdown()

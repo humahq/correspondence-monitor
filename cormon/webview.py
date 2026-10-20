@@ -7,7 +7,7 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import config, db, items, senders, settings
+from . import config, db, items, senders, settings, weblogin
 from .drafting import also_broken, local_time, sender_ctx
 from .triage import TIER_LABELS
 
@@ -154,27 +154,47 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def _send(self, code: int, body: str, ctype: str = "text/html; charset=utf-8"):
+    def _send(self, code: int, body: str, ctype: str = "text/html; charset=utf-8", headers: dict | None = None):
         data = body.encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("X-Robots-Tag", "noindex")
+        self.send_header("Cache-Control", "private, no-store")
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(data)
+
+    def _gated(self, study_id: str, what: str, ref) -> bool:
+        """True when a sign-in redirect or a refusal was sent instead of the page."""
+        stop = weblogin.gate(self.path, self.headers.get("Cookie"), study_id, what, ref)
+        if stop:
+            self._send(stop[0], stop[2], "text/plain; charset=utf-8", stop[1])
+        return bool(stop)
 
     def do_GET(self):
         if self.path == "/health":
             return self._send(200, "ok", "text/plain")
+        if self.path.startswith("/auth/callback") and weblogin.enabled():
+            code, headers, body = weblogin.callback(self.path)
+            return self._send(code, body, "text/plain; charset=utf-8", headers)
+        if self.path.startswith("/auth/logout"):
+            code, headers, body = weblogin.logout()
+            return self._send(code, body, "text/plain; charset=utf-8", headers)
         if self.path.startswith("/items/"):
             token = self.path.split("/items/", 1)[1].split("?")[0]
-            row = db.q1("SELECT id FROM items WHERE link_token=?", (token,))
+            row = db.q1("SELECT id, study_id FROM items WHERE link_token=?", (token,))
             if row:
+                if self._gated(row["study_id"], "item", row["id"]):
+                    return
                 return self._send(200, render_item(items.get(row["id"])))
         if self.path.startswith("/answers/"):
             token = self.path.split("/answers/", 1)[1].split("?")[0]
             as_file = token.endswith(".md")
             row = db.q1("SELECT * FROM answer_pages WHERE link_token=?", (token.removesuffix(".md"),))
+            if row and self._gated(row["study_id"], "answer_page", row["id"]):
+                return
             if row and as_file:
                 from . import answers
                 return self._send(200, answers.facts_file(dict(row), config.study(row["study_id"]).title),
