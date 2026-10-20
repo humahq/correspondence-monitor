@@ -1697,6 +1697,7 @@ def test_a_backup_is_checked_and_can_be_restored(tmp_path):
     made = backup.make()
     assert made["ok"] and made["counts"]["outbox"] == 1
     assert backup.check(tmp_path / "backups" / Path(made["path"]).name)["ok"]
+    assert sorted(p.name for p in (tmp_path / "backups").iterdir()) == [Path(made["path"]).name]
     install = db.get_state("install_id")
     _queued("after the backup")
     res = backup.restore(Path(made["path"]))

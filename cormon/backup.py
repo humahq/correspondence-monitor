@@ -53,6 +53,7 @@ def make(keep: int | None = None) -> dict:
             live.backup(out)
         finally:
             live.execute("COMMIT")
+        out.execute("PRAGMA journal_mode=DELETE")  # one self-contained file, no -wal/-shm beside it
     finally:
         out.close()
     result = check(path, expect)
@@ -60,7 +61,8 @@ def make(keep: int | None = None) -> dict:
         path.rename(path.with_suffix(".bad"))
     else:
         for old in sorted(folder().glob("cormon-*.db"))[:-keep]:
-            old.unlink()
+            for p in (old, Path(f"{old}-wal"), Path(f"{old}-shm")):
+                p.unlink(missing_ok=True)
     db.audit("backup_made" if result["ok"] else "backup_failed", entity_type="service", entity_id="backup",
              path=path.name, problems=result["problems"] or None, counts=result["counts"])
     return result
