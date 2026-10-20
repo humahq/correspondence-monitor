@@ -6,7 +6,7 @@ import hashlib
 import re
 from email.utils import make_msgid
 
-from . import capture, config, db, drafting, items, settings
+from . import capture, config, db, drafting, items, phi, settings
 from .config import Person, Study
 
 REPEAT_HOURS = 6
@@ -52,6 +52,16 @@ def enqueue(*, purpose: str, channel: str, destination: str, body: str, item_id:
                  study_id=study_id, purpose=purpose, found=sorted(set(found)))
         body, subject = BLOCKED, (subject and "Message withheld")
         meta = {k: v for k, v in meta.items() if k != "files"} if files else meta
+    keep = phi.documents_own(study_id)
+    (body, in_body), (subject, in_subject) = phi.mask(body, keep), phi.mask(subject, keep)
+    masked_files = [dict(f, text=phi.mask(f.get("text"), keep)[0]) for f in (meta or {}).get("files") or []]
+    in_files = [k for f in (meta or {}).get("files") or [] for k in phi.mask(f.get("text"), keep)[1]]
+    if masked_files:
+        meta = dict(meta, files=masked_files)
+    if in_body or in_subject or in_files:
+        db.audit("outgoing_phi_masked", entity_type="message" if message_id else "item",
+                 entity_id=message_id or item_id, study_id=study_id, purpose=purpose,
+                 found=sorted(set(in_body + in_subject + in_files)))
     rfc_id = make_msgid(domain=settings.get("mailbox.address", "bot@huma.ai").split("@")[1]) \
         if channel == "email" else None
     oid = db.ex(

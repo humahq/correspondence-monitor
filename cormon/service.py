@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 import traceback
 
-from . import backup, capture, config, db, digest, outbox, pipeline, settings, stuck, webview
+from . import backup, capture, config, db, digest, outbox, phi, pipeline, settings, stuck, webview
 from .channels import email_channel, teams_channel
 
 
@@ -22,7 +22,7 @@ def poll_channels(log=print) -> int:
                     adapter.ack(inb)
                 if mid:
                     n += 1
-                    log(f"captured {name} message {mid}: {inb.subject or inb.body_text[:60]!r}")
+                    log(f"captured {name} message {mid}")  # no message text: the system log is not for patient data
         except Exception as e:
             db.audit("channel_error", entity_type="channel", entity_id=name, error=str(e)[:500])
             log(f"{name} channel error: {e}")
@@ -43,6 +43,7 @@ def tick(log=print) -> None:
     poll_channels(log)  # capture continues while paused, so nothing is dropped
     db.set_state("heartbeat", db.now())
     _safely(backup.daily, log)
+    _safely(phi.daily, log)
     if outbox.is_paused():
         return
     _safely(pipeline.recover_messages, log)

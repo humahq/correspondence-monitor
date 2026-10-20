@@ -1867,3 +1867,39 @@ def test_pages_need_a_google_sign_in_on_the_studys_people_list(monkeypatch):
         assert get("/items/tok9")[2] == "THE PAGE"
     finally:
         server.shutdown()
+
+
+def test_patient_details_are_masked_in_logs_and_outgoing_messages_but_study_ids_stay():
+    from cormon import phi
+    text = ("Pt G-501-004, DOB 03/14/1961, MRN 00123456, call her on (617) 555-0142, SSN 123-45-6789. "
+            "Week 12 visit 2026-10-03, Day 84 ± 3, dose 2 stick packs.")
+    masked, found = phi.mask(text)
+    assert set(found) == {"date of birth", "medical record number", "phone number", "social security number"}
+    for gone in ("03/14/1961", "00123456", "555-0142", "123-45-6789"):
+        assert gone not in masked
+    for kept in ("G-501-004", "2026-10-03", "Day 84 ± 3", "2 stick packs"):
+        assert kept in masked
+    assert phi.mask("Safety line 1-800-555-0199", frozenset({"1-800-555-0199"}))[0] == "Safety line 1-800-555-0199"
+    db.audit("event_extracted", entity_type="message", entity_id=1, summary="born on 4 July 1950, MRN 998877")
+    row = db.q1("SELECT details FROM audit_log WHERE action='event_extracted'")["details"]
+    assert "1950" not in row and "998877" not in row
+    oid = _queued("Reply to DOB: 1/2/1950 about 004")
+    body = db.q1("SELECT body FROM outbox WHERE id=?", (oid,))["body"]
+    assert "1950" not in body and "004" in body and db.q("SELECT 1 FROM audit_log WHERE action='outgoing_phi_masked'")
+
+
+def test_old_message_text_is_cleared_only_when_a_retention_period_is_set(monkeypatch, tmp_path):
+    from cormon import phi, settings
+    _message(1, "processed")
+    _message(2, "processed")
+    db.ex("UPDATE messages SET body_text='old text', received_at=?, raw_path='raw/email/1.eml' WHERE id=1",
+          (db.later(-60 * 24 * 400),))
+    db.ex("UPDATE messages SET body_text='new text' WHERE id=2")
+    (tmp_path / "raw" / "email").mkdir(parents=True)
+    (tmp_path / "raw" / "email" / "1.eml").write_text("x")
+    assert phi.purge() == {"skipped": "data.retention_days is not set"}
+    assert db.q1("SELECT body_text FROM messages WHERE id=1")["body_text"] == "old text"
+    out = phi.purge(365)
+    assert out["messages"] == 1 and out["raw_files"] == 1 and not (tmp_path / "raw" / "email" / "1.eml").exists()
+    assert [r["body_text"] for r in db.q("SELECT body_text FROM messages ORDER BY id")] == \
+        ["[cleared after retention period]", "new text"]

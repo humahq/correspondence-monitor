@@ -232,6 +232,23 @@ def cmd_restore(args):
     print(f"restored {res['restored']}; the old database is kept as {res['kept']}  rows: {res['counts']}")
 
 
+def cmd_purge(args):
+    from . import phi
+    if not args.yes:
+        print(f"This clears message text, attachments and saved participant dates older than "
+              f"{args.days or 'data.retention_days'} days. Run again with --yes.")
+        return
+    print(phi.purge(args.days))
+
+
+def cmd_forget(args):
+    from . import phi
+    if not args.yes:
+        print(f"This deletes what the bot remembers about {args.participant} in {args.study}. Run again with --yes.")
+        return
+    print(f"removed {phi.forget_participant(args.study, args.participant)} saved fact rows")
+
+
 def cmd_pause(args):
     db.set_state("paused", "1")
     db.audit("processing_paused", entity_type="service", entity_id="listener", actor=actor(args),
@@ -693,6 +710,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--check", metavar="FILE", help="only check an existing backup"); s.set_defaults(fn=cmd_backup)
     s = sub.add_parser("restore", help="replace the database with a checked backup (service stopped)")
     s.add_argument("file"); s.add_argument("--yes", action="store_true"); s.set_defaults(fn=cmd_restore)
+    s = sub.add_parser("purge", help="clear message text older than the retention period")
+    s.add_argument("--days", type=int); s.add_argument("--yes", action="store_true"); s.set_defaults(fn=cmd_purge)
+    s = sub.add_parser("forget-participant", help="delete the dates and events the bot remembers for one participant")
+    s.add_argument("study"); s.add_argument("participant"); s.add_argument("--yes", action="store_true")
+    s.set_defaults(fn=cmd_forget)
     s = sub.add_parser("pause", help="pause processing and sending"); s.add_argument("--reason"); s.set_defaults(fn=cmd_pause)
     sub.add_parser("resume", help="resume processing").set_defaults(fn=cmd_resume)
 

@@ -395,7 +395,9 @@ def audit(
     actor_type: str = "system",
     **details: Any,
 ) -> int:
-    """Append to the audit log and confirm the row was written."""
+    """Append to the audit log and confirm the row was written. Patient details are masked first."""
+    from . import phi
+    details = phi.mask_all(details)
     row_id = ex(
         "INSERT INTO audit_log (ts, actor, actor_type, action, entity_type, entity_id, study_id, details)"
         " VALUES (?,?,?,?,?,?,?,?)",
