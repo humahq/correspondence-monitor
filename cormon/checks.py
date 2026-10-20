@@ -205,10 +205,61 @@ def resolve(study: Study, rules: list[dict]) -> list[dict]:
     return conflicts
 
 
-def build(study: Study, log=print, use_cache: bool = True) -> dict:
+VOCAB_ADD_SYSTEM = """A clinical-trial check list has a vocabulary of event and value names (id | kind | description
+| example names). New names come from rules just added. For each new name: if it means the same thing as an existing
+entry (case, word order, synonyms), give that entry's id; otherwise give a new entry. Do not merge different
+visits, samples, medicine classes or doses. For a new entry give: id (snake_case, short, not an existing id), kind
+(event or value), description (one line), and phrases: 3 to 8 ways site staff write it in emails and chat.
+members: the exact new names it covers. Every new name appears in exactly one entry."""
+
+
+def add_names(old: list[dict], names: list[str], use_cache: bool, model: str) -> list[dict]:
+    """The vocabulary for these names. A stored vocabulary keeps its entries and ids, and only names it does not
+    have yet are named (joined to an entry or given a new one), so the facts read from messages keep their names
+    when a document is added. With none stored, every name is named afresh."""
+    vocab = [dict(e, members=list(e["members"])) for e in old]
+    known = {_norm(m) for e in vocab for m in e["members"]}
+    new = [n for n in names if n not in known]
+    for i in range(0, len(new), 250):
+        part = new[i:i + 250]
+        if not vocab:
+            vocab += llm.structured("checks_build", VOCAB_SYSTEM, "\n".join(part), VOCAB_SCHEMA, "vocab",
+                                    use_cache=use_cache, model=model)["entries"]
+            continue
+        have = {e["id"]: e for e in vocab}
+        listing = "\n".join(f"{e['id']} | {e['kind']} | {e['description']} | {'; '.join(e['members'][:4])}"
+                            for e in vocab)
+        res = llm.structured("checks_build", VOCAB_ADD_SYSTEM, f"EXISTING ENTRIES:\n{listing}\n\nNEW NAMES:\n"
+                             + "\n".join(part), VOCAB_SCHEMA, "vocab_add", use_cache=use_cache, model=model)
+        wanted = set(part)
+        for e in res["entries"]:
+            members = [m for m in e["members"] if _norm(m) in wanted]
+            if not members:
+                continue
+            if e["id"] in have:
+                have[e["id"]]["members"] += members
+            else:
+                vocab.append(dict(e, members=members))
+                have[e["id"]] = vocab[-1]
+    return vocab
+
+
+def build(study: Study, log=print, use_cache: bool = True, reuse: bool = True) -> dict:
+    """The check list from the guide sections. The stored vocabulary is kept and only new names are added to it.
+    When every document of the stored list is unchanged, its rules are kept as they are and only documents added
+    since are read. reuse=False builds everything again."""
     docs = guide.documents(study)
     secs = [i for i in guide.load(study.study_id) if i["kind"] == "section" and i["doc_id"] in docs]
     secs.sort(key=lambda s: (docs.index(s["doc_id"]), s["ord"]))
+    versions = {r["doc_id"]: r["version"] for r in db.q(
+        "SELECT DISTINCT doc_id, version FROM guide WHERE study_id=? AND kind='section'", (study.study_id,))}
+    stored = db.q1("SELECT version FROM guide WHERE study_id=? AND kind='check' LIMIT 1", (study.study_id,))
+    built = dict(p.split("=", 1) for p in stored["version"].split("; ") if "=" in p) if stored and reuse else {}
+    old_rules, old_vocab = load(study) if reuse else ([], [])
+    if not (built and all(d in docs and versions.get(d) == v for d, v in built.items())):
+        built, old_rules = {}, []
+    if built:
+        log(f"checks: kept {len(old_rules)} rules from unchanged {', '.join(sorted(built))}")
     titles = {d["id"]: d.get("title", d["id"]) for d in study.documents}
     model = llm.model_for("ingest")
     dropped: list[dict] = []
@@ -227,26 +278,25 @@ def build(study: Study, log=print, use_cache: bool = True) -> dict:
             out.append(dict(r, section_id=hit[0], quote=hit[1]))
         return out
 
+    batches = [b for g in guide.build_groups(study, [s for s in secs if s["doc_id"] not in built])
+               for b in _batches(g)]
     with ThreadPoolExecutor(4) as ex:
-        rules = [r for part in ex.map(one, _batches(secs)) for r in part]
+        new = [r for part in ex.map(one, batches) for r in part]
 
-    names = sorted({_norm(r[f]) for r in rules for f in ("from_event", "to_event", "first_event", "then_event",
-                                                          "event", "value_name") if _norm(r[f])})
-    vocab: list[dict] = []
-    for i in range(0, len(names), 250):
-        res = llm.structured("checks_build", VOCAB_SYSTEM, "\n".join(names[i:i + 250]), VOCAB_SCHEMA, "vocab",
-                             use_cache=use_cache, model=model)
-        vocab += res["entries"]
+    names = sorted({_norm(r[f]) for r in new for f in ("from_event", "to_event", "first_event", "then_event",
+                                                        "event", "value_name") if _norm(r[f])})
+    vocab = add_names(old_vocab, names, use_cache, model)
     by_name = {_norm(m): e["id"] for e in vocab for m in e["members"]}
-    for r in rules:
+    for r in new:
         for f in ("from_event", "to_event", "first_event", "then_event", "event", "value_name"):
             r[f"{f}_id"] = by_name.get(_norm(r[f]), "") if _norm(r[f]) else ""
         r["code"] = code_ready(r)
-    for n, r in enumerate(rules):
+    for n, r in enumerate(new, max((int(r["id"].split(":")[1]) + 1 for r in old_rules), default=0)):
         r["id"] = f"chk:{n:04d}"
-    washouts = longer_of(rules, secs)
+    washouts = longer_of(new, secs)
+    rules = old_rules + new
     conflicts = resolve(study, rules)
-    mark_implied(rules, use_cache)
+    mark_implied(new, use_cache, old_rules)
 
     version = "; ".join(f"{r['doc_id']}={r['version']}" for r in db.q(
         "SELECT DISTINCT doc_id, version FROM guide WHERE study_id=? AND kind='section'", (study.study_id,)))
@@ -316,10 +366,23 @@ IMPLIED_SCHEMA = llm.obj({"rules": {"type": "array", "items": llm.obj({
     "id": {"type": "string"}, "implied": {"type": "boolean"}})}})
 
 
-def mark_implied(rules: list[dict], use_cache: bool = True) -> None:
+def _implied_key(r: dict) -> tuple:
+    return (r["text"], r["applies_when"]) + tuple(r.get(f) for f in ("from_event_id", "to_event_id", "first_event_id",
+                                                                    "then_event_id", "event_id", "value_name_id"))
+
+
+def mark_implied(rules: list[dict], use_cache: bool = True, old: list[dict] = ()) -> None:
     """Sets "implied" on each code rule with a condition: code checks it only when the condition is true whenever
-    its events happen; otherwise the AI, which reads the whole message, judges it."""
-    todo = [r for r in rules if r["code"] and r["applies_when"].strip()]
+    its events happen; otherwise the AI, which reads the whole message, judges it. A rule already decided in the
+    stored check list (same words, condition and names) keeps its answer."""
+    decided = {_implied_key(r): r["implied"] for r in old if "implied" in r}
+    todo = []
+    for r in rules:
+        if r["code"] and r["applies_when"].strip():
+            if _implied_key(r) in decided:
+                r["implied"] = decided[_implied_key(r)]
+            else:
+                todo.append(r)
     lines = []
     for r in todo:
         names = ", ".join(r[f] for f in ("from_event_id", "to_event_id", "first_event_id", "then_event_id",

@@ -104,20 +104,20 @@ def cmd_guide(args):
     s = config.study(args.study)
     if not args.packs_only:
         for doc_id in guide.documents(s):
-            guide.prepare(s, doc_id, guide.source(s, doc_id))
+            guide.prepare(s, doc_id, guide.source(s, doc_id), reread=args.reread)
     if guide.checker(s).get("packs"):
         from . import packs
-        packs.build(s)
+        packs.build(s, reuse=not args.reread)
     if guide.checker(s).get("route") == "reader":
         from . import duties
-        duties.build(s)
+        duties.build(s, reuse=not args.reread)
 
 
 def cmd_duties(args):
     """Print the follow-up table (or rebuild it) so a person can check it against the protocol once."""
     from . import duties
     s = config.study(args.study)
-    events = duties.build(s) if args.rebuild else duties.table(s)
+    events = duties.build(s, reuse=False) if args.rebuild else duties.table(s)
     print(duties.render(events))
 
 
@@ -658,13 +658,16 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("guide", help="prepare the protocol as a guide (sections, tables by row, visit checklists)")
     s.add_argument("--study", required=True)
     s.add_argument("--packs-only", action="store_true", help="rebuild the topic packs from the stored sections")
+    s.add_argument("--reread", action="store_true",
+                   help="read every document again and rewrite every brief line, also for documents unchanged")
     s.set_defaults(fn=cmd_guide)
 
     s = sub.add_parser("checks", help="build the check list from the protocol and print its coverage")
     s.add_argument("--study", required=True)
-    s.add_argument("--fresh", action="store_true", help="ask the model again instead of using stored answers")
+    s.add_argument("--fresh", action="store_true",
+                   help="ask the model again for every document instead of keeping stored answers and rules")
     s.set_defaults(fn=lambda a: __import__("cormon.checks", fromlist=["build"]).build(
-        config.study(a.study), use_cache=not a.fresh))
+        config.study(a.study), use_cache=not a.fresh, reuse=not a.fresh))
 
     s = sub.add_parser("duties", help="print the follow-up table: what the site must do after each event")
     s.add_argument("--study", required=True)

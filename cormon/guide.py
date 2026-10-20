@@ -454,6 +454,54 @@ def read_text(path: Path, doc_id: str) -> tuple[list[Section], list[Visit]]:
     return [s for s in sections if s.text or s.level <= 2], []
 
 
+_MD_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*$")
+_MD_NUMBER = re.compile(r"^(?:step\s+)?(\d+(?:\.\d+)*)[.:]?\s+(.+)$", re.I)
+
+
+def read_markdown(path: Path, doc_id: str) -> tuple[list[Section], list[Visit]]:
+    """Sections of a document prepared as Markdown: each "#" heading opens a section at its level (the first
+    heading is the document's title, kept as the front matter). Numbered headings ("3. Storage", "Step 3.1: ...")
+    keep their number as the section id; tables are written one line per row and stay as they are."""
+    sections = [Section(id=f"{doc_id}:front", number="", title="Front matter", path=[], level=0)]
+    stack: list[tuple[int, str, str]] = []
+    buf: list[str] = []
+    titled = False
+
+    def flush():
+        text = "\n".join(buf).strip()
+        if text:
+            sections[-1].parts.append(re.sub(r"\n{3,}", "\n\n", text))
+        buf.clear()
+
+    for ln in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = _MD_HEADING.match(ln.strip())
+        if not m:
+            buf.append(_clean(ln) if ln.strip() else "")
+            continue
+        flush()
+        level, heading = len(m.group(1)), _clean(m.group(2))
+        if not titled:
+            titled = True
+            sections[0].title = heading
+            continue
+        while stack and stack[-1][0] >= level:
+            stack.pop()
+        n = _MD_NUMBER.match(heading)
+        parent = next((num for _, num, _ in reversed(stack) if num), "")
+        if n and (n.group(1).startswith(parent + ".") if parent else "." not in n.group(1)):
+            number, title = n.group(1), n.group(2).strip()
+        else:                                   # "Step 1" under section 6 is not section 1
+            number, title = "", heading
+        slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40]
+        sid = f"{doc_id}:{number}" if number else f"{doc_id}:{slug}"
+        if any(s.id == sid for s in sections):
+            sid = f"{sid}-{len(sections)}"
+        sections.append(Section(id=sid, number=number, title=title, path=[t for _, _, t in stack], level=level))
+        stack.append((level, number, f"{number} {title}".strip()))
+    flush()
+    return [s for s in sections if s.text or s.level <= 2], []
+
+
 # ---------------------------------------------------------------- what each section is about
 
 TOPICS = ["eligibility", "concomitant_medications", "dosing", "safety", "contraception_pregnancy", "visit_schedule",
@@ -502,14 +550,23 @@ def version_of(study: Study, doc_id: str, path: Path) -> str:
     return f"{stated} sha256:{hashlib.sha256(path.read_bytes()).hexdigest()[:12]}".strip()
 
 
-def prepare(study: Study, doc_id: str, path: Path, log=print) -> dict:
+def prepare(study: Study, doc_id: str, path: Path, log=print, reread: bool = False) -> dict:
+    """Reads one document into guide sections. A document already stored at this version and file is kept as it
+    is (the AI's topic tags would come out differently, and so would everything built on them); reread forces it."""
+    version = version_of(study, doc_id, path)
+    stored = db.q("SELECT COUNT(*) AS n FROM guide WHERE study_id=? AND doc_id=? AND kind='section' AND version=?",
+                  (study.study_id, doc_id, version))[0]["n"]
+    if stored and not reread:
+        log(f"guide {doc_id}: unchanged ({version}), {stored} sections kept")
+        return {"sections": stored, "visits": 0, "file": "", "kept": True}
     if path.suffix.lower() == ".docx":
         sections, visits = read_docx(path, doc_id)
-    elif path.suffix.lower() in (".txt", ".md"):
+    elif path.suffix.lower() == ".md":
+        sections, visits = read_markdown(path, doc_id)
+    elif path.suffix.lower() == ".txt":
         sections, visits = read_text(path, doc_id)
     else:
-        raise ValueError(f"guide needs a .docx or text source, got {path.name}")
-    version = version_of(study, doc_id, path)
+        raise ValueError(f"guide needs a .docx, .md or text source, got {path.name}")
     about = describe(sections)
     db.ex("DELETE FROM guide WHERE study_id=? AND doc_id=?", (study.study_id, doc_id))
     rows = []
@@ -550,6 +607,17 @@ def checker(study: Study) -> dict:
 
 def documents(study: Study) -> list[str]:
     return list(checker(study).get("documents") or [d["id"] for d in study.documents if d.get("guide_file")])
+
+
+def build_groups(study: Study, secs: list[dict]) -> list[list[dict]]:
+    """Sections grouped for the model's build passes, in order: the protocol documents together, each other
+    document (a manual) on its own, so adding or revising a manual leaves what was built from the protocol as it
+    was."""
+    groups: dict[str, list[dict]] = {}
+    for s in secs:
+        kind = study.doc(s["doc_id"]).get("kind")
+        groups.setdefault("protocol" if kind == "protocol" else s["doc_id"], []).append(s)
+    return list(groups.values())
 
 
 def source(study: Study, doc_id: str) -> Path:

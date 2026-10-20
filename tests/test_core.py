@@ -1904,3 +1904,63 @@ def test_old_message_text_is_cleared_only_when_a_retention_period_is_set(monkeyp
     assert out["messages"] == 1 and out["raw_files"] == 1 and not (tmp_path / "raw" / "email" / "1.eml").exists()
     assert [r["body_text"] for r in db.q("SELECT body_text FROM messages ORDER BY id")] == \
         ["[cleared after retention period]", "new text"]
+
+
+def test_markdown_guide_keeps_section_numbers_and_table_rows(tmp_path):
+    from cormon import guide
+    md = tmp_path / "lab.md"
+    md.write_text("# Lab Manual\n\nIntro line.\n\n# 6. Shipping\n\nShip frozen samples Monday to Wednesday.\n\n"
+                  "## Step 1: Pack the box\n\nUse dry ice.\n\n## 6.1 Ambient\n\nTable columns: Sample | When\n"
+                  "- Serum (Central): done at baseline\n")
+    secs, visits = guide.read_markdown(md, "lab")
+    by_id = {s.id: s for s in secs}
+    assert secs[0].title == "Lab Manual" and visits == []
+    assert by_id["lab:6"].title == "Shipping" and "Monday to Wednesday" in by_id["lab:6"].text
+    assert by_id["lab:step-1-pack-the-box"].number == ""
+    assert by_id["lab:6.1"].path == ["6 Shipping"] and "- Serum (Central): done at baseline" in by_id["lab:6.1"].text
+
+
+def test_unchanged_documents_keep_their_stored_brief_lines():
+    from types import SimpleNamespace
+    from cormon import packs
+    for tid, text in (("brief:dosing", "Where A differs from B, A governs.\n- Dose with food (week 1) [g:5]\n"
+                                       "- Mix within 15 minutes [lab:3]"),
+                      ("brief:safety", "- Dose with food (week 1) [g:5]")):
+        db.ex("INSERT INTO guide(study_id, doc_id, id, kind, number, title, path, text, about, topics, ord, version) "
+              "VALUES ('S', 'packs', ?, 'brief', '', '', '', ?, '', '[]', 0, 'g=1 sha:a; lab=1 sha:b')", (tid, text))
+    lines, same = packs.stored_lines(SimpleNamespace(study_id="S"), {"g": "1 sha:a", "lab": "2 sha:c"})
+    assert same == {"g"}
+    assert lines["dosing"][0] == {"rule": "Dose with food (week 1)", "section": "g:5", "doc": "g"}
+    assert packs.render_brief(lines["dosing"]) == "- Dose with food (week 1) [g:5]\n- Mix within 15 minutes [lab:3]"
+
+
+def test_vocabulary_keeps_its_ids_and_asks_only_about_new_names(monkeypatch):
+    from cormon import checks, llm
+    old = [{"id": "pk_predose", "kind": "event", "description": "", "members": ["predose pk"], "phrases": []}]
+    calls = []
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: calls.append(a[2]) or {"entries": [
+        {"id": "pk_predose", "kind": "event", "description": "", "members": ["pre-dose pk sample"], "phrases": []},
+        {"id": "shipment", "kind": "event", "description": "", "members": ["frozen shipment"], "phrases": []}]})
+    assert checks.add_names(old, ["predose pk"], True, "m") == old and calls == []
+    vocab = checks.add_names(old, ["predose pk", "pre-dose pk sample", "frozen shipment"], True, "m")
+    assert [e["id"] for e in vocab] == ["pk_predose", "shipment"] and "predose pk" not in calls[0].split("NEW NAMES:")[1]
+    assert vocab[0]["members"] == ["predose pk", "pre-dose pk sample"] and old[0]["members"] == ["predose pk"]
+
+
+def test_implied_answers_are_kept_for_unchanged_rules(monkeypatch):
+    from cormon import checks, llm
+    rule = {"id": "chk:0001", "code": True, "applies_when": "for postdose PK", "text": "PK 30 min after dose",
+            "from_event_id": "dose", "to_event_id": "pk_post"}
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: pytest.fail("asked the model again"))
+    checks.mark_implied([dict(rule)], True, [dict(rule, implied=True)])
+    new = dict(rule)
+    checks.mark_implied([new], True, [dict(rule, implied=True)])
+    assert new["implied"] is True
+
+
+def test_numbers_marked_unconfirmed_make_no_brief_rule():
+    from cormon import packs
+    sec = {"id": "ph:5", "text": "1. Open two sticks.\n3. Add 30 mL to 50 mL of water. [Default - Sponsor to confirm]"
+                                 "\n4. Give within 15 minutes."}
+    assert packs.unconfirmed([sec]) == {"ph:5": {"30", "50"}}
+    assert packs.unconfirmed([{"id": "p:1", "text": "Confirm the kit number in IRT."}]) == {}

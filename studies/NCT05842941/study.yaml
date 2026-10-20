@@ -19,13 +19,41 @@ documents:
     version: "6.0 (14 Oct 2024)"
     file: docs/master_protocol.pdf
     guide_file: docs/master_protocol.ocr.txt   # text of the scan (bin/ocr-pdf), read for the guide
+    overrides: [site_lab_manual, site_pharmacy_manual, site_edc_guide, site_irt_guide]
   - id: regimen_g
     kind: protocol
     title: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023)
     version: "2.0 (18 Dec 2023)"
     file: docs/regimen_g.pdf
     guide_file: docs/regimen_g.docx   # the same appendix as a Word file: clean headings and tables for the guide
-    overrides: [master]   # where the appendix changes a Master Protocol step, the appendix wins
+    # where the appendix changes a Master Protocol step, the appendix wins; the protocol wins over every manual
+    overrides: [master, site_lab_manual, site_pharmacy_manual, site_edc_guide, site_irt_guide]
+# Site manuals (sample versions from the sponsor, Oct 2026). Each guide_file is the PDF's words in Markdown: headings
+# as "#", each table one line per row naming its columns; checked word for word against the PDF.
+  - id: site_lab_manual
+    kind: lab_manual
+    title: Central Laboratory Manual V2.0 (Dec 2023)
+    version: "2.0 (Dec 2023)"
+    file: docs/lab_manual.pdf
+    guide_file: docs/lab_manual.md
+  - id: site_pharmacy_manual
+    kind: manual
+    title: Investigational Product & Pharmacy Handling Manual V2.0
+    version: "2.0"
+    file: docs/pharmacy_manual.pdf
+    guide_file: docs/pharmacy_manual.md
+  - id: site_edc_guide
+    kind: manual
+    title: Medidata Rave EDC User Guide V1.0
+    version: "1.0"
+    file: docs/edc_guide.pdf
+    guide_file: docs/edc_guide.md
+  - id: site_irt_guide
+    kind: manual
+    title: Suvoda IRT Site User Guide
+    version: ""
+    file: docs/irt_guide.pdf
+    guide_file: docs/irt_guide.md
 
 # How emails are checked. "reader": the AI reads the guide sections an email is about (cormon/guide.py,
 # cormon/reader.py). Any other value, or no checker block, uses the rule-by-rule checks.
@@ -36,7 +64,7 @@ documents:
 # is sent as "please check" (check) or dropped (drop).
 checker:
   route: reader
-  documents: [regimen_g, master]
+  documents: [regimen_g, master, site_lab_manual, site_pharmacy_manual, site_edc_guide, site_irt_guide]
   packs: true
   view: briefs
   review: false

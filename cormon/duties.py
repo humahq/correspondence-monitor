@@ -103,11 +103,21 @@ def _batches(secs: list[dict], limit: int = 24000) -> list[list[dict]]:
     return out + ([cur] if cur else [])
 
 
-def build(study: Study, log=print, use_cache: bool = True) -> list[dict]:
+def build(study: Study, log=print, use_cache: bool = True, reuse: bool = True) -> list[dict]:
     """Read the study's guide sections, list the events and their duties, verify every step's quote, and store
-    the table as guide rows of kind "duty" (one per event). Returns the events."""
+    the table as guide rows of kind "duty" (one per event). Returns the events. When every document of the stored
+    table is unchanged, its events are kept and only documents added since are read (reuse=False reads all)."""
     docs = guide.documents(study)
+    versions = {r["doc_id"]: r["version"] for r in db.q(
+        "SELECT DISTINCT doc_id, version FROM guide WHERE study_id=? AND kind='section'", (study.study_id,))}
+    stored = db.q("SELECT text, version FROM guide WHERE study_id=? AND kind='duty' ORDER BY ord", (study.study_id,))
+    built = dict(p.split("=", 1) for p in stored[0]["version"].split("; ") if "=" in p) if stored and reuse else {}
+    keep = bool(built) and all(d in docs and versions.get(d) == v for d, v in built.items())
+    old = {ev["name"]: ev for ev in (json.loads(r["text"]) for r in stored)} if keep else {}
+    if keep:
+        log(f"duties: kept {len(old)} events from unchanged {', '.join(sorted(built))}")
     secs = [i for i in guide.load(study.study_id) if i["kind"] == "section" and i["doc_id"] in docs
+            and not (keep and i["doc_id"] in built)
             and not set(i["topics"]) <= {"background", "statistics", "admin"} and len(i["text"]) > 60]
     titles = {d["id"]: d.get("title", d["id"]) for d in study.documents}
     model = llm.model_for("ingest")
@@ -147,9 +157,11 @@ def build(study: Study, log=print, use_cache: bool = True) -> list[dict]:
                 if m in groups:
                     groups[m] = g["name"]
                     labels[m] = g["name"]
-    events: dict[str, dict] = {}
+    events: dict[str, dict] = dict(old)
+    same_name = {n.lower(): n for n in old}
     for e in raw:
         name = groups.get(e["name"], e["name"])
+        name = same_name.get(name.lower(), name)
         ev = events.setdefault(name, {"name": name, "triggers": [], "steps": []})
         for t in e["triggers"]:
             t = t.strip().lower()

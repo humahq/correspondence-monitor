@@ -112,6 +112,10 @@ def _override_note(study: Study, docs: list[str]) -> str:
     return " ".join(bits)
 
 
+def _and(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} or {names[-1]}"
+
+
 def _block(sec: dict, titles: dict[str, str]) -> str:
     return f"[{sec['id']}] {titles.get(sec['doc_id'], sec['doc_id'])}: {sec['number']} {sec['title']}\n{sec['text']}"
 
@@ -245,9 +249,11 @@ def _batches(secs: list[dict], limit: int = 24000) -> list[list[dict]]:
     return out + ([cur] if cur else [])
 
 
-def brief_lines(secs: list[dict], titles: dict[str, str], use_cache: bool = True) -> list[dict]:
+def brief_lines(secs: list[dict], titles: dict[str, str], use_cache: bool = True,
+                groups: list[list[dict]] | None = None) -> list[dict]:
     """Every source section's rules as short lines, each written once and tagged with every topic it matters for;
-    a line tagged with two topics is how a rule reaches both (an overdose's reporting duty: dosing and safety)."""
+    a line tagged with two topics is how a rule reaches both (an overdose's reporting duty: dosing and safety).
+    groups: the sections split for building (guide.build_groups); batches never cross a group."""
     by_id = {s["id"]: s for s in secs}
 
     def one(batch: list[dict]) -> list[dict]:
@@ -259,8 +265,9 @@ def brief_lines(secs: list[dict], titles: dict[str, str], use_cache: bool = True
                      topics=[t for t in ln["topics"] if t in PACK_TOPICS])
                 for ln in res["lines"] if ln["rule"].strip() and ln["section"].strip("[] ") in ids and ln["topics"]]
 
+    batches = [b for g in (groups or [secs]) for b in _batches(g)]
     with ThreadPoolExecutor(max_workers=6) as pool:
-        lines = [ln for part in pool.map(one, _batches(secs)) for ln in part]
+        lines = [ln for part in pool.map(one, batches) for ln in part]
     order = {s["id"]: n for n, s in enumerate(secs)}
     lines.sort(key=lambda ln: order[ln["section"]])
     for ln in lines:
@@ -271,6 +278,21 @@ def brief_lines(secs: list[dict], titles: dict[str, str], use_cache: bool = True
 def _numbers(text: str) -> set[str]:
     """Numbers in rule text, section ids in brackets left out: a brief that loses one may have lost a limit."""
     return set(re.findall(r"\d+(?:\.\d+)?", re.sub(r"\[[^\]]*\]", " ", text)))
+
+
+_UNCONFIRMED = re.compile(r"\[[^\]]*\b(?:confirm\w*|tbd|placeholder)\b[^\]]*\]", re.I)
+
+
+def unconfirmed(secs: list[dict]) -> dict[str, set[str]]:
+    """Per section, the numbers on its source lines marked as not yet confirmed ("[... Sponsor to confirm ...]"):
+    a brief line using one of them would turn a placeholder into a rule."""
+    out = {}
+    for s in secs:
+        nums = set().union(*(_numbers(re.sub(r"^\s*(?:-\s*)?\d+[.)]\s", "", ln))   # not a list item's own number
+                             for ln in s["text"].splitlines() if _UNCONFIRMED.search(ln)))
+        if nums:
+            out[s["id"]] = nums
+    return out
 
 
 def lost_numbers(secs: list[dict], lines: list[dict]) -> dict[str, list[str]]:
@@ -285,6 +307,25 @@ def lost_numbers(secs: list[dict], lines: list[dict]) -> dict[str, list[str]]:
         if miss:
             out[s["id"]] = sorted(miss)
     return out
+
+
+def stored_lines(study: Study, versions: dict[str, str]) -> tuple[dict[str, list[dict]], set[str]]:
+    """The stored briefs' lines per topic, in their order, and the documents those briefs were built from that are
+    still at the same version (their lines can be kept as they are)."""
+    rows = db.q("SELECT id, text, version FROM guide WHERE study_id=? AND kind='brief'", (study.study_id,))
+    if not rows:
+        return {}, set()
+    built = dict(p.split("=", 1) for p in rows[0]["version"].split("; ") if "=" in p)
+    same = {d for d, v in built.items() if versions.get(d) and versions[d] == v}
+    by_topic = {}
+    for r in rows:
+        out = []
+        for ln in r["text"].splitlines():
+            m = re.match(r"^- (.*) \[([^\]]+)\]$", ln)
+            if m:
+                out.append({"rule": m.group(1), "section": m.group(2), "doc": m.group(2).split(":")[0]})
+        by_topic[r["id"].removeprefix("brief:")] = out
+    return by_topic, same
 
 
 def render_brief(lines: list[dict]) -> str:
@@ -318,8 +359,10 @@ def build_one(study: Study, topic: str, secs: list[dict], titles: dict[str, str]
             "dropped": [d["excerpt"] for d in dropped]}
 
 
-def build(study: Study, log=print, use_cache: bool = True) -> dict:
-    """Build and store every topic pack from the study's guide sections (all documents)."""
+def build(study: Study, log=print, use_cache: bool = True, reuse: bool = True) -> dict:
+    """Build and store every topic pack from the study's guide sections (all documents). The brief lines of
+    documents unchanged since the stored briefs are kept (reuse=False writes them all again), so adding a manual
+    leaves what the checker reads from the protocol as it was."""
     docs = guide.documents(study)
     items = [i for i in guide.load(study.study_id) if i["kind"] == "section" and i["doc_id"] in docs
              and i["text"].strip() and not set(i["topics"]) <= NOT_CHECKABLE]
@@ -330,6 +373,7 @@ def build(study: Study, log=print, use_cache: bool = True) -> dict:
                 db.q("SELECT DISTINCT doc_id, version FROM guide WHERE study_id=? AND kind IN ('section', 'visit')",
                      (study.study_id,))}
     version = "; ".join(f"{d}={versions.get(d) or '?'}" for d in docs)
+    old, same = stored_lines(study, versions) if reuse else ({}, set())
     db.ex("DELETE FROM guide WHERE study_id=? AND kind IN ('pack', 'piece', 'brief')", (study.study_id,))
     packs, spans = [], {}
     for topic in PACK_TOPICS:
@@ -341,13 +385,36 @@ def build(study: Study, log=print, use_cache: bool = True) -> dict:
     not_rules = fill_gaps(packs, items, spans, use_cache)
     links = link(packs, use_cache)
     log(f"{links} links between packs (rules from another topic that also apply)")
-    lines = brief_lines(items, titles, use_cache)
+    groups = guide.build_groups(study, items)
+    fresh = [g for g in groups if not {s["doc_id"] for s in g} <= same]
+    new = brief_lines([s for g in fresh for s in g], titles, use_cache, fresh)
+    kept_docs = {s["doc_id"] for g in groups if g not in fresh for s in g}
+    if kept_docs:
+        log(f"brief lines kept from the stored briefs for unchanged {', '.join(sorted(kept_docs))}")
+    place = {s["doc_id"]: n for n, g in enumerate(groups) for s in g}
+    marked = unconfirmed(items)
+    placeholder = lambda ln: bool(_numbers(ln["rule"]) & marked.get(ln["section"], set()))  # noqa: E731
+    by_topic = {t: sorted([ln for ln in old.get(t, []) if ln["doc"] in kept_docs and not placeholder(ln)]
+                          + [ln for ln in new if t in ln["topics"] and not placeholder(ln)],
+                          key=lambda ln: place[ln["doc"]])
+                for t in PACK_TOPICS}
+    left_out = sorted({ln["rule"] for ln in new + [x for v in old.values() for x in v] if placeholder(ln)})
+    if left_out:
+        log(f"brief: {len(left_out)} lines left out, their numbers are marked as not yet confirmed: "
+            + " | ".join(left_out))
+    lines, seen = [], set()
+    for t in PACK_TOPICS:
+        for ln in by_topic[t]:
+            if (ln["rule"], ln["section"]) not in seen:
+                seen.add((ln["rule"], ln["section"]))
+                lines.append(dict(ln, topics=[u for u in PACK_TOPICS if ln in by_topic[u]]))
     lost = lost_numbers(items, lines)
-    governs = " ".join(f"Where {study.doc(d)['title']} differs from {study.doc(o)['title']}, {study.doc(d)['title']} "
-                       f"governs." for d in docs for o in (study.doc(d).get("overrides") or []) if o in docs)
+    governs = " ".join(f"Where {study.doc(d)['title']} differs from {_and(ws)}, {study.doc(d)['title']} governs."
+                       for d in docs if (ws := [study.doc(o)["title"] for o in study.doc(d).get("overrides") or []
+                                                if o in docs]))
     rows = []
     for n, topic in enumerate(PACK_TOPICS):
-        mine = [ln for ln in lines if topic in ln["topics"]]
+        mine = by_topic[topic]
         if not mine:
             continue
         text = (governs + "\n" if governs else "") + render_brief(mine)
