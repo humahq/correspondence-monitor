@@ -1322,9 +1322,17 @@ def checklist(study: Study) -> tuple[str, dict]:
     return head + "\n" + "\n".join(lines), totals
 
 
-def import_model(src: Path, reason: str, actor: str = "operator", only: list[str] | None = None) -> dict:
+MODEL_TABLES = ("documents", "doc_pages", "rules", "allowances", "rule_decisions", "guide", "llm_cache")
+
+
+def import_model(src: Path, reason: str, actor: str = "operator", only: list[str] | None = None,
+                 tables: list[str] | None = None) -> dict:
     """Replace this database's study model (documents, pages, rules, guide) with the one in another cormon database,
-    keeping messages, items and the log. Used to move a model rebuilt and tested elsewhere onto the live bot."""
+    keeping messages, items and the log. Used to move a model rebuilt and tested elsewhere onto the live bot.
+    tables: only these model tables (e.g. ["guide"]); the others are left as they are."""
+    bad = set(tables or []) - set(MODEL_TABLES)
+    if bad:
+        raise ValueError(f"not a model table: {', '.join(sorted(bad))}; choose from {', '.join(MODEL_TABLES)}")
     import shutil
     import sqlite3
     import tempfile
@@ -1347,7 +1355,7 @@ def import_model(src: Path, reason: str, actor: str = "operator", only: list[str
         before = {sid: c.execute("SELECT COUNT(*) FROM main.rules WHERE study_id=? AND active=1",
                                  (sid,)).fetchone()[0] for sid in studies}
         with c:
-            for tbl in ("documents", "doc_pages", "rules", "allowances", "rule_decisions", "guide", "llm_cache"):
+            for tbl in [t for t in MODEL_TABLES if not tables or t in tables]:
                 cols = [r[1] for r in c.execute(f"PRAGMA main.table_info({tbl})")]
                 have = {r[1] for r in c.execute(f"PRAGMA model.table_info({tbl})")}
                 names = ", ".join(col for col in cols if col in have)
@@ -1361,7 +1369,7 @@ def import_model(src: Path, reason: str, actor: str = "operator", only: list[str
                 cur = c.execute(f"INSERT OR IGNORE INTO main.{tbl} ({names}) SELECT {names} FROM model.{tbl}{where}",
                                 args)
                 counts[tbl] = cur.rowcount
-            for sid in studies:
+            for sid in studies if not tables or "rules" in tables else []:
                 c.execute("INSERT OR REPLACE INTO main.state (key, value) SELECT key, value FROM model.state "
                           "WHERE (key LIKE 'ingest:%' OR key LIKE 'allowances:%') AND key LIKE ?", (f"%{sid}%",))
     finally:

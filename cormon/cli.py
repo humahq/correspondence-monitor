@@ -157,7 +157,7 @@ def cmd_rules_decide(args):
 
 
 def cmd_import_model(args):
-    counts = ingest.import_model(Path(args.db), args.reason, actor(args), args.study)
+    counts = ingest.import_model(Path(args.db), args.reason, actor(args), args.study, args.table)
     print(f"study model replaced from {args.db}: {counts}")
 
 
@@ -693,6 +693,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("db", help="the other copy's database, e.g. practice/data/cormon.db")
     s.add_argument("--reason", required=True)
     s.add_argument("--study", action="append", help="only this study (repeatable); default every study in it")
+    s.add_argument("--table", action="append", choices=ingest.MODEL_TABLES,
+                   help="only this model table (repeatable), e.g. guide; default all of them")
     s.set_defaults(fn=cmd_import_model)
 
     s = sub.add_parser("rules", help="list the study model's rules")
