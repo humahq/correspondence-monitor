@@ -608,6 +608,8 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 confirmation=f.confirmation, unsure_reason=f.extra.get("unsure_reason"),
                 earlier=f.extra.get("earlier"), next_step=step(f), headline=headline(f),
                 numbers=f.extra.get("numbers"), detail=said[id(f)].get("detail"),
+                why=f.extra.get("why"), verdict=f.extra.get("verdict"), kept_by_code=f.extra.get("kept_by_code"),
+                code_fact=f.extra.get("code_fact"), date_notes=f.extra.get("date_notes"),
                 hours_until=lead["hours"], triage_facts=lead["facts"],
                 additional=[{"rule_id": c["f"].rule["id"], "rule_text": c["f"].rule["text"],
                              "doc_id": c["f"].rule["doc_id"], "doc_title": study.doc(c["f"].rule["doc_id"])["title"],

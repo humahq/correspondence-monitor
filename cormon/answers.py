@@ -324,6 +324,7 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
     return {"question": q["question"], "participant": pid, "text": found["text"], "quotes": found["proven"][:4],
             "sums": found["sums"], "found": bool(found["proven"]), "serious": bool(res["serious_event"]),
             "traced": found["traced"], "picked": [i["id"] for i in secs + checklists],
+            "read": [reader._heading(i) for i in secs + checklists], "record": record, "windows": sched,
             "chosen": [x for x in dict.fromkeys(picked_ids) if x in known and known[x]["kind"] == "section"]}
 
 

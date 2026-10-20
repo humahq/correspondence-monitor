@@ -1377,7 +1377,9 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
                 reasoning=f"{f['why']} Next step: {f['next_step']}", certainty=certainty, doc_quote=quote,
                 doc_passage=sec["text"][:2000], confirmation=c["reasons"],
                 extra={"headline": f["problem"], "next_step": f["next_step"], "severity": f["severity"],
-                       "numbers": f.get("code_numbers"),
+                       "numbers": f.get("code_numbers"), "why": f["why"], "verdict": c["verdict"],
+                       "kept_by_code": bool(rec.get("kept_by_order_fact")), "code_fact": f.get("code_fact"),
+                       "date_notes": notes[:8],
                        "problem_key": hashlib.sha1(f"{_norm(f['email_quote'])}|{sec['id']}".encode()).hexdigest()[:10],
                        "unsure_reason": None if certainty == "clear" else
                        ("the code's date check put a visit date mentioned here inside its window" if doubt else

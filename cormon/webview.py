@@ -34,6 +34,43 @@ def _also(study, ev: dict) -> str:
     return f"<h2>It also goes against this rule</h2>{''.join(parts)}" if parts else ""
 
 
+_VERDICT = {"confirmed": "it agreed: the message does go against this rule.",
+            "unsure": "it was not sure the message goes against this rule.",
+            "rejected": "it did not agree."}
+
+
+def _how(item: dict, ev: dict) -> str:
+    """How the bot reached the finding, step by step, from what it saved while checking (no new AI call)."""
+    steps = [f"<b>What it read in the message.</b> \"{_e(ev.get('message_quote'))}\""
+             + (f" It also used an earlier message about this participant ({_e(ev['earlier'].get('date'))}, "
+                f"\"{_e(ev['earlier'].get('subject'))}\")." if isinstance(ev.get("earlier"), dict) else "")]
+    key = ev.get("detail") or ev.get("code_fact")
+    dates = ev.get("date_notes") or []
+    if key or dates:
+        steps.append("<b>What code worked out</b> (dates, gaps and times are counted by code, not by the AI)."
+                     + (f" {_e(key)}" if key else "")
+                     + (f"<details><summary class=\"muted\">All the dates code worked out for this message "
+                        f"({len(dates)})</summary><ul>" + "".join(f"<li>{_e(d)}</li>" for d in dates)
+                        + "</ul></details>" if dates else ""))
+    steps.append(f"<b>The rule it compared with.</b> {_e(ev.get('doc_title'))}: "
+                 f"\"{_e(ev.get('doc_quote') or _NO_QUOTE)}\"")
+    steps.append(f"<b>Its reasoning.</b> {_e(ev.get('why') or item.get('reasoning'))}")
+    if ev.get("verdict") or ev.get("confirmation"):
+        check = _VERDICT.get(ev.get("verdict"), "")
+        if ev.get("kept_by_code"):
+            check = "it did not agree, but the finding was kept because code worked out the numbers behind it."
+        steps.append(f"<b>A second check.</b> A separate AI check reread the message and the protocol, and "
+                     f"{_e(check)} {_e(ev.get('confirmation'))}")
+    sure = ev.get("certainty") == "clear"
+    steps.append("<b>How sure it is.</b> " + ("Sure: the protocol's exact words were found and the second check "
+                                              "agreed." if sure else f"Not sure: {_e(ev.get('unsure_reason') or 'please check it.')}"))
+    steps.append(f"<b>Why this urgency.</b> {_e(TIER_LABELS.get(item['tier'], item['tier']))}: "
+                 f"{_e(item['tier_reason'])}")
+    if ev.get("next_step"):
+        steps.append(f"<b>Next step.</b> {_e(ev['next_step'])}")
+    return "<h2>How the bot reached this</h2><ol>" + "".join(f"<li>{s}</li>" for s in steps) + "</ol>"
+
+
 def render_item(item: dict) -> str:
     s = config.study(item["study_id"])
     ev = item["evidence"]
@@ -60,15 +97,27 @@ def render_item(item: dict) -> str:
 <details><summary class="muted">Surrounding passage in the original document</summary>
 <blockquote>{_e(ev.get('doc_passage'))}</blockquote></details>
 {_also(s, ev)}
-<h2>Why it was flagged</h2>
-<p>{_e(item.get('reasoning'))}</p>
-<p class="muted">Check: {_e(ev.get('method'))} · certainty: {_e(ev.get('certainty'))} ·
-confirmed against the original document: {_e(ev.get('confirmation'))}</p>
-<p class="muted">Tier reason: {_e(item['tier_reason'])} · recipient: {_e(item['recipient_person'])}
+{_how(item, ev)}
+<p class="muted">Check: {_e(ev.get('method'))} · recipient: {_e(item['recipient_person'])}
 ({_e(item['recipient_reason'])})</p>
 <h2>History</h2><table><tr><th>When</th><th>Who</th><th>What</th></tr>{rows}</table>
 <p class="muted">This monitor does not review safety information.</p>
 </body></html>"""
+
+
+def _answer_how(a: dict) -> str:
+    """How the answer was reached, from what the bot saved while answering (no new AI call)."""
+    li = lambda xs: "<ul>" + "".join(f"<li>{_e(x)}</li>" for x in xs) + "</ul>"
+    steps = [f"<b>What it read.</b> {li(a.get('read') or a.get('picked') or ['no sections'])}"]
+    if a.get("participant"):
+        steps.append(f"<b>What it knew about {_e(a['participant'])}</b> (from earlier messages): "
+                     + li(a.get("record") or ["no dates on record"]))
+    if a.get("windows"):
+        steps.append("<b>Visit windows worked out by code</b> (not by the AI): " + li(a["windows"]))
+    steps.append("<b>Checks.</b> " + ("Every number in the answer was found in the protocol's words, the record or "
+                                      "a sum worked out by code." if a.get("traced") else
+                                      "Not every number could be checked, so the reply says it is not sure."))
+    return "<p><b>How the answer was reached</b></p><ol>" + "".join(f"<li>{s}</li>" for s in steps) + "</ol>"
 
 
 def render_answers(page: dict) -> str:
@@ -83,7 +132,7 @@ def render_answers(page: dict) -> str:
 {f'<p><b>Worked out by code</b></p><ul>{sums}</ul>' if sums else ''}
 <p><b>The protocol's words</b> (found word for word in the documents)</p>
 {quotes or '<p class="muted">None found.</p>'}
-<p class="muted">Sections read: {_e(', '.join(a.get('picked', [])))} · numbers checked: {_e(a['traced'])}</p>""")
+{_answer_how(a)}""")
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Answer details</title>
 <style>{CSS}</style></head><body>
 <p class="muted">{_e(s.title)} ({_e(s.study_id)}) · {_e(local_time(page['created_at']))}</p>

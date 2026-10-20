@@ -1410,6 +1410,26 @@ def test_what_the_bot_does_not_do_is_turned_down_in_fixed_words(monkeypatch):
     assert "Facts from the protocol: https://x/answers/tok.md" in posted[-1]
 
 
+def test_the_details_page_says_how_the_bot_reached_a_finding_and_an_answer():
+    from cormon import webview
+    item = {"tier": "medium", "tier_reason": "sample-handling", "reasoning": "old style. Next step: x"}
+    ev = {"message_quote": "postdose 9:20", "detail": "20 minutes after the dose. Allowed: 1 to 8 hours.",
+          "date_notes": ["Week 4 visit: Day 33"], "doc_title": "RSA G", "doc_quote": "1 to 8 hours postdose",
+          "why": "Too early.", "verdict": "confirmed", "confirmation": "Dosed 9:00, drawn 9:20.", "certainty": "clear",
+          "next_step": "Record a deviation.", "earlier": {"date": "12 Oct", "subject": "baseline"}}
+    out = webview._how(item, ev)
+    for words in ("postdose 9:20", "earlier message about this participant (12 Oct", "20 minutes after the dose",
+                  "All the dates code worked out for this message (1)", "1 to 8 hours postdose", "Too early.",
+                  "it agreed", "Dosed 9:00", "Sure:", "Medium", "Record a deviation."):
+        assert words in out, words
+    old = webview._how(item, {"message_quote": "q", "certainty": "unsure", "unsure_reason": "no exact words"})
+    assert "old style" in old and "Not sure: no exact words" in old and "code worked out" not in old
+    assert "kept because code" in webview._how(item, dict(ev, verdict="rejected", kept_by_code=True))
+    a = webview._answer_how({"read": ["8.6 Week 8 Visit"], "participant": "G-1", "record": ["Baseline: 1 Oct"],
+                             "windows": ["Week 8: 19 to 3 Dec"], "traced": True})
+    assert "8.6 Week 8 Visit" in a and "Baseline: 1 Oct" in a and "Week 8: 19 to 3 Dec" in a and "Every number" in a
+
+
 def test_an_email_reply_carries_the_facts_file_as_an_attachment():
     from cormon.channels.sim import build_mime
     row = {"from_addr": "bot@x.org", "to_addrs": ["site@x.org"], "cc_addrs": [], "subject": "Re: q", "body": "Hi",
