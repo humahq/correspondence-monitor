@@ -6,8 +6,8 @@ import re
 
 from dateutil import parser as dtparser
 
-from . import (answers, asks, capture, checks, config, db, events, guide, items, matching, reader, routing, senders,
-               settings, textutil, triage)
+from . import (answers, asks, capture, checks, config, conversation, db, events, guide, items, matching, reader,
+               routing, senders, settings, textutil, triage)
 from .config import Study
 from . import drafting
 from .drafting import item_link, local_time
@@ -696,7 +696,7 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                     if declined:
                         summary["declined"] = declined["kinds"]
                 elif turn == "email":
-                    kinds = [r["kind"] for r in asks.sort(text, use_cache)]
+                    kinds = [r["kind"] for r in asks.sort(text, use_cache, conversation.recent(msg))]
                     for_people = bool(kinds) and "study" not in kinds
                     if for_people:
                         db.audit("question_left_to_people", entity_type="message", entity_id=msg_id,

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 
-from . import answers, db, llm, settings
+from . import answers, conversation, db, llm, settings
 from .config import Study
 
 SORT_SYSTEM = """You sort what a message asks a clinical-trial monitoring bot to do. The bot only answers
@@ -34,6 +34,11 @@ List each request the message makes of the bot, with its kind:
 topic: for opinion or task, the study topic the documents' facts would be about, in a few words. "" when the
 request has nothing to do with the study (the weather, music, sport, general news), and for every other kind.
 Return no requests when the message asks nothing of the bot."""
+SORT_EARLIER = """
+EARLIER IN THIS CONVERSATION is only there to understand MESSAGE: sort only what MESSAGE asks. A follow-up ("and
+week 8?", "make slides of that") or a correction ("sorry, I meant 012") has the kind and topic of what it now asks,
+read with the earlier messages. When MESSAGE gives what the bot asked for (a date, a participant, more context),
+it repeats the person's own earlier request with that added (not the bot's question): sort it as that request."""
 
 KINDS = ["study", "opinion", "task", "about_bot", "improper", "other"]
 SORT_SCHEMA = llm.obj({"requests": {"type": "array", "items": llm.obj({
@@ -65,9 +70,11 @@ def private(msg: dict) -> bool:
     return msg.get("channel") != "teams" or msg.get("visibility") == "direct"
 
 
-def sort(text: str, use_cache: bool = True) -> list[dict]:
-    res = llm.structured("asks_sort", SORT_SYSTEM, f"MESSAGE:\n{text}", SORT_SCHEMA, "requests",
-                         use_cache=use_cache)
+def sort(text: str, use_cache: bool = True, earlier: list[dict] | None = None) -> list[dict]:
+    prompt = (f"EARLIER IN THIS CONVERSATION:\n{conversation.block(earlier)}\n\n" if earlier else "") + \
+        f"MESSAGE:\n{text}"
+    res = llm.structured("asks_sort", SORT_SYSTEM + (SORT_EARLIER if earlier else ""), prompt, SORT_SCHEMA,
+                         "requests", use_cache=use_cache)
     return [r for r in res["requests"] if r["kind"] in KINDS]
 
 
@@ -78,7 +85,7 @@ def _link(url: str, label: str, chat: bool) -> str:
 def decline(study: Study, msg: dict, text: str, use_cache: bool = True) -> dict | None:
     """Replies to what the message asks that the bot does not do. Returns {only, outbox_id, kinds}, or None when
     every request is a study question or there is none. only: no study question is left to answer."""
-    reqs = sort(text, use_cache)
+    reqs = sort(text, use_cache, conversation.recent(msg) if msg.get("id") else None)
     kinds = [r["kind"] for r in reqs]
     if not any(k in DECLINE or k in LEAD for k in kinds):
         return None

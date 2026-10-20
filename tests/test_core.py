@@ -1263,7 +1263,7 @@ def test_group_chatter_gets_only_the_serious_harm_warning(monkeypatch):
     qs = [{"question": answers.REPORTING_QUESTION, "participant": "G-1", "harm": True},
           {"question": "When is the next visit?", "participant": "G-1", "harm": False}]
     monkeypatch.setattr(answers.guide, "checker", lambda s: {})
-    monkeypatch.setattr(answers, "find", lambda text, use_cache=True: qs)
+    monkeypatch.setattr(answers, "find", lambda text, use_cache=True, earlier=None: qs)
     monkeypatch.setattr(answers.guide, "load", lambda sid: [])
     monkeypatch.setattr(answers.reader, "view", lambda s, every: [])
     monkeypatch.setattr(answers, "answer_one", lambda st, m, q, *a: asked.append(q["question"]) or
@@ -1406,7 +1406,7 @@ def test_what_the_bot_does_not_do_is_turned_down_in_fixed_words(monkeypatch):
         else None)
     study = type("S", (), {"study_id": "x", "title": "Study X"})()
     msg = {"id": 1, "channel": "teams", "visibility": "direct"}
-    run = lambda *reqs: (monkeypatch.setattr(asks, "sort", lambda text, use_cache=True: [
+    run = lambda *reqs: (monkeypatch.setattr(asks, "sort", lambda text, use_cache=True, earlier=None: [
         {"request": "r", "kind": k, "topic": t} for k, t in reqs]), asks.decline(study, msg, "m"))[1]
     assert run(("study", "")) is None and run() is None and run(("other", "")) is None and not posted
     got = run(("improper", ""))
@@ -1773,3 +1773,44 @@ def test_an_email_that_fails_the_sender_check_cannot_clear_an_alert():
     msg["headers"] = capture.parse_email(_mail(GOOD)).headers
     assert pipeline.handle_instruction(study, msg, {"type": "cleared", "text": "cleared #8"}) is True
     assert items.get(8)["state"] == "cleared"
+
+
+def test_conversation_memory_stays_in_its_own_chat_and_half_hour():
+    from cormon import conversation
+    def said(mid, thread, text, mins_ago, who="Ann"):
+        db.ex("INSERT INTO messages (id, channel, external_id, thread_key, study_id, route, visibility, from_name,"
+              " body_text, received_at, status) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+              (mid, "teams", f"x{mid}", thread, "S1", "study", "direct", who, text, db.later(-mins_ago), "processed"))
+    said(1, "teams:spaces/A/threads/1", "What is the week 4 window?", 5)
+    said(2, "teams:spaces/B/threads/9", "Secret other chat", 4)
+    said(3, "teams:spaces/A/threads/2", "Old question", 45)
+    oid = _queued("x")
+    db.ex("UPDATE outbox SET channel='teams', status='sent', sent_at=?, body=?, meta=? WHERE id=?",
+          (db.later(-4), "<b>Week 4</b> is day 28 &plusmn; 3 days.", db.js({"target": {"space": "spaces/A"}}), oid))
+    said(4, "teams:spaces/A/threads/3", "and week 8?", 0)
+    msg = capture.message(4)
+    turns = conversation.recent(msg)
+    assert [(t["who"], t["text"]) for t in turns] == [("Ann", "What is the week 4 window?"),
+                                                      ("the bot", "Week 4 is day 28 ± 3 days.")]
+    assert conversation.bot_answered_lately(turns)
+    said(5, "teams:spaces/A/threads/4", "x " * 4000, 1)
+    assert sum(len(t["text"]) for t in conversation.recent(dict(msg, id=6))) <= conversation.CHARS
+
+
+def test_a_question_back_is_shown_and_never_asks_for_personal_details(monkeypatch):
+    from cormon import answers
+    a = {"found": False, "traced": False, "ask": "To tell if the Week 12 visit was in window, what was the baseline date?",
+         "question": "q", "quotes": []}
+    assert answers.plain(a, "coordinator") == a["ask"]
+    assert answers.plain(dict(a, ask=""), "coordinator") == answers.NOT_FOUND
+    say = lambda text: monkeypatch.setattr(answers.llm, "structured", lambda *x, **k: {"ask": text})
+    q = {"question": "Was 007's week 12 visit on 3 Oct in window?"}
+    say("What is the participant's date of birth?")
+    assert answers.ask_back(q, "", [], "", []) == ""
+    say("To tell if it was in window, I need the baseline date.")
+    assert answers.ask_back(q, "", [], "", []).endswith("Can you tell me?")
+    say("Was it on 19 Sep?")  # a date of its own
+    assert answers.ask_back(q, "", [], "", []) == ""
+    from datetime import date
+    got = answers.stated_anchors("Was it in window, given that their Baseline was 4 July?", date(2026, 10, 19))
+    assert got[0]["dates"] == [{"kind": "baseline", "label": "Baseline (as given in the question)", "date": "2026-07-04"}]

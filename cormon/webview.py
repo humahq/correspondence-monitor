@@ -121,6 +121,9 @@ def _answer_how(a: dict) -> str:
     steps.append("<b>Checks.</b> " + ("Every number in the answer was found in the protocol's words, the record or "
                                       "a sum worked out by code." if a.get("traced") else
                                       "Not every number could be checked, so the reply says it is not sure."))
+    if a.get("ask"):
+        steps.append(f"<b>It asked back.</b> The documents could not settle this without a fact only you can give, "
+                     f"so it asked: \"{_e(a['ask'])}\" Reply in the same chat and it will answer with it.")
     return "<p><b>How the answer was reached</b></p><ol>" + "".join(f"<li>{s}</li>" for s in steps) + "</ol>"
 
 

@@ -16,11 +16,11 @@ import operator
 import re
 import secrets
 from collections import Counter
-from datetime import date
+from datetime import date, datetime
 
 from dateutil.relativedelta import relativedelta
 
-from . import db, guide, llm, memory, reader, routing, settings
+from . import capture, conversation, db, guide, llm, memory, reader, routing, settings
 from .config import Study
 
 ASKED = re.compile(r"\?|^\s*(?:what|when|how|which|where|why|who|is|are|can|could|should|do|does|did|may|must|"
@@ -42,6 +42,14 @@ reports a death, a hospital admission, a life-threatening event, a disability, a
 harm to a participant (or their baby) that happened, whatever the question is about; a reason for a remote
 visit or a condition at enrolment is not harm. harm and harm_participant are also set for the whole message.
 Return no questions when there are none."""
+FIND_EARLIER = """
+EARLIER IN THIS CONVERSATION is only there to understand MESSAGE. List only what MESSAGE asks. When
+MESSAGE follows up on an earlier message ("and week 8?", "what about 014?") or corrects one ("sorry, I meant
+012", "no, the visit was on the 12th"), write the question it now asks in full from the earlier messages, with
+MESSAGE winning where they disagree. When MESSAGE gives what the bot asked for (a date, a participant, more
+context), list the person's own earlier question again (never the bot's question back to them), in full, with what
+MESSAGE gives. Any other question asked earlier and
+not asked again in MESSAGE is not listed. harm is only about what MESSAGE reports."""
 
 FIND_SCHEMA = llm.obj({"questions": {"type": "array", "items": llm.obj({
     "question": {"type": "string"},
@@ -107,6 +115,19 @@ Rules:
 
 PLAIN_SCHEMA = llm.obj({"text": {"type": "string"}})
 
+ASK_SYSTEM = """A clinical-trial study monitor bot could not settle a site's question from the protocol with what it
+knows. Decide whether one or two facts that the person who asked can give would let the protocol settle it: a date
+(baseline, a visit, a dose, an event), which participant, visit, sample or medicine they mean, or what exactly
+happened. If so, write ask: one short, friendly question (ending with "?") asking for just those facts, saying in a few words what
+it is for ("To tell if the Week 12 visit was in window, I need ..."). Ask only for what is missing from the
+question, the message and the participant record.
+ask is "" when the protocol sections don't cover the topic at all, when the answer needs a medical, safety or site
+judgment rather than a fact, or when nothing the person could add would settle it. Whether to change, hold or stop
+a dose or treatment, how severe an event is, and whether it is related to the study drug are the investigator's
+and medical monitor's judgment: never ask about them.
+Never ask for a name, a date of birth, contact details or other personal details; a participant id is enough."""
+ASK_SCHEMA = llm.obj({"ask": {"type": "string"}})
+
 SAE_TITLE = re.compile(r"serious adverse|\bSAEs?\b|reportable event|reporting of (?:serious )?adverse", re.I)
 SERIOUS_LINE = "This may be a Serious Adverse Event. Contact the PI and the Medical Monitor now."
 
@@ -115,11 +136,13 @@ def asks_something(text: str) -> bool:
     return bool(ASKED.search(text or ""))
 
 
-def find(text: str, use_cache: bool = True) -> list[dict]:
+def find(text: str, use_cache: bool = True, earlier: list[dict] | None = None) -> list[dict]:
     """The message's questions for the documents. A message reporting serious harm always gets one: how to report
-    it, if none of its own questions is about the harm."""
-    res = llm.structured("answer_find", FIND_SYSTEM, f"MESSAGE:\n{text}", FIND_SCHEMA, "questions",
-                         use_cache=use_cache)
+    it, if none of its own questions is about the harm. earlier: the conversation just before (follow-ups)."""
+    prompt = (f"EARLIER IN THIS CONVERSATION:\n{conversation.block(earlier)}\n\n" if earlier else "") + \
+        f"MESSAGE:\n{text}"
+    res = llm.structured("answer_find", FIND_SYSTEM + (FIND_EARLIER if earlier else ""), prompt, FIND_SCHEMA,
+                         "questions", use_cache=use_cache)
     qs = [q for q in res["questions"] if q["question"].strip()][:MAX_QUESTIONS]
     if res["harm"] and not any(q["harm"] for q in qs):
         qs = [{"question": REPORTING_QUESTION, "participant": res["harm_participant"], "harm": True}] + qs
@@ -131,6 +154,31 @@ def _day(s: str | None) -> date | None:
         return date.fromisoformat((s or "")[:10])
     except ValueError:
         return None
+
+
+_MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?"
+STATED_ANCHOR = re.compile(
+    r"\b(baseline|(?:open[- ]label )?extension start|start of (?:the )?(?:open[- ]label )?extension|last dose)\b"
+    r"[^.?!;]{0,25}?\b(\d{4}-\d{2}-\d{2}|\d{1,2}(?:st|nd|rd|th)?\s+" + _MONTH + r"(?:,?\s+\d{4})?|"
+    + _MONTH + r"\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?)", re.I)
+
+
+def stated_anchors(question: str, today: date) -> list[dict]:
+    """Anchor dates the question itself gives ("given a baseline on 4 July"), as a record entry, so code counts the
+    windows from them. A date without a year is the latest one not after the message date."""
+    from dateutil import parser as dateparser
+    dates = []
+    for what, when in STATED_ANCHOR.findall(question):
+        try:
+            day = dateparser.parse(when, default=datetime(today.year, 1, 1)).date()
+        except (ValueError, OverflowError):
+            continue
+        if not re.search(r"\d{4}", when) and day > today:
+            day = day.replace(year=day.year - 1)
+        kind = "baseline" if what.lower() == "baseline" else "last_dose" if "dose" in what.lower() else \
+            "extension_start"
+        dates.append({"kind": kind, "label": f"{what} (as given in the question)", "date": day.isoformat()})
+    return [{"message_id": None, "when": "this conversation", "dates": dates, "events": []}] if dates else []
 
 
 def schedule(past: list[dict], visits: list[dict]) -> list[str]:
@@ -277,6 +325,9 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
     """One question's answer: {question, participant, text, quotes: [(heading, words)], found, serious, ...}."""
     pid = q["participant"].strip()
     past = memory.history(study.study_id, pid, msg, include_current=True) if pid else []
+    known_anchors = {memory.anchor_kind(d) for h in past for d in h["dates"]}
+    past += [dict(h, dates=[d for d in h["dates"] if d["kind"] not in known_anchors])
+             for h in stated_anchors(q["question"], reader._email_date(msg).date())]
     visits = [i for i in items if i["kind"] == "visit"]
     record = memory.record_lines(past)
     sched = schedule(past, visits)
@@ -320,12 +371,36 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
             res, found = res2, again
         elif found["conflict"]:  # the AI keeps the wrong pair: code's own answer from the quoted rows
             found = dict(found, text=found["code_answer"], traced=True, sums=found["sums"][-1:])
+    ask = "" if res["answerable"] else ask_back(q, found["text"], secs, email, record, use_cache)
     # an answer that says the protocol is silent but gives its proven numbers is still shown
     return {"question": q["question"], "participant": pid, "text": found["text"], "quotes": found["proven"][:4],
+            "ask": ask,
             "sums": found["sums"], "found": bool(found["proven"]), "serious": bool(res["serious_event"]),
             "traced": found["traced"], "picked": [i["id"] for i in secs + checklists],
             "read": [reader._heading(i) for i in secs + checklists], "record": record, "windows": sched,
             "chosen": [x for x in dict.fromkeys(picked_ids) if x in known and known[x]["kind"] == "section"]}
+
+
+PERSONAL = re.compile(r"\b(?:(?:participant|patient|subject|their|his|her|full|first|last)'?s? name|date of birth|"
+                      r"birth ?date|DOB|home address|phone number|e-?mail address|contact details|initials|MRN|"
+                      r"medical record number|social security|NHS number)\b", re.I)
+
+
+def ask_back(q: dict, said: str, secs: list[dict], email: str, record: list[str], use_cache: bool = True) -> str:
+    """A question back to the person for the fact the documents need to settle it; "" when none would help.
+    Kept only when it is a short question, asks nothing personal and adds no number of its own."""
+    try:
+        ask = llm.structured("answer_ask", ASK_SYSTEM, f"QUESTION: {q['question']}\n\nTHE SITE'S MESSAGE:\n{email}"
+                             f"\n\nPARTICIPANT RECORD:\n" + ("\n".join(f"- {x}" for x in record) or "- none")
+                             + "\n\nPROTOCOL SECTIONS READ: " + "; ".join(reader._heading(s) for s in secs)
+                             + f"\n\nWHAT THE BOT FOUND:\n{said}", ASK_SCHEMA, "ask", use_cache=use_cache)["ask"]
+    except Exception:
+        return ""
+    ask = " ".join(ask.split())
+    backing = " ".join([q["question"], email, said] + record + [s["text"] for s in secs])
+    if len(ask) < 15 or len(ask) > 300 or PERSONAL.search(ask) or not _numbers_traced(ask, backing):
+        return ""
+    return ask if ask.endswith("?") else ask.rstrip(".") + ". Can you tell me?"
 
 
 def _proof(res: dict, q: dict, secs: list[dict], checklists: list[dict], sources: list[dict], visits: list[dict],
@@ -392,10 +467,17 @@ NOT_SURE = "I couldn't work out a sure answer. The protocol's words on it are in
 def plain(a: dict, reader_role: str, use_cache: bool = True) -> str:
     """The checked answer as a human assistant would say it in chat: short, no workings. Every number in it must
     be in the checked answer, its sums, its quotes or the question; otherwise the checked answer is used."""
+    ask = a.get("ask")
     if not a["found"]:
-        return NOT_FOUND
+        return ask or NOT_FOUND
     if not a["traced"]:
-        return NOT_SURE
+        return f"{NOT_SURE} {ask}" if ask else NOT_SURE
+    if ask:
+        return f"{_plain_said(a, reader_role, use_cache)}\n\n{ask}"
+    return _plain_said(a, reader_role, use_cache)
+
+
+def _plain_said(a: dict, reader_role: str, use_cache: bool) -> str:
     facts = "\n".join([a["text"]] + [f"{what}: {r}" for what, r in a.get("sums", [])])
     words = "\n".join(f"- {w}" for _, w in a["quotes"]) or "- none"
     try:
@@ -418,7 +500,8 @@ def render(answers: list[dict], link: str | None = None, chat: bool = True) -> s
         lines = [f"*{a['question']}*" if chat else f"Q: {a['question']}"] if len(answers) > 1 else []
         if a.get("serious"):  # said whatever else is found: reporting a serious event cannot wait for the answer
             lines.append(f"⚠️ {SERIOUS_LINE}")
-        lines.append(a.get("plain") or (NOT_FOUND if not a["found"] else NOT_SURE if not a["traced"] else a["text"]))
+        lines.append(a.get("plain") or (a.get("ask") or NOT_FOUND if not a["found"] else NOT_SURE if not a["traced"]
+                                        else a["text"]))
         blocks.append("\n".join(lines))
     more = ("" if not link else f"\n\n<{link}|Details and the protocol's words>" if chat
             else f"\n\nDetails and the protocol's words: {link}")
@@ -475,10 +558,17 @@ def answer_message(study: Study, msg: dict, email: str, use_cache: bool = True,
                    harm_only: bool = False) -> list[dict]:
     """Answers to the questions the message asks that the documents could answer (none: an empty list).
     harm_only: group chat not talking to the bot, where only how to report serious harm is said."""
+    earlier = conversation.recent(msg) if msg.get("id") else []
+    turn = capture.turn(msg)
+    to_bot = turn in ("direct", "addressed") or (turn == "email" and msg.get("visibility") == "to")
+    follow_up = to_bot and conversation.bot_answered_lately(earlier)
     if not guide.checker(study).get("answer_questions", True) or not (
-            HARM_WORDS.search(email or "") or (asks_something(email) and not harm_only)):
+            HARM_WORDS.search(email or "") or ((asks_something(email) or follow_up) and not harm_only)):
         return []
-    qs = [q for q in find(email, use_cache) if q.get("harm") or not harm_only]
+    qs = [q for q in find(email, use_cache, earlier) if q.get("harm") or not harm_only]
+    if earlier:
+        db.audit("conversation_used", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
+                 turns=len(earlier), questions=[q["question"] for q in qs])
     if not qs:
         return []
     every = guide.load(study.study_id)
