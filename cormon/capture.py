@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 from dateutil import parser as dtparser
 
-from . import config, db, settings
+from . import config, db, senders, settings
 
 
 @dataclass
@@ -189,7 +189,8 @@ def parse_email(raw: bytes, *, external_id: str | None = None, thread_ref: str |
         to_addrs=_addrs(msg, "To"),
         cc_addrs=_addrs(msg, "Cc"),
         delivered_to=delivered,
-        headers={k: str(v) for k, v in msg.items()},
+        headers={**{k: str(v) for k, v in msg.items() if not k.lower().startswith("_cormon")},
+                 "_cormon_sender_check": senders.check(msg)},
         rfc_message_id=rfc_id,
         in_reply_to=(msg.get("In-Reply-To") or "").strip() or None,
         references=refs,

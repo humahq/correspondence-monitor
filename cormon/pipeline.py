@@ -6,8 +6,8 @@ import re
 
 from dateutil import parser as dtparser
 
-from . import (answers, asks, capture, checks, config, db, events, guide, items, matching, reader, routing, settings,
-               textutil, triage)
+from . import (answers, asks, capture, checks, config, db, events, guide, items, matching, reader, routing, senders,
+               settings, textutil, triage)
 from .config import Study
 from . import drafting
 from .drafting import item_link, local_time
@@ -338,6 +338,11 @@ def _shown_key(f) -> tuple[str, str]:
 def handle_instruction(study: Study, msg: dict, instruction: dict) -> bool:
     kind = instruction.get("type")
     if kind not in ("disregard", "cleared"):
+        return False
+    if senders.failed(msg):
+        db.audit("instruction_ignored_unverified_sender", entity_type="message", entity_id=msg["id"],
+                 study_id=study.study_id, instruction=instruction, claimed_sender=msg.get("from_addr"),
+                 sender_check=(msg.get("headers") or {}).get("_cormon_sender_check"))
         return False
     person = study.person_by_email(msg.get("from_addr"))
     item_ids = _target_items(msg, instruction)

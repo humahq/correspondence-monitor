@@ -7,7 +7,7 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import config, db, items, settings
+from . import config, db, items, senders, settings
 from .drafting import also_broken, local_time, sender_ctx
 from .triage import TIER_LABELS
 
@@ -44,6 +44,10 @@ def _how(item: dict, ev: dict) -> str:
     steps = [f"<b>What it read in the message.</b> \"{_e(ev.get('message_quote'))}\""
              + (f" It also used an earlier message about this participant ({_e(ev['earlier'].get('date'))}, "
                 f"\"{_e(ev['earlier'].get('subject'))}\")." if isinstance(ev.get("earlier"), dict) else "")]
+    first = db.q1("SELECT channel, from_addr, headers FROM messages WHERE id=?", (item.get("first_message_id"),))
+    if first and senders.failed(dict(first, headers=db.unjs(first["headers"], {}))):
+        steps[0] += (f" <b>Warning: the email's sender check failed</b>, so it may not really be from "
+                     f"{_e(first['from_addr'])}. It was still checked for problems, but a request in it to clear or hide an alert is ignored.")
     key = ev.get("detail") or ev.get("code_fact")
     dates = ev.get("date_notes") or []
     if key or dates:

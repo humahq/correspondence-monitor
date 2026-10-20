@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from cormon import capture, db, drafting, matching, textutil, triage
+from cormon import capture, db, drafting, items, matching, textutil, triage
 
 
 @pytest.fixture(autouse=True)
@@ -1728,3 +1728,48 @@ def test_a_chat_post_carries_its_own_id_and_a_repeat_is_recognised():
     assert ch.send(row)["external_ref"] == "spaces/S/messages/1"
     assert posts[0]["messageId"].startswith("client-cormon-") and posts[0]["messageId"].endswith("-42")
     assert ch.send(row)["external_ref"] == "spaces/S/messages/1" and gets[-1].endswith(posts[0]["messageId"])
+
+
+def _mail(*auth, extra=""):
+    lines = [f"Authentication-Results: {a}" for a in auth]
+    return ("\r\n".join(lines + ["From: Ann CRA <cra@site.org>", "To: bot+g@huma.ai", "Subject: re alert",
+                                 "Message-ID: <m1@site.org>", "Date: Mon, 19 Oct 2026 10:00:00 +0000"])
+            + extra + "\r\n\r\ncleared\r\n").encode()
+
+
+GOOD = ("mx.google.com; dkim=pass header.i=@site.org header.s=s1 header.b=abc; spf=pass (google.com: domain of "
+        "cra@site.org designates 1.2.3.4 as permitted sender) smtp.mailfrom=cra@site.org; dmarc=pass "
+        "(p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=site.org")
+FORGED = ("mx.google.com; spf=softfail (google.com: domain of transitioning cra@site.org does not designate "
+          "9.9.9.9 as permitted sender) smtp.mailfrom=cra@site.org; dmarc=fail (p=NONE sp=NONE dis=NONE) "
+          "header.from=site.org")
+
+
+def test_the_sender_check_trusts_only_the_top_result_from_google():
+    check = lambda raw: capture.parse_email(raw).headers["_cormon_sender_check"]["result"]
+    assert check(_mail(GOOD)) == "pass"
+    assert check(_mail(FORGED)) == "fail"
+    assert check(_mail(FORGED, GOOD)) == "fail"  # a fake "pass" lower down does not count
+    assert check(_mail("evil.example; dmarc=pass header.from=site.org")) == "unknown"
+    assert check(_mail()) == "unknown"
+    assert check(_mail("mx.google.com; dkim=none; spf=neutral smtp.mailfrom=cra@site.org")) == "unknown"
+    assert check(_mail("mx.google.com; spf=pass smtp.mailfrom=cra@site.org; dmarc=bestguesspass")) == "pass"
+    forged = capture.parse_email(_mail(GOOD, extra="\r\n_cormon_to_bot: 1"))
+    assert "_cormon_to_bot" not in forged.headers
+
+
+def test_an_email_that_fails_the_sender_check_cannot_clear_an_alert():
+    from cormon import pipeline
+    db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind,"
+          " polarity, title, tier, evidence, link_token, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (8, "S1", "t", 1, 1, "k8", "finding", "problem", "x", "medium", "{}", "l8", db.now(), db.now()))
+    person = type("P", (), {"name": "Ann", "email": "cra@site.org", "roles": ["cra"]})()
+    study = type("S", (), {"study_id": "S1", "person_by_email": lambda self, a: person})()
+    head = capture.parse_email(_mail(FORGED)).headers
+    msg = {"id": 4, "channel": "email", "study_id": "S1", "from_addr": "cra@site.org", "headers": head}
+    assert pipeline.handle_instruction(study, msg, {"type": "cleared", "text": "cleared #8"}) is False
+    assert items.get(8)["state"] == "open"
+    assert db.q("SELECT 1 FROM audit_log WHERE action='instruction_ignored_unverified_sender'")
+    msg["headers"] = capture.parse_email(_mail(GOOD)).headers
+    assert pipeline.handle_instruction(study, msg, {"type": "cleared", "text": "cleared #8"}) is True
+    assert items.get(8)["state"] == "cleared"
