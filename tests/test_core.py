@@ -945,6 +945,33 @@ def test_cleared_in_chat_works_in_the_alerts_thread_or_by_number():
     assert pipeline._target_items(dict(new_post, study_id="S2"), {"text": "cleared #19"}) == []
 
 
+def test_one_study_cannot_clear_or_suppress_another_studys_item(monkeypatch):
+    from cormon import items, pipeline, routing
+    db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind,"
+          " polarity, title, tier, evidence, link_token, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (7, "S1", "t", 1, 1, "k7", "finding", "problem", "x", "medium", "{}", "l7", db.now(), db.now()))
+    for change in (lambda: items.set_state(7, "cleared", "cra@s2", "cra", study_id="S2"),
+                   lambda: items.override(7, "counts", 0, "cra@s2", "cra", force=True, study_id="S2")):
+        with pytest.raises(items.OtherStudy):
+            change()
+    assert items.get(7)["state"] == "open" and items.get(7)["counts"] == 1
+    assert len(db.q("SELECT 1 FROM audit_log WHERE action='item_change_refused_other_study'")) == 2
+    items.set_state(7, "cleared", "cra@s1", "cra", study_id="S1")
+    assert items.get(7)["state"] == "cleared"
+    # a CRA of study S2 replying "cleared" in the thread of an S1 alert changes nothing
+    oid = routing.enqueue(purpose="teams_study_team", channel="teams", destination="teams_study_channel", body="b",
+                          item_id=7, meta={"item_ids": [7]})
+    db.ex("UPDATE outbox SET external_ref=? WHERE id=?", ("spaces/AA/messages/Q_1.Q_1", oid))
+    db.ex("UPDATE items SET state='open', cleared=0 WHERE id=7")
+    said = []
+    monkeypatch.setattr(pipeline, "_answer_in_chat", lambda study, msg, text: said.append(text))
+    person = type("P", (), {"name": "Cy", "email": "cra@s2", "roles": ["cra"]})()
+    study = type("S", (), {"study_id": "S2", "person_by_email": lambda self, a: person})()
+    msg = {"id": 3, "study_id": "S2", "from_addr": "cra@s2", "headers": {"_cormon_reply_to": "spaces/AA/threads/Q_1"}}
+    assert pipeline.handle_instruction(study, msg, {"type": "cleared", "text": "cleared"}) is False
+    assert items.get(7)["state"] == "open" and "not part of this study" in said[-1]
+
+
 def _two_messages_about_one_participant():
     from cormon import memory
     ev = lambda e, d, t="", q="": {"event": e, "date": d, "time": t, "status": "done", "quote": q or e}

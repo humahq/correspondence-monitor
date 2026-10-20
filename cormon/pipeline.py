@@ -351,12 +351,23 @@ def handle_instruction(study: Study, msg: dict, instruction: dict) -> bool:
         return False
     actor_type = "cra" if "cra" in person.roles else "sponsor" if "clinops_lead" in person.roles else "tester"
     who = f"{person.name} <{person.email}>"
+    elsewhere = [i for i in item_ids if items.get(i)["study_id"] != study.study_id]
+    if elsewhere:
+        db.audit("instruction_not_applied", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
+                 instruction=instruction, item_id=elsewhere[0], reason="item belongs to another study")
+        _answer_in_chat(study, msg, f"I can't change {', '.join(f'#{i}' for i in elsewhere)}: "
+                                    f"{'it is' if len(elsewhere) == 1 else 'they are'} not part of this study.")
+        return False
+    sid = study.study_id
     for item_id in item_ids:
         if kind == "disregard":
-            items.override(item_id, "counts", 0, who, actor_type, reason=instruction.get("text"), force=True)
-            items.set_state(item_id, "suppressed", who, actor_type, reason=f"reply: {instruction.get('text')}")
+            items.override(item_id, "counts", 0, who, actor_type, reason=instruction.get("text"), force=True,
+                           study_id=sid)
+            items.set_state(item_id, "suppressed", who, actor_type, reason=f"reply: {instruction.get('text')}",
+                            study_id=sid)
         else:
-            items.set_state(item_id, "cleared", who, actor_type, reason=f"reply: {instruction.get('text')}")
+            items.set_state(item_id, "cleared", who, actor_type, reason=f"reply: {instruction.get('text')}",
+                            study_id=sid)
     done = "cleared" if kind == "cleared" else "disregarded (it will not count)"
     _answer_in_chat(study, msg, f"Done: {', '.join(f'#{i}' for i in item_ids)} {done}, by {person.name}.")
     return True

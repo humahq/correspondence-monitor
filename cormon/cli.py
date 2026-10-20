@@ -380,20 +380,26 @@ def cmd_draft(args):
         print("\nqueued; the listener sends them on its next pass (use `cormon outbox --send ID` to send now)")
 
 
+def _study_of(item_id: int) -> str:
+    """The server operator acts on any study: the item's own."""
+    return items.get(item_id)["study_id"]
+
+
 def cmd_suppress(args):
-    items.set_state(args.id, "suppressed", actor(args), "operator", args.reason)
+    items.set_state(args.id, "suppressed", actor(args), "operator", args.reason, study_id=_study_of(args.id))
     print(f"item {args.id} suppressed; queued messages for it are held")
 
 
 def cmd_unsuppress(args):
-    items.set_state(args.id, "open", actor(args), "operator", args.reason)
+    items.set_state(args.id, "open", actor(args), "operator", args.reason, study_id=_study_of(args.id))
     db.ex("UPDATE outbox SET status='queued' WHERE item_id=? AND status='held' AND last_error='item suppressed'",
           (args.id,))
     print(f"item {args.id} reopened")
 
 
 def cmd_clear(args):
-    items.set_state(args.id, "open" if args.undo else "cleared", actor(args), "operator", args.reason)
+    items.set_state(args.id, "open" if args.undo else "cleared", actor(args), "operator", args.reason,
+                    study_id=_study_of(args.id))
     print(f"item {args.id} {'uncleared' if args.undo else 'cleared'}")
 
 
@@ -415,7 +421,8 @@ def cmd_override(args):
         print("nothing to change (use --tier, --recipient, --send-draft, --counts)")
         return
     for field, value in changes:
-        problems = items.override(args.id, field, value, actor(args), "operator", args.reason, args.force)
+        problems = items.override(args.id, field, value, actor(args), "operator", args.reason, args.force,
+                                  study_id=_study_of(args.id))
         if problems:
             print(f"NOT APPLIED ({field}={value}); it would leave the item inconsistent:")
             for p in problems:

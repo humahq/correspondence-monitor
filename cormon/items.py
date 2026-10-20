@@ -101,12 +101,25 @@ def check_consistency(item: dict) -> list[str]:
     return problems
 
 
+class OtherStudy(PermissionError):
+    """A person acting on one study tried to change another study's item."""
+
+
+def _in_study(item_id: int, study_id: str, actor: str, change: str) -> dict:
+    item = get(item_id)
+    if item["study_id"] != study_id:
+        db.audit("item_change_refused_other_study", entity_type="item", entity_id=item_id,
+                 study_id=item["study_id"], actor=actor, acting_for_study=study_id, change=change)
+        raise OtherStudy(f"item #{item_id} is not in study {study_id}")
+    return item
+
+
 def override(item_id: int, field: str, value, actor: str, actor_type: str = "operator",
-             reason: str | None = None, force: bool = False) -> list[str]:
-    """Apply a human override. Returns inconsistencies; refuses to apply them unless forced."""
+             reason: str | None = None, force: bool = False, *, study_id: str) -> list[str]:
+    """Apply a human override. Returns inconsistencies; refuses to apply them unless forced. Only within study_id."""
     if field not in OVERRIDABLE:
         raise ValueError(f"can override only {OVERRIDABLE}")
-    item = get(item_id)
+    item = _in_study(item_id, study_id, actor, f"override {field}")
     proposed = dict(item, **{field: value})
     problems = check_consistency(proposed)
     if problems and not force:
@@ -114,18 +127,20 @@ def override(item_id: int, field: str, value, actor: str, actor_type: str = "ope
                  study_id=item["study_id"], actor=actor, actor_type=actor_type, field=field,
                  value=value, problems=problems)
         return problems
-    db.ex(f"UPDATE items SET {field}=?, {SOURCE_COL[field]}=?, updated_at=? WHERE id=?",
-          (value, actor_type, db.now(), item_id))
+    db.ex(f"UPDATE items SET {field}=?, {SOURCE_COL[field]}=?, updated_at=? WHERE id=? AND study_id=?",
+          (value, actor_type, db.now(), item_id, study_id))
     db.audit("item_override", entity_type="item", entity_id=item_id, study_id=item["study_id"],
              actor=actor, actor_type=actor_type, field=field, old=item[field], new=value,
              reason=reason, forced=bool(problems) or None, problems=problems or None)
     return []
 
 
-def set_state(item_id: int, state: str, actor: str, actor_type: str = "operator", reason: str | None = None) -> None:
-    item = get(item_id)
+def set_state(item_id: int, state: str, actor: str, actor_type: str = "operator", reason: str | None = None, *,
+              study_id: str) -> None:
+    item = _in_study(item_id, study_id, actor, f"state {state}")
     cleared = 1 if state == "cleared" else (0 if state == "open" else item["cleared"])
-    db.ex("UPDATE items SET state=?, cleared=?, updated_at=? WHERE id=?", (state, cleared, db.now(), item_id))
+    db.ex("UPDATE items SET state=?, cleared=?, updated_at=? WHERE id=? AND study_id=?",
+          (state, cleared, db.now(), item_id, study_id))
     if state == "suppressed":
         db.ex("UPDATE outbox SET status='held', last_error='item suppressed' WHERE item_id=? AND status='queued'",
               (item_id,))
