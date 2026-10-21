@@ -496,8 +496,19 @@ def _plain_said(a: dict, reader_role: str, use_cache: bool) -> str:
     return said if ok else a["text"]
 
 
-def render(answers: list[dict], link: str | None = None, chat: bool = True) -> str:
-    """The chat or email reply: each answer in plain words; the quotes and workings are on the details page."""
+def cra_names(study: Study) -> str | None:
+    """The study's CRA by name ("John Ernest", "A or B"), for the reply's last line; None for none or more than two."""
+    names = list(dict.fromkeys(p.name for p in study.people_with_role("cra") if p.name))
+    return " or ".join(names) if 0 < len(names) <= 2 else None
+
+
+def footer(cra: str | None = None) -> str:
+    return FOOTER.replace("your CRA", f"your CRA, {cra},") if cra else FOOTER
+
+
+def render(answers: list[dict], link: str | None = None, chat: bool = True, cra: str | None = None) -> str:
+    """The chat or email reply: each answer in plain words; the quotes and workings are on the details page.
+    cra names the CRA in the last line."""
     blocks = []
     for a in answers:
         lines = [f"*{a['question']}*" if chat else f"Q: {a['question']}"] if len(answers) > 1 else []
@@ -508,7 +519,8 @@ def render(answers: list[dict], link: str | None = None, chat: bool = True) -> s
         blocks.append("\n".join(lines))
     more = ("" if not link else f"\n\n<{link}|Details and the protocol's words>" if chat
             else f"\n\nDetails and the protocol's words: {link}")
-    return "\n\n".join(blocks) + more + (f"\n\n_{FOOTER}_" if chat else f"\n\n{FOOTER}")
+    end = footer(cra)
+    return "\n\n".join(blocks) + more + (f"\n\n_{end}_" if chat else f"\n\n{end}")
 
 
 def render_full(answers: list[dict]) -> str:
@@ -638,7 +650,8 @@ def reply(study: Study, msg: dict, email: str, use_cache: bool = True, harm_only
     answers = answer_message(study, msg, email, use_cache, harm_only)
     if not answers:
         return None
-    text = render(answers, save_page(study, msg, email, answers), chat=msg.get("channel") == "teams")
+    text = render(answers, save_page(study, msg, email, answers), chat=msg.get("channel") == "teams",
+                  cra=cra_names(study))
     oid = _post(study, msg, text)
     db.audit("question_answered", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
              outbox_id=oid, answers=answers)

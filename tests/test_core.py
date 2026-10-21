@@ -1101,6 +1101,8 @@ def test_the_chat_reply_is_short_and_never_adds_a_number(monkeypatch):
     assert "Worked out by code" not in reply and "<https://x/answers/t|" in reply
     assert "Details and the protocol's words: https://x/answers/t" in answers.render(
         [dict(a, plain="70 days.")], "https://x/answers/t", chat=False)
+    named = answers.render([dict(a, plain="70 days.")], chat=False, cra="John Ernest")
+    assert named.endswith("Please confirm with your CRA, John Ernest, before acting on it.")
     assert answers.plain(dict(a, found=False), "x") == answers.NOT_FOUND
     dated = dict(a, text="The Week 4 window is 19 Oct 2026 to 2 Nov 2026. It counts from baseline on 28 Sep 2026.",
                  sums=[], quotes=[("SOA", "Week 4 / Clinic / Day 28 ± 7")])
