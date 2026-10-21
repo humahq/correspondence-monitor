@@ -9,6 +9,9 @@
 # Templates are deterministic Jinja. Set `ai_edit: true` to let the model
 # tighten the wording; its output is rejected unless every study fact survives.
 # Rendering fails if any variable is missing, so no placeholder can go out.
+#
+# Voice: lead with the finding or the ask, name the actor ("I asked ..."), one block per problem
+# (title, Next: step, then its evidence), keep every hedge and reply command as it is.
 
 templates:
 
@@ -20,19 +23,14 @@ templates:
     severity: "*"
     body: |
       <p><b>{{ item.tier_label }} · {{ study.short_name }} · {{ item.participant_id or "participant not named" }} · {{ item.site }}</b></p>
-      <p><b>{{ problems | length }} problem{{ "s" if problems | length > 1 }} found:</b>
-      {%- for p in problems %}<br><b>{{ p.n }}. {{ p.title }}</b>{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} <i>(please check: not sure)</i>{% endif %}{% if p.detail %}<br>{{ p.detail }}{% endif %}{% endfor %}</p>
-      <p><b>What to do:</b>
-      {%- for p in problems %}<br>{{ p.n }}. {{ p.next_step or "Check this with the site." }}{% endfor %}</p>
-      <p>──────────</p>
       {%- for p in problems %}
-      <p><b>Evidence for problem {{ p.n }}</b><br>{{ finding.wrote | default('Site wrote') }} ({{ finding.sender_name }}, {{ finding.message_date }}):<br><code>{{ p.message_quote }}</code>{% for e in p.earlier_quotes %}<br>Earlier message ({{ e.when }}):<br><code>{{ e.words }}</code>{% endfor %}<br>Study rule:<br>{% if p.doc_quote %}<code>{{ p.doc_quote }}</code><br><i>From: {{ p.where }}</i>{% else %}<i>exact words not found, please read this section: {{ p.where }}</i>{% endif %}
-      {%- if p.unsure %}<br><i>Why not sure: {{ p.unsure_reason }}</i>{% endif %}</p>
+      <p><b>{{ p.n }}. {{ p.title }}</b>{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} <i>(not sure, please check)</i>{% endif %}{% if p.detail %}<br>{{ p.detail }}{% endif %}<br>Next: {{ p.next_step or "Check this with the site." }}</p>
+      <p>{{ finding.wrote | default('Site wrote') }} ({{ finding.sender_name }}, {{ finding.message_date }}):<br><code>{{ p.message_quote }}</code>{% for e in p.earlier_quotes %}<br>Earlier message ({{ e.when }}):<br><code>{{ e.words }}</code>{% endfor %}<br>Study rule: {% if p.doc_quote %}<code>{{ p.doc_quote }}</code> <i>From: {{ p.where }}</i>{% else %}<i>exact words not found, please read this section: {{ p.where }}</i>{% endif %}{% if p.unsure %}<br><i>Why not sure: {{ p.unsure_reason }}</i>{% endif %}</p>
       {%- endfor %}
       {%- if finding.earlier %}
       <p>(Part of this is from an earlier message: {{ finding.earlier }}.)</p>
       {%- endif %}
-      <p>Told: {{ item.routed_to }} · {% if bundle %}Items {% for p in problems %}#{{ p.item_id }}{{ ", " if not loop.last }}{% endfor %}{% else %}Item #{{ item.id }}{% endif %} · <a href="{{ item.link }}">details</a></p>
+      <p>Notified: {{ item.routed_to }} · {% if bundle %}Items {% for p in problems %}#{{ p.item_id }}{{ ", " if not loop.last }}{% endfor %}{% else %}Item #{{ item.id }}{% endif %} · <a href="{{ item.link }}">details</a></p>
 
   - id: teams-study-good-news
     topic: good_news
@@ -42,8 +40,8 @@ templates:
     body: |
       <p><b>Good news · {{ study.short_name }} · {{ item.participant_id or "study" }} · {{ item.site }}</b></p>
       <p>{{ item.title }}</p>
-      <p><b>{% if finding.sender_is_site | default(true) %}What the site wrote{% else %}What the {{ finding.sender_role | lower }} wrote{% endif %}</b> ({{ finding.sender_name }}, {{ finding.message_date }}):<br><i>"{{ finding.message_quote }}"</i></p>
-      <p>Item #{{ item.id }} · added to the CRA's to-do list</p>
+      <p><b>{% if finding.sender_is_site | default(true) %}{{ finding.sender_name }} (site) wrote{% else %}{{ finding.sender_name }} ({{ finding.sender_role | lower }}) wrote{% endif %}</b> ({{ finding.message_date }}):<br><i>"{{ finding.message_quote }}"</i></p>
+      <p>Item #{{ item.id }} · I added it to {{ people.cra.name }}'s list</p>
 
   # ---------------- Teams: alert channel (immediate only) ----------------
   - id: teams-alert
@@ -53,13 +51,10 @@ templates:
     severity: immediate
     body: |
       <p><b>{{ item.tier_label }} · {{ study.short_name }} · {{ item.participant_id or "participant not named" }} · {{ item.site }}</b></p>
-      <p><b>{{ problems | length }} problem{{ "s" if problems | length > 1 }} found:</b>
-      {%- for p in problems %}<br><b>{{ p.n }}. {{ p.title }}</b>{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} <i>(please check: not sure)</i>{% endif %}{% if p.detail %}<br>{{ p.detail }}{% endif %}{% endfor %}</p>
-      <p><b>What to do:</b><br>{{ people.cra.name }} (CRA) has been asked to call the site today.
-      {%- for p in problems %}<br>{{ p.n }}. {{ p.next_step or "Check this with the site." }}{% endfor %}</p>
-      <p>──────────</p>
+      <p>I asked {{ people.cra.name }} (CRA) to call the site today.</p>
       {%- for p in problems %}
-      <p><b>Evidence for problem {{ p.n }}</b><br>{{ finding.wrote | default('Site wrote') }}:<br><code>{{ p.message_quote }}</code>{% for e in p.earlier_quotes %}<br>Earlier message ({{ e.when }}):<br><code>{{ e.words }}</code>{% endfor %}<br>Study rule:<br>{% if p.doc_quote %}<code>{{ p.doc_quote }}</code><br><i>From: {{ p.where }}</i>{% else %}<i>exact words not found, please read this section: {{ p.where }}</i>{% endif %}</p>
+      <p><b>{{ p.n }}. {{ p.title }}</b>{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} <i>(not sure, please check)</i>{% endif %}{% if p.detail %}<br>{{ p.detail }}{% endif %}<br>Next: {{ p.next_step or "Check this with the site." }}</p>
+      <p>{{ finding.wrote | default('Site wrote') }}:<br><code>{{ p.message_quote }}</code>{% for e in p.earlier_quotes %}<br>Earlier message ({{ e.when }}):<br><code>{{ e.words }}</code>{% endfor %}<br>Study rule: {% if p.doc_quote %}<code>{{ p.doc_quote }}</code> <i>From: {{ p.where }}</i>{% else %}<i>exact words not found, please read this section: {{ p.where }}</i>{% endif %}</p>
       {%- endfor %}
       <p>Item #{{ item.id }} · <a href="{{ item.link }}">details</a></p>
 
@@ -73,23 +68,14 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      **{{ problems | length }} problem{{ "s" if problems | length > 1 }} for {{ item.participant_id or "participant not named" }} at {{ item.site }}:**
+      {{ item.participant_id or "The participant" }} at {{ item.site }} may not meet the study's eligibility requirements. Please confirm with the site within two days whether this is a deviation, and record it if so.
       {%- for p in problems %}
-      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (please check: not sure){% endif %}
+
+      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (not sure, please check){% endif %}
       {%- if p.detail %}
       {{ p.detail }}
       {%- endif %}
-      {%- endfor %}
-
-      **What to do** (within two days): confirm with the site whether this is a deviation, and record it if so.
-      {%- for p in problems %}
-      {{ p.n }}. {{ p.next_step or "Check this with the site." }}
-      {%- endfor %}
-
-      ──────────
-      {%- for p in problems %}
-
-      **Evidence for problem {{ p.n }}**
+      Next: {{ p.next_step or "Check this with the site." }}
       {{ finding.wrote | default('Site wrote') }} ({{ finding.sender_name }}, {{ finding.message_date }}):
       > {{ p.message_quote | replace("\n", " ") }}
       {%- for e in p.earlier_quotes %}
@@ -113,7 +99,7 @@ templates:
       {%- endif %}
 
       Details: {{ item.link }}
-      {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}To have me disregard this, reply "disregard". To clear it, reply "cleared".{% endif %}
+      {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}Reply "cleared" once it is resolved, or "disregard" to have me drop it.{% endif %}
 
       {{ study.monitor_signature }}
 
@@ -126,23 +112,14 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      **{{ problems | length }} problem{{ "s" if problems | length > 1 }} for {{ item.participant_id or "participant not named" }} at {{ item.site }}:**
+      Please follow up with the site within two days on {{ problems | length }} item{% if problems | length > 1 %}s{% endif %} for {{ item.participant_id or "a participant not named" }} at {{ item.site }}:
       {%- for p in problems %}
-      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (please check: not sure){% endif %}
+
+      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (not sure, please check){% endif %}
       {%- if p.detail %}
       {{ p.detail }}
       {%- endif %}
-      {%- endfor %}
-
-      **What to do** (follow up with the site within two days):
-      {%- for p in problems %}
-      {{ p.n }}. {{ p.next_step or "Check this with the site." }}
-      {%- endfor %}
-
-      ──────────
-      {%- for p in problems %}
-
-      **Evidence for problem {{ p.n }}**
+      Next: {{ p.next_step or "Check this with the site." }}
       {{ finding.wrote | default('Site wrote') }} ({{ finding.sender_name }}, {{ finding.message_date }}):
       > {{ p.message_quote | replace("\n", " ") }}
       {%- for e in p.earlier_quotes %}
@@ -166,7 +143,7 @@ templates:
       {%- endif %}
 
       Details: {{ item.link }}
-      {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}Reply "disregard" to have me drop this, or "cleared" once resolved.{% endif %}
+      {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}Reply "cleared" once it is resolved, or "disregard" to have me drop it.{% endif %}
 
       {{ study.monitor_signature }}
 
@@ -179,23 +156,14 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      **{{ problems | length }} problem{{ "s" if problems | length > 1 }} for {{ item.participant_id or "participant not named" }} at {{ item.site }}:**
+      {{ problems | length }} item{% if problems | length > 1 %}s{% endif %} for {{ item.participant_id or "a participant not named" }} at {{ item.site }} can wait for your next follow-up with the site, so nothing here needs action today.
       {%- for p in problems %}
-      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (please check: not sure){% endif %}
+
+      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (not sure, please check){% endif %}
       {%- if p.detail %}
       {{ p.detail }}
       {%- endif %}
-      {%- endfor %}
-
-      **What to do** (no rush: raise it at your next follow-up with the site):
-      {%- for p in problems %}
-      {{ p.n }}. {{ p.next_step or "Check this with the site." }}
-      {%- endfor %}
-
-      ──────────
-      {%- for p in problems %}
-
-      **Evidence for problem {{ p.n }}**
+      Next: {{ p.next_step or "Check this with the site." }}
       {{ finding.wrote | default('Site wrote') }} ({{ finding.sender_name }}, {{ finding.message_date }}):
       > {{ p.message_quote | replace("\n", " ") }}
       {%- for e in p.earlier_quotes %}
@@ -219,7 +187,7 @@ templates:
       {%- endif %}
 
       Details: {{ item.link }}
-      {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}Reply "disregard" to have me drop this, or "cleared" once resolved.{% endif %}
+      {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}Reply "cleared" once it is resolved, or "disregard" to have me drop it.{% endif %}
 
       {{ study.monitor_signature }}
 
@@ -232,23 +200,14 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      **{{ problems | length }} problem{{ "s" if problems | length > 1 }} for {{ item.participant_id or "participant not named" }} at {{ item.site }}:**
+      Please call {% if finding.sender_is_site | default(true) %}{{ people.crc.name }} at {{ item.site }}{% else %}{{ finding.sender_name }} ({{ finding.sender_role }}), who sent it,{% endif %} today about {{ problems | length }} problem{{ "s" if problems | length > 1 }} for {{ item.participant_id or "a participant not named" }}:
       {%- for p in problems %}
-      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (please check: not sure){% endif %}
+
+      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (not sure, please check){% endif %}
       {%- if p.detail %}
       {{ p.detail }}
       {%- endif %}
-      {%- endfor %}
-
-      **What to do** (today): please call {% if finding.sender_is_site | default(true) %}{{ people.crc.name }} at {{ item.site }}{% else %}{{ finding.sender_name }} ({{ finding.sender_role }}), who sent it{% endif %}, then:
-      {%- for p in problems %}
-      {{ p.n }}. {{ p.next_step or "Check this with the site." }}
-      {%- endfor %}
-
-      ──────────
-      {%- for p in problems %}
-
-      **Evidence for problem {{ p.n }}**
+      Next: {{ p.next_step or "Check this with the site." }}
       {{ finding.wrote | default('Site wrote') }} ({{ finding.sender_name }}, {{ finding.message_date }}):
       > {{ p.message_quote | replace("\n", " ") }}
       {%- for e in p.earlier_quotes %}
@@ -271,10 +230,10 @@ templates:
       (Part of this is from an earlier email: {{ finding.earlier }}.)
       {%- endif %}
 
-      {% if finding.sender_is_site | default(true) %}The site has been told only that a possible issue was noted and that you have been informed. {% endif %}{{ people.clinops_lead.name }} (sponsor) has been told you are in touch with the site.
+      {% if finding.sender_is_site | default(true) %}I told the site only that a possible issue was noted and that you have been informed. {% endif %}I told {{ people.clinops_lead.name }} (sponsor) that you are in touch with the site.
 
       Details: {{ item.link }}
-      {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}Reply "disregard" to have me drop this, or "cleared" once resolved.{% endif %}
+      {% if bundle %}Reply "cleared" once all of these are resolved, or name one: "cleared #{{ problems[-1].item_id }}". "disregard" works the same way.{% else %}Reply "cleared" once it is resolved, or "disregard" to have me drop it.{% endif %}
 
       {{ study.monitor_signature }}
 
@@ -288,12 +247,11 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      For your awareness, no action needed from you. A possible urgent issue was flagged at {{ item.site }}: {{ item.title }}.
+      No action is needed from you. I flagged a possible urgent issue at {{ item.site }}: {{ item.title.rstrip('.') }}.
 
-      What was routed:
-      - {{ people.cra.name }} (CRA) has the context and has been asked to call the site today.
+      I asked {{ people.cra.name }} (CRA), who has the context, to call the site today.
       {%- if finding.sender_is_site | default(true) %}
-      - {{ people.crc.name }} (site coordinator) was told a possible issue was noted and that their monitor has been informed.
+      I told {{ people.crc.name }} (site coordinator) that a possible issue was noted and that their monitor is aware.
       {%- endif %}
 
       The study rule ({{ finding.where }}){% if finding.doc_quote %}: "{{ finding.doc_quote }}"{% else %}: exact words not found, please read this section.{% endif %}
@@ -317,9 +275,9 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      A possible issue was noted in your message about {{ item.participant_id or "a participant" }}, relating to the study's {{ item.pattern_label | lower }} requirements. This has not been confirmed.
+      I noticed something in your message about {{ item.participant_id or "a participant" }} that may not match the study's {{ item.pattern_label | lower }} requirements. I have not confirmed it.
 
-      Your monitor, {{ people.cra.name }}, has been told and will be in touch with you.
+      I have told your monitor, {{ people.cra.name }}, who will be in touch with you.
 
       {{ study.monitor_signature }}
 
@@ -338,7 +296,7 @@ templates:
 
       **{{ problems | length }} problem{{ "s" if problems | length > 1 }} for {{ item.participant_id or "participant not named" }} at {{ item.site }} ({{ item.tier_label }}):**
       {%- for p in problems %}
-      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (please check: not sure){% endif %}
+      **{{ p.n }}. {{ p.title }}**{% if bundle %} ({{ p.tier_label }}, Item #{{ p.item_id }}){% endif %}{% if p.unsure %} (not sure, please check){% endif %}
       {%- if p.detail %}
       {{ p.detail }}
       {%- endif %}
@@ -378,7 +336,7 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      This monitor does not review safety information, and nothing in this message has been assessed or passed on for safety.
+      I do not review safety information. I have not assessed this message or passed it on for safety review.
 
       Please take it to {{ people.medical_monitor.name or "the study's medical monitor" }} and follow the protocol's safety reporting process.
 
@@ -394,7 +352,7 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      I was left off this thread for a while and have now read the messages I missed. Please keep {{ study.alias }} copied on all study correspondence, including replies, so the record stays complete.
+      I missed part of this thread and have now read the messages. Please keep {{ study.alias }} copied on all study correspondence, including replies, so the record stays complete.
 
       Thank you.
 
@@ -410,7 +368,7 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      Summary of study messages for {{ digest.window }}.
+      Here is the study correspondence I reviewed for {{ digest.window }}.
       {%- for s in digest.studies %}
 
       == {{ s.short_name }} ({{ s.study_id }}) ==
@@ -424,7 +382,7 @@ templates:
       {%- endfor %}
       {%- if not digest.studies %}
 
-      Nothing was found in this window.
+      No items in this window.
       {%- endif %}
 
       {{ digest.footer }}

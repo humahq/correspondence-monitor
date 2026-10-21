@@ -83,7 +83,7 @@ def test_unsure_finding_says_so_in_the_email():
           "doc_quote": "d", "doc_title": "Lab", "doc_page": 3, "next_step": ""}
     ctx["problems"] = drafting.problems(None, ctx["item"], ev)
     _, body = drafting.render(t, ctx)
-    assert "**1. Sample late** (please check: not sure)" in body
+    assert "**1. Sample late** (not sure, please check)" in body
     assert "Why not sure: Years of education not given." in body
     assert "> q" in body and "> d" in body
     _, body = drafting.render(t, dict(ctx, problems=drafting.problems(None, ctx["item"], dict(ev, certainty="clear"))))
@@ -174,8 +174,9 @@ def test_alert_lists_every_problem_with_its_own_step_and_evidence():
            "finding": {"sender_name": "A", "message_date": "1 Jan", "earlier": ""}}
     chat = chat_text(drafting.render(dict(drafting.select("sample_handling", "study_team", "teams", "medium"),
                                           ai_edit=False), ctx)[1])
-    assert "*2 problems found:*" in chat and "*2. Postdose sample too soon.*" in chat
-    assert "2. Recollect the postdose sample." in chat and "`postdose 10:00`" in chat
+    assert "*1. Predose sample too early.*" in chat and "*2. Postdose sample too soon.*" in chat
+    assert "Next: Recollect the postdose sample." in chat and "`postdose 10:00`" in chat
+    assert chat.index("*2. Postdose") < chat.index("Next: Recollect") < chat.index("`postdose 10:00`")
     mime = build_mime({"from_addr": "a@x", "to_addrs": ["b@x"], "cc_addrs": [], "subject": "s",
                        "body": "**1. Problem**\n> site words\n──────────\nhttp://x/i"})
     plain, rich = (p.get_content() for p in mime.iter_parts())
@@ -1582,13 +1583,13 @@ def test_an_alert_names_the_senders_real_role():
     tpl = lambda who: dict(drafting.select("study_drug", who, "email", "immediate"), ai_edit=False)
     _, cra = drafting.render(tpl("cra"), drafting.item_context(study, item, None))
     _, sponsor = drafting.render(tpl("clinops_lead"), drafting.item_context(study, item, None))
-    assert "please call Eliot Levitt (Study team member), who sent it, then:" in cra
+    assert "Please call Eliot Levitt (Study team member), who sent it, today about 1 problem" in cra
     assert "Study team member wrote (Eliot Levitt," in cra and "Site wrote" not in cra
-    assert "The site has been told" not in cra and "John Rohit" not in sponsor
+    assert "I told the site" not in cra and "John Rohit" not in sponsor
     ev["sender_email"], ev["sender_name"] = "johnrohit94@gmail.com", "John Rohit"
     _, cra = drafting.render(tpl("cra"), drafting.item_context(study, item, None))
-    assert "please call John Rohit at Site 01 (MGH), then:" in cra and "Site wrote (John Rohit," in cra
-    assert "The site has been told only that a possible issue was noted" in cra
+    assert "Please call John Rohit at Site 01 (MGH) today about 1 problem" in cra and "Site wrote (John Rohit," in cra
+    assert "I told the site only that a possible issue was noted" in cra
 
 
 def _queued(body="Alert", **kw):
