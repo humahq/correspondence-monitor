@@ -11,6 +11,7 @@ import html
 import json
 import re
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 
 from .. import config, db, settings
@@ -20,6 +21,7 @@ from . import study_for_person
 CHAT = "https://chat.googleapis.com/v1"
 UPLOAD = "https://chat.googleapis.com/upload/v1"
 PEOPLE = "https://people.googleapis.com/v1"
+LOOKUP_RETRY = 120
 SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -95,6 +97,7 @@ class GoogleChatChannel:
         self.http = session
         self._me = None
         self._users: dict[str, str] = {}
+        self._lookup_failed: dict[str, float] = {}
         self._app = None
 
     def _get(self, url: str, **params) -> dict:
@@ -118,14 +121,19 @@ class GoogleChatChannel:
         return self._me
 
     def _email_for(self, user: str) -> str | None:
-        if user not in self._users:
+        """A failed lookup is tried again after LOOKUP_RETRY seconds, so one Google error doesn't leave a person
+        unknown until the next restart."""
+        failed = self._lookup_failed.get(user)
+        if user not in self._users or (failed and time.monotonic() - failed > LOOKUP_RETRY):
             try:
                 p = self._get(f"{PEOPLE}/people/{user.split('/', 1)[1]}", personFields="emailAddresses",
                               sources=["READ_SOURCE_TYPE_PROFILE", "READ_SOURCE_TYPE_DOMAIN_CONTACT"])
                 emails = [e.get("value", "") for e in p.get("emailAddresses", [])]
                 self._users[user] = (emails[0] if emails else "").lower()
+                self._lookup_failed.pop(user, None)
             except Exception:
-                self._users[user] = ""
+                self._users.setdefault(user, "")
+                self._lookup_failed[user] = time.monotonic()
         return self._users[user] or None
 
     # -------------------------------------------------------------- inbound

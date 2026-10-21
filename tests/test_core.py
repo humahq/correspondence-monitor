@@ -1228,6 +1228,26 @@ def test_google_chat_notes_who_a_message_mentions():
     assert ch._to_inbound(msg(), study_id="x", visibility="channel").headers == {}
 
 
+def test_google_chat_tries_a_failed_email_lookup_again(monkeypatch):
+    from cormon.channels import gchat
+    ch = gchat.GoogleChatChannel(session=object())
+    calls = []
+
+    def get(url, **params):
+        calls.append(url)
+        if len(calls) == 1:
+            raise RuntimeError("503 from Google")
+        return {"emailAddresses": [{"value": "Peter@huma.ai"}]}
+    monkeypatch.setattr(ch, "_get", get)
+    now = [1000.0]
+    monkeypatch.setattr(gchat.time, "monotonic", lambda: now[0])
+    assert ch._email_for("users/2") is None
+    assert ch._email_for("users/2") is None and len(calls) == 1   # not asked again straight away
+    now[0] += gchat.LOOKUP_RETRY + 1
+    assert ch._email_for("users/2") == "peter@huma.ai"
+    assert ch._email_for("users/2") == "peter@huma.ai" and len(calls) == 2
+
+
 def test_a_message_to_the_bot_always_gets_a_reply(monkeypatch):
     from cormon import pipeline
     said = []
