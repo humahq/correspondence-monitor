@@ -28,8 +28,10 @@ SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/chat.messages",
     "https://www.googleapis.com/auth/chat.spaces.readonly",
+    "https://www.googleapis.com/auth/chat.memberships.readonly",
     "https://www.googleapis.com/auth/directory.readonly",
 ]
+MEMBERS_SCOPE = "https://www.googleapis.com/auth/chat.memberships.readonly"
 
 
 def credentials(interactive: bool = False):
@@ -37,7 +39,9 @@ def credentials(interactive: bool = False):
     from google.oauth2.credentials import Credentials
 
     token = settings.resolve(settings.get("gchat.token_file", "secrets/gchat_token.json"))
-    creds = Credentials.from_authorized_user_file(str(token), SCOPES) if token.exists() else None
+    # The saved sign-in's own scopes, not SCOPES: a refresh that asks for a scope never granted is refused, so a
+    # scope added to SCOPES takes effect at the next `cormon auth gchat` instead of stopping the bot.
+    creds = Credentials.from_authorized_user_file(str(token)) if token.exists() else None
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
         token.write_text(creds.to_json())

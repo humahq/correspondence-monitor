@@ -590,12 +590,15 @@ def cmd_auth(args):
         r = ImapChannel().check()
         print(f"Gmail login works for {r['user']} ({r['inbox_messages']} emails in the inbox)")
     elif args.service == "gchat":
-        from .channels.gchat import GoogleChatChannel, credentials
+        from .channels.gchat import MEMBERS_SCOPE, GoogleChatChannel, credentials
 
-        credentials(interactive=True)
+        creds = credentials(interactive=True)
         ch = GoogleChatChannel()
         who = ch._users.get(ch.me) or ch.me
         print(f"Google Chat authorised as {who}")
+        granted = getattr(creds, "granted_scopes", None) or creds.scopes or []
+        print("Chat member lists: allowed" if MEMBERS_SCOPE in granted else
+              "Warning: reading chat member lists was not allowed; tick every box on Google's consent page.")
         if who != settings.get("gchat.account", settings.get("mailbox.address")):
             print(f"Warning: this is not {settings.get('gchat.account', settings.get('mailbox.address'))}."
                   " Run it again and sign in as the bot account.")

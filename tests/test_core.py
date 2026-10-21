@@ -1231,6 +1231,18 @@ def test_google_chat_notes_who_a_message_mentions():
     assert ch._to_inbound(msg(), study_id="x", visibility="channel").headers == {}
 
 
+def test_google_chat_keeps_the_saved_sign_ins_scopes(monkeypatch, tmp_path):
+    import json
+    from cormon.channels import gchat
+    old = [s for s in gchat.SCOPES if s != gchat.MEMBERS_SCOPE]
+    token = tmp_path / "t.json"
+    token.write_text(json.dumps({"token": "a", "refresh_token": "r", "client_id": "c", "client_secret": "s",
+                                 "scopes": old, "expiry": "2999-01-01T00:00:00Z"}))
+    monkeypatch.setattr(gchat.settings, "resolve", lambda p: token)
+    creds = gchat.credentials()
+    assert list(creds.scopes) == old   # a refresh must not ask for the member-list scope before a new sign-in
+
+
 def test_google_chat_tries_a_failed_email_lookup_again(monkeypatch):
     from cormon.channels import gchat
     ch = gchat.GoogleChatChannel(session=object())
