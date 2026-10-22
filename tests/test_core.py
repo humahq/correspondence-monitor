@@ -2329,6 +2329,19 @@ def test_a_disagreement_is_confirmed_against_both_sides():
     assert {"lab:4"} <= {i["id"] for i in reader._proof(ai, [], sources)}
 
 
+def test_a_finding_resting_on_a_brief_points_to_the_section_the_brief_cites(monkeypatch):
+    from cormon import guide, reader
+    monkeypatch.setattr(guide, "documents", lambda study: ["master", "regimen_g"])
+    brief = {"id": "brief:safety", "doc_id": "packs", "kind": "brief",
+             "text": "- Enter AE information in EDC as soon as possible. [master:10.2]\n"
+                     "- Record pregnancy as a Key Study Event in EDC. [master:10.2.3]"}
+    sources = [{"id": "master:10.2.3", "doc_id": "master", "kind": "section", "title": "Key events", "text": "..."}]
+    assert reader._cited_section(None, brief, "Record pregnancy as a Key Study Event", sources) is sources[0]
+    sec = reader._cited_section(None, brief, "Enter AE information in EDC", sources)
+    assert sec["id"] == "master:10.2" and sec["doc_id"] == "master"
+    assert reader._cited_section(None, {"text": "- no tag here"}, "no tag", sources) is None
+
+
 def test_a_manual_is_briefed_beside_the_protocol_with_no_document_ranked_and_the_gate_reports_gaps(tmp_path,
                                                                                                      monkeypatch):
     import json

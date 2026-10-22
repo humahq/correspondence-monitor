@@ -777,6 +777,21 @@ def _find_quote(quote: str, context: list[dict], cited: str) -> tuple[dict, str]
     return None
 
 
+def _cited_section(study, own: dict, quote: str, sources: list[dict]) -> dict | None:
+    """The document section a bot-written line cites ("... [regimen_g:s010]") for the line holding the quote."""
+    lines = own["text"].splitlines()
+    line = next((ln for ln in lines if quote and textutil.find_quote(quote, ln)), None)
+    if line is None:
+        best = max(lines, key=lambda ln: len(set(ln.lower().split()) & set(quote.lower().split())), default="")
+        line = best if set(best.lower().split()) & set(quote.lower().split()) else ""
+    tag = re.search(r"\[([\w.-]+):([\w.:-]+)\]\s*$", line)
+    if not tag or tag.group(1) not in guide.documents(study):
+        return None
+    sid = f"{tag.group(1)}:{tag.group(2)}"
+    return next((s for s in sources if s["id"] == sid), None) or {
+        "id": sid, "doc_id": tag.group(1), "title": "", "number": "", "text": "", "kind": "section", "path": ""}
+
+
 _TAG = re.compile(r"\s*\[[\w.:-]+\]\s*$")
 _OWN_TEXT = ("brief", "pack", "piece")  # written by the bot from the documents, so never quoted as the protocol
 
@@ -1380,6 +1395,8 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
                     sec, quote = found = hit
             if not found:
                 quote = ""  # unproven words are not shown as the protocol's: the alert points to the section
+            if sec and sec["kind"] in _OWN_TEXT and sec["doc_id"] not in guide.documents(study):
+                sec = _cited_section(study, sec, _TAG.sub("", f["protocol_quote"]), sources)
             sec = sec or {"id": f["section_id"], "doc_id": guide.documents(study)[0], "title": "", "number": "",
                           "text": "", "kind": "section", "path": ""}
             pid = part["participant"] or None
