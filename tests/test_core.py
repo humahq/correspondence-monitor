@@ -2252,3 +2252,116 @@ def test_careful_rules_grow_from_a_file_and_a_study_can_add_or_change_them(monke
     assert careful.named(study, "pick up the kits", [(eliot, got["physicians"])]) == []
     monkeypatch.setitem(study.raw, "careful", [{"id": "physicians", "enabled": False}])
     assert careful.rules(study) == [] and careful.rule_for(study, eliot) is None
+
+
+def _two_doc_study(tmp_path, scanned=False):
+    from cormon import config
+    (tmp_path / "study.yaml").write_text(
+        "study_id: S\ndocuments:\n"
+        f"  - {{id: p, kind: protocol, title: Protocol, guide_file: {'p.ocr.txt' if scanned else 'p.docx'}}}\n"
+        "  - {id: lab, kind: lab_manual, title: Lab Manual, guide_file: lab.md}\n")
+    return config.load_study(tmp_path / "study.yaml")
+
+
+def _window(rid, sec, lo, hi, quote):
+    return {"id": rid, "kind": "interval", "code": True, "from_event_id": "baseline_visit", "to_event_id": "w16_visit",
+            "unit": "days", "min": lo, "max": hi, "section_id": sec, "quote": quote, "text": quote,
+            "applies_when": "", "exception": ""}
+
+
+def test_window_copies_fold_scan_damage_and_unstated_sides_but_keep_real_disagreements(tmp_path):
+    from cormon import checks
+    study = _two_doc_study(tmp_path, scanned=True)
+    # the scan read "112 ± 7" as "112 - 7": folded, the clean copy's window kept, no dispute
+    rules = [_window("a", "p:8.8", 105, 112, "112 - 7 days"), _window("b", "lab:3", 105, 119, "Day 112 ± 7")]
+    (c,) = checks.resolve(study, rules)
+    assert not c["disputed"] and "scan lost" in c["copies"][0] and rules[0]["superseded"] == "b"
+    assert (rules[1]["min"], rules[1]["max"]) == (105, 119) and "disputed" not in rules[1]
+    # the same half-window in a document that is not a scan is a real disagreement: both kept, code checks the widest
+    rules = [_window("a", "lab:8.8", 105, 112, "112 + 0 to 7"), _window("b", "p:3", 105, 119, "Day 112 ± 7")]
+    study = _two_doc_study(tmp_path, scanned=False)
+    (c,) = checks.resolve(study, rules)
+    assert c["disputed"] and [(x["min"], x["max"]) for x in rules[1]["disputed"]] == [(105, 112), (105, 119)]
+    # a side one copy leaves unstated is no disagreement
+    rules = [_window("a", "p:1", None, 119, "at most 119"), _window("b", "lab:2", 105, 119, "105 to 119")]
+    (c,) = checks.resolve(study, rules)
+    assert not c["disputed"]
+    # building again starts from each copy's own limits, whatever the last build kept
+    rules = [_window("a", "lab:8.8", 105, 112, "x"), _window("b", "p:3", 105, 119, "y")]
+    checks.resolve(study, rules)
+    first = [dict(r) for r in rules]
+    checks.resolve(study, rules)
+    assert rules == first and rules[0]["stated"] == [105, 112]
+
+
+def test_a_date_inside_one_documents_window_but_not_the_others_is_not_sure_and_names_both():
+    from cormon import checks
+    rule = dict(_window("b", "p:3", 105, 119, "Day 112 ± 7"),
+                disputed=[{"min": 105, "max": 112, "section_id": "lab:8.8", "quote": "112 + 0 to 7"},
+                          {"min": 105, "max": 119, "section_id": "p:3", "quote": "Day 112 ± 7"}])
+    ev = lambda day: [{"event": "baseline_visit", "date": "2026-01-01", "status": "done", "quote": "baseline 1 Jan"},
+                      {"event": "w16_visit", "date": day, "status": "done", "quote": f"week 16 on {day}"}]
+    bad, ok = checks.evaluate([rule], {"events": ev("2026-04-25"), "values": []})        # Day 114
+    assert len(bad) == 1 and bad[0]["disputed"] and "outside some of them" in bad[0]["fact"]
+    f = checks.finding(bad[0])
+    assert f["certainty"] == "cannot_tell" and "[lab:8.8]" in f["why"] and "[p:3]" in f["why"]
+    assert "Ask the sponsor" in f["next_step"]
+    said = checks.explain(f["code_numbers"])
+    assert "disagree" in said["headline"] and "lab:8.8" in said["detail"] and "p:3" in said["detail"]
+    bad, ok = checks.evaluate([rule], {"events": ev("2026-04-20"), "values": []})        # Day 109: inside both
+    assert not bad and ok
+    bad, _ = checks.evaluate([rule], {"events": ev("2026-05-10"), "values": []})         # Day 129: outside both
+    assert len(bad) == 1 and not bad[0]["disputed"] and checks.finding(bad[0])["certainty"] == "conflict"
+
+
+def test_a_disagreement_is_confirmed_against_both_sides():
+    from cormon import reader
+    sources = [{"id": i, "kind": "section", "title": t, "text": t} for i, t in
+               (("p:6.8", "Safety call"), ("p:s010", "Schedule"), ("lab:4", "CSF collection"), ("p:7", "CSF timing"))]
+    brief = {"id": "brief:samples", "kind": "brief", "text": "- Collect CSF at Week 24 [p:7]"}
+    code = {"section_id": "p:6.8", "protocol_quote": "28 + 3 days", "problem": "x", "why": "y", "certainty": "cannot_tell",
+            "disputed": [{"section_id": "p:6.8"}, {"section_id": "p:s010"}]}
+    assert {"p:6.8", "p:s010"} <= {i["id"] for i in reader._proof(code, [brief], sources)}
+    # not a window: the judge names both sides in why
+    ai = {"section_id": "p:7", "protocol_quote": "Collect CSF at Week 24", "problem": "CSF at Week 16",
+          "why": "[p:7] says Week 24 but [lab:4] says Week 16", "certainty": "cannot_tell"}
+    assert {"p:7", "lab:4"} <= {i["id"] for i in reader._proof(ai, [brief], sources)}
+    assert {"lab:4"} <= {i["id"] for i in reader._proof(ai, [], sources)}
+
+
+def test_a_manual_is_briefed_beside_the_protocol_with_no_document_ranked_and_the_gate_reports_gaps(tmp_path,
+                                                                                                     monkeypatch):
+    import json
+    import re
+    from cormon import coverage, guide, llm, packs
+    study = _two_doc_study(tmp_path)
+    study.documents[0]["overrides"] = ["lab"]                      # an old ranking is ignored
+    secs = [("p", "p:6", ["samples"], "Collect the CSF sample at Baseline and Week 24 rather than Week 16."),
+            ("lab", "lab:2", ["samples"], "Ship frozen samples within 2 days of collection."),
+            ("lab", "lab:3", [], "Label every tube with the participant number before it is frozen."),
+            ("lab", "lab:9", ["admin"], "Call the lab helpdesk on weekdays only, before 5 pm.")]
+    for n, (d, sid, topics, text) in enumerate(secs):
+        db.ex("INSERT INTO guide(study_id, doc_id, id, kind, number, title, path, text, about, topics, ord, version) "
+              "VALUES ('S', ?, ?, 'section', '', 'T', '', ?, '', ?, ?, '1')", (d, sid, text, json.dumps(topics), n))
+    systems = []
+
+    def fake(task, system, user, schema, name, **k):
+        systems.append(system)
+        if name == "brief_lines":
+            return {"lines": [{"section": sid, "rule": f"Rule of {sid}: {t}", "applies_to": "", "topics": ["samples"]}
+                              for sid, t in re.findall(r"^\[([^\]]+)\] [^\n]*\n([^\n]+)", user, re.M)]}
+        if name == "coverage":
+            return {"sentences": [{"n": n, "verdict": "missing", "lacks": "no line"}
+                                  for n in range(1, user.count("NEAREST") + 1)]}
+        return {"groups": [], "sentences": [], "links": []}
+    monkeypatch.setattr(llm, "structured", fake)
+    packs.build(study, log=lambda *a: None)
+    brief = next(r for r in guide.load("S") if r["id"] == "brief:samples")["text"]
+    assert "[p:6]" in brief and "[lab:2]" in brief and "lab:3" not in brief
+    assert "governs" not in brief and not any("governs" in s or "replaced by" in s for s in systems)
+    res = coverage.gate(study, log=lambda *a: None)
+    assert res["sections_with_no_topic"] == ["lab:3"]
+    assert {m["section"] for m in res["missing"]} == {"lab:3", "lab:9"}    # background and admin are read too
+    assert any("no topic" in w for w in res["warnings"]) and any("2 site rules" in w for w in res["warnings"])
+    assert coverage.last("S")["warnings"] == res["warnings"]
+    assert db.q1("SELECT action FROM audit_log WHERE action='coverage_gate'")

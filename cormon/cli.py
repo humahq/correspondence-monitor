@@ -111,6 +111,20 @@ def cmd_guide(args):
     if guide.checker(s).get("route") == "reader":
         from . import duties
         duties.build(s, reuse=not args.reread)
+    from . import coverage
+    coverage.gate(s)
+
+
+def cmd_checks(args):
+    from . import checks, coverage
+    s = config.study(args.study)
+    checks.build(s, use_cache=not args.fresh, reuse=not args.fresh)
+    coverage.gate(s)
+
+
+def cmd_coverage(args):
+    from . import coverage
+    coverage.gate(config.study(args.study), use_cache=not args.fresh, ai=not args.no_ai)
 
 
 def cmd_duties(args):
@@ -198,6 +212,12 @@ def cmd_status(args):
     counts = {r["status"]: r["n"] for r in db.q("SELECT status, COUNT(*) n FROM messages GROUP BY status")}
     ob = {r["status"]: r["n"] for r in db.q("SELECT status, COUNT(*) n FROM outbox GROUP BY status")}
     print(f"messages: {counts or '{}'}   outbox: {ob or '{}'}")
+    from . import coverage
+    for st in config.studies().values():
+        g = coverage.last(st.study_id)
+        print(f"study model {st.study_id}: " + ("coverage gate not run yet (cormon coverage)" if not g else
+              "coverage gate passed" if not g["warnings"] else
+              "coverage gate WARNINGS (cormon coverage): " + "; ".join(g["warnings"])))
     print("open items: " + ", ".join(
         f"{r['tier']}={r['n']}" for r in db.q(
             "SELECT tier, COUNT(*) n FROM items WHERE state='open' AND counts=1 GROUP BY tier")) or "none")
@@ -669,8 +689,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--study", required=True)
     s.add_argument("--fresh", action="store_true",
                    help="ask the model again for every document instead of keeping stored answers and rules")
-    s.set_defaults(fn=lambda a: __import__("cormon.checks", fromlist=["build"]).build(
-        config.study(a.study), use_cache=not a.fresh, reuse=not a.fresh))
+    s.set_defaults(fn=cmd_checks)
+
+    s = sub.add_parser("coverage", help="the coverage gate: site rules the briefs may be missing, documents not read")
+    s.add_argument("--study", required=True)
+    s.add_argument("--no-ai", action="store_true", help="only the code step: sentences whose words are in no line")
+    s.add_argument("--fresh", action="store_true", help="ask the model again instead of using stored answers")
+    s.set_defaults(fn=cmd_coverage)
 
     s = sub.add_parser("duties", help="print the follow-up table: what the site must do after each event")
     s.add_argument("--study", required=True)

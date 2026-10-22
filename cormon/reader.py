@@ -301,8 +301,8 @@ READ_SYSTEM = """You are an experienced clinical-trial monitor checking one site
 You get the protocol text that governs what the email is about (in the protocol's own words; tables are one line
 per row), checklists for the visits it names, and date arithmetic done by code. Trust the code's numbers; you decide
 what they mean against the protocol's windows and rules. A topic pack gathers one topic's rules from every study
-document; each line ends with its source section in brackets, and a line noted "replaced by ..." is overruled by
-the document named.
+document; each line ends with its source section in brackets. No document outranks another: where they differ,
+see check 2.
 
 Work in two steps.
 1. checks: the email has been split into numbered STATEMENTS, each with the ids of the protocol parts linked to it.
@@ -377,10 +377,12 @@ Before you mark anything ok, run these five checks on every statement. Most miss
    or the condition not met, is a problem. If the email reports doing that thing but does not say whether the
    condition holds, it is a finding with certainty cannot_tell. A list of what may be done is not permission on
    its own: read the condition attached to the list.
-2. Passages that disagree. When two passages give different values for the same thing (a window, an interval, a
-   dose, a count), do not pick one or decide the email "fits both". Report the disagreement as a finding with
-   certainty cannot_tell, quoting one of the values, giving both in why, with the next step "confirm with the
-   sponsor / medical monitor".
+2. Passages that disagree. When two passages, in the same or different documents, give different values or
+   steps for the same thing (a window, an interval, a dose, a count, a visit, a step) and the email would be fine
+   under one but not the other, do not pick one or decide the email "fits both". Report the disagreement as a
+   finding with certainty cannot_tell, quoting one side, giving both sides with their section ids in brackets in
+   why, with the next step "ask the sponsor which applies". A passage that itself says it changes the other ("at
+   Week 24 rather than Week 16", "instead of", "replaces") is not a disagreement: follow it, and quote it.
 3. Time limits. Work out every duration the email states or implies (days since an event, since a dose change,
    until the next supply or visit) and compare it with every time limit in the sections ("within 28 days", "for at
    least 14 days", "until the next dispensing visit").
@@ -397,7 +399,7 @@ departure is one finding even when several sections govern it."""
 
 READ_SYSTEM_SHORT = """You are an experienced clinical-trial monitor checking one site email against the study protocol.
 You get the protocol text for what the email is about (topic packs: each line is the protocol's own words with its
-source section in brackets; a line noted "replaced by ..." is overruled), visit checklists, the email split into
+source section in brackets; no document outranks another), visit checklists, the email split into
 numbered statements, and date arithmetic done by code. Trust the code's numbers.
 
 1. checks: check every statement against the protocol: at least one check per statement (statement 0 for anything
@@ -425,7 +427,9 @@ Rules: only the protocol text given counts. "Should" is a requirement; "may" is 
 something forbidden is a finding now. A required item the email simply does not mention is a reminder, not a
 finding. A past departure stays a finding (status done) until the email says it was corrected and reported; then its
 status is already_handled. An adverse event is not itself a problem; a missed step the protocol requires for it is.
-If two passages disagree on a value, report it with certainty cannot_tell. Otherwise certainty is conflict.
+If two passages disagree on a value or step and the email fits only one, report it with certainty cannot_tell,
+both sides with their section ids in why, next step "ask the sponsor which applies" (a passage that itself says it
+changes the other is followed, not a disagreement). Otherwise certainty is conflict.
 If you need a part not given, put its id from the GUIDE INDEX in need_more."""
 
 
@@ -706,14 +710,19 @@ CONFIRM_SCHEMA = llm.obj({
 
 def _proof(f: dict, context: list[dict], sources: list[dict]) -> list[dict]:
     """What a finding is confirmed against. With topic briefs: the source sections its brief line cites (and any
-    it names itself), with the briefs and visit checklists; otherwise what the judge read."""
+    it names itself), with the briefs and visit checklists; otherwise what the judge read. A finding that passages
+    disagree gets every side's section, so the check sees both."""
+    by_id = {s["id"]: s for s in sources}
+    sides = [c["section_id"] for c in f.get("disputed") or []]
+    found_ids = lambda s: [x.rstrip(".") for x in re.findall(r"[\w.-]+:[\w.-]+", s)]
+    if f.get("certainty") == "cannot_tell":
+        sides += [i for i in found_ids(f["why"]) if i in by_id]
     briefs = [i for i in context if i["kind"] == "brief"]
     if not briefs:
-        return context
-    by_id = {s["id"]: s for s in sources}
+        have = {i["id"] for i in context}
+        return context + [by_id[i] for i in dict.fromkeys(sides) if i not in have]
     cited = f["section_id"] + " " + f["protocol_quote"]
-    found_ids = lambda s: [x.rstrip(".") for x in re.findall(r"[\w.-]+:[\w.-]+", s)]
-    ids = found_ids(cited)
+    ids = found_ids(cited) + sides
     lines = [ln for b in briefs for ln in b["text"].splitlines() if ln.startswith("- ")]
     if lines:
         best = max(lines, key=lambda ln: SequenceMatcher(None, _norm(ln), _norm(f["protocol_quote"])).ratio())
@@ -1205,15 +1214,18 @@ def _with_earlier(rules: list[dict], facts: dict, past: list[dict], bad: list[di
 
 def _code_checks(study: Study, rules: list[dict], vocab: list[dict], part: dict, email: str, sent: datetime,
                  notes: list[str], res: dict, context: list[dict], sources: list[dict], use_cache: bool,
-                 past: list[dict] | None = None) -> dict:
+                 past: list[dict] | None = None, disputed: list[dict] | None = None) -> dict:
     """The check list's countable rules, run by code on facts pulled from the email. A departure the AI already
     reported (same email words) only adds its fact for the confirm step; any other becomes a finding of its own.
     Rules the facts pass are handed to the confirm step too, so a wrong timing finding can be turned down."""
     from . import checks
-    facts = checks.extract(study, rules, vocab, email, part["participant"] or "", sent, use_cache)
+    facts = checks.extract(study, rules + (disputed or []), vocab, email, part["participant"] or "", sent, use_cache)
     bad, ok = checks.evaluate(rules, facts)
     if past:
         _with_earlier(rules, facts, past, bad, ok, notes)
+    # a conditional rule is not code-checked, but a date its documents disagree on is still raised (as not sure);
+    # the confirm step drops it when the rule's condition does not hold
+    bad += [d for d in checks.evaluate(disputed or [], facts)[0] if d.get("disputed")]
     ai = [f for f in res["findings"] if f["status"] != "already_handled"]
     added = []
     cfs = [checks.finding(d) for d in bad]
@@ -1227,6 +1239,9 @@ def _code_checks(study: Study, rules: list[dict], vocab: list[dict], part: dict,
             f["code_quotes"] = d["quotes"]
             f["code_rule_quote"] = d["rule"]["quote"]
             f["code_numbers"] = d.get("numbers")
+            if cf.get("disputed"):
+                f.update(disputed=cf["disputed"], certainty="cannot_tell", why=f"{f['why']} {cf['why']}",
+                         next_step=cf["next_step"])
         if same:
             continue
         res["findings"].append(cf)
@@ -1253,11 +1268,12 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
     out: list[Finding] = []
     meta: list[tuple[dict, dict]] = []
     ai_merge = bool(guide.checker(study).get("merge"))  # off by default: code's same_problem is enough
-    code_rules, vocab = [], []
+    code_rules, vocab, split_rules = [], [], []
     if guide.checker(study).get("code_checks"):
         from . import checks
         rules, vocab = checks.load(study)
         code_rules = checks.live(rules)
+        split_rules = [r for r in rules if r.get("disputed") and r not in code_rules]
     remember: dict[str, tuple[str, list, list]] = {}
     for part in scope(study, items, email, sent, use_cache):
         past = memory.history(study.study_id, part["participant"], msg) if part["participant"] else []
@@ -1290,7 +1306,7 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
         code: dict = {}
         if code_rules:
             code = _code_checks(study, code_rules, vocab, part, email, sent, notes, res, context, sources, use_cache,
-                                past)
+                                past, split_rules)
         if part["participant"]:
             k = memory.key(part["participant"])
             _, ds, es = remember.get(k, (part["participant"], [], []))
@@ -1344,7 +1360,8 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
             elif c["verdict"] == "rejected":
                 rec["outcome"] = "rejected"
                 continue
-            certainty = "clear" if c["verdict"] == "confirmed" and found and not doubt else "unsure"
+            certainty = ("clear" if c["verdict"] == "confirmed" and found and not doubt and not f.get("disputed")
+                         else "unsure")
             rec["outcome"] = certainty
             kept.append(f)
             if g is not None:

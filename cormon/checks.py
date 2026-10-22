@@ -175,33 +175,98 @@ def longer_of(rules: list[dict], secs: list[dict]) -> list[str]:
     return out
 
 
+def _scanned(study: Study, doc_id: str) -> bool:
+    """A document read from a scan (bin/ocr-pdf), whose text can lose a "±" sign."""
+    doc = next((d for d in study.documents if d["id"] == doc_id), {})
+    return ".ocr." in str(doc.get("guide_file") or "")
+
+
+def _clash(a: tuple, b: tuple) -> bool:
+    """Two (min, max) limits that state the same bound differently. A bound one leaves unstated clashes with none."""
+    return any(x is not None and y is not None and x != y for x, y in zip(a, b))
+
+
+def _sign_lost(narrow: tuple, wide: tuple) -> bool:
+    """narrow is one half of wide's "c ± d" range, (c, c + d) or (c - d, c): "112 ± 7" read as "112 - 7"."""
+    if None in narrow or None in wide:
+        return False
+    c = (wide[0] + wide[1]) / 2
+    return narrow in ((c, wide[1]), (wide[0], c)) and narrow != wide
+
+
+_PLUS_MINUS = re.compile(r"(\d+(?:\.\d+)?)\s*(?:days?\s*)?\(?\s*±\s*(\d+(?:\.\d+)?)")
+
+
+def _stated(r: dict, rules: list[dict]) -> tuple:
+    """The limits the rule's own source states. Rules stored before "stated" was kept had the widest limits of
+    their group written over their own; those are read back from a single "N ± M" in their quote."""
+    if "stated" in r:
+        return tuple(r["stated"])
+    m = _PLUS_MINUS.findall(r["quote"])
+    if len(m) == 1 and any(x.get("superseded") == r["id"] for x in rules):
+        n, d = float(m[0][0]), float(m[0][1])
+        lo, hi = n - d, n + d
+        if (r["min"] is None or r["min"] <= lo) and (r["max"] is None or r["max"] >= hi):
+            return (lo if lo % 1 else int(lo), hi if hi % 1 else int(hi))
+    return (r["min"], r["max"])
+
+
+def sides(copies: list[dict]) -> list[dict]:
+    """A disputed rule's copies grouped by their limits: {min, max, sections}, in first-seen order."""
+    out: dict[tuple, dict] = {}
+    for c in copies:
+        out.setdefault((c["min"], c["max"]), {"min": c["min"], "max": c["max"], "sections": []})["sections"].append(
+            c["section_id"])
+    return list(out.values())
+
+
 def resolve(study: Study, rules: list[dict]) -> list[dict]:
-    """Settle intervals that give the same pair of events different limits. A document that overrides another wins
-    (the appendix over the master protocol); among the rest the widest limits win, since the scanned master text
-    loses the "±" sign ("112 ± 7" read as "112 - 7") and a narrower copy is the damaged one. Returns the conflicts;
-    the losing rules get "superseded" set to the winner's id and stop being code-checked."""
-    over = {d["id"]: set(d.get("overrides") or []) for d in study.documents}
+    """Intervals that give the same pair of events different limits. No document wins over another:
+    - copies from a scanned document that are one half of another copy's "c ± d" range lost the "±" sign in the
+      scan ("112 ± 7" read as "112 - 7") and are set aside;
+    - copies that differ only by a bound one leaves unstated ("at most 78" and "52 to 78") are one rule;
+    - any other difference is a real disagreement between the documents. Code checks the widest limits, and the
+      rule keeps every copy in "disputed": a gap inside the widest limits but outside a copy is reported as not
+      sure, with every copy, so the sponsor can say which applies.
+    Every rule keeps its own limits in "stated", so building again starts from them. Returns the groups that
+    differed; copies set aside get "superseded" set to the kept rule's id and stop being code-checked."""
+    own = {id(r): list(_stated(r, rules)) for r in rules if r["kind"] == "interval"}
+    for r in rules:
+        if r["kind"] == "interval":
+            r["stated"] = own[id(r)]
+            if r.pop("superseded", None) or r.get("disputed"):
+                r["code"] = code_ready(r)
+            r.pop("disputed", None)
+            r["min"], r["max"] = r["stated"]
     groups: dict[tuple, list[dict]] = {}
     for r in rules:
         if r["kind"] == "interval" and r.get("code"):
             groups.setdefault((r["from_event_id"], r["to_event_id"], r["unit"]), []).append(r)
     conflicts = []
     for rs in groups.values():
-        if len({(r["min"], r["max"]) for r in rs}) < 2:
+        limits = list(dict.fromkeys((r["min"], r["max"]) for r in rs))
+        if len(limits) < 2:
             continue
-        docs = {r["section_id"].split(":")[0] for r in rs}
-        beaten = set().union(*(over.get(d, set()) for d in docs)) & docs
-        live = [r for r in rs if r["section_id"].split(":")[0] not in beaten]
+        damaged = {x for x in limits if any(_sign_lost(x, w) for w in limits)
+                   and all(_scanned(study, r["section_id"].split(":")[0]) for r in rs if (r["min"], r["max"]) == x)}
+        live = [r for r in rs if (r["min"], r["max"]) not in damaged]
         lo = None if any(r["min"] is None for r in live) else min(r["min"] for r in live)
         hi = None if any(r["max"] is None for r in live) else max(r["max"] for r in live)
-        copies = [f"{r['min']}..{r['max']} [{r['section_id']}]" for r in rs]
+        kept = [x for x in limits if x not in damaged]
+        disputed = any(_clash(a, b) for a in kept for b in kept)
         win = next((r for r in live if (r["min"], r["max"]) == (lo, hi)), live[0])
         for r in rs:
             if r is not win:
                 r.update(superseded=win["id"], code=False)
         win.update(min=lo, max=hi)
+        if disputed:
+            win["disputed"] = [{"min": r["stated"][0], "max": r["stated"][1], "section_id": r["section_id"],
+                                "quote": r["quote"]} for r in live]
         conflicts.append({"events": f"{win['from_event_id']} -> {win['to_event_id']}", "kept": f"{lo}..{hi}",
-                          "copies": copies})
+                          "disputed": disputed,
+                          "copies": [f"{r['stated'][0]}..{r['stated'][1]} [{r['section_id']}]"
+                                     + (" (scan lost the ± sign)" if tuple(r["stated"]) in damaged else "")
+                                     for r in rs]})
     return conflicts
 
 
@@ -398,8 +463,8 @@ def mark_implied(rules: list[dict], use_cache: bool = True, old: list[dict] = ()
 
 
 def live(rules: list[dict]) -> list[dict]:
-    """The rules code checks, appendix rules first (the appendix overrides the master protocol): those with no
-    condition, or a condition true whenever their events happen (see mark_implied)."""
+    """The rules code checks, appendix rules first: those with no condition, or a condition true whenever their
+    events happen (see mark_implied)."""
     return sorted((r for r in rules if r["code"] and not r.get("superseded")
                    and (not r["applies_when"].strip() or r.get("implied"))),
                   key=lambda r: not r["section_id"].startswith("regimen"))
@@ -462,13 +527,17 @@ def evaluate(rules: list[dict], facts: dict) -> tuple[list[dict], list[dict]]:
     real = lambda eid: [e for e in by.get(eid, []) if e["status"] != "not_done"]
     bad, ok, seen = [], [], set()
 
-    def add(r, fact, quotes, broken, status="done", numbers=None):
+    def add(r, fact, quotes, broken, status="done", numbers=None, disputed=None):
         key = (r["kind"], fact)
         if key in seen:
             return
         seen.add(key)
-        (bad if broken else ok).append({"rule": r, "fact": fact, "quotes": [q for q in quotes if q],
-                                        "status": status, "numbers": numbers})
+        (bad if broken or disputed else ok).append({"rule": r, "fact": fact, "quotes": [q for q in quotes if q],
+                                                    "status": status, "numbers": numbers, "disputed": disputed})
+
+    outside = lambda g, lo, hi: (lo is not None and g < lo) or (hi is not None and g > hi)  # noqa: E731
+    limits = lambda lo, hi: (f"{lo:g} to {hi:g}" if lo is not None and hi is not None else  # noqa: E731
+                             f"at least {lo:g}" if lo is not None else f"at most {hi:g}")
 
     for r in rules:
         k = r["kind"]
@@ -482,17 +551,22 @@ def evaluate(rules: list[dict], facts: dict) -> tuple[list[dict], list[dict]]:
                     continue
                 used |= {id(a), id(b)}
                 lo, hi = r["min"], r["max"]
-                broken = (lo is not None and g < lo) or (hi is not None and g > hi)
-                allowed = (f"{lo:g} to {hi:g}" if lo is not None and hi is not None else
-                           f"at least {lo:g}" if lo is not None else f"at most {hi:g}")
+                broken = outside(g, lo, hi)
+                copies = r.get("disputed") or []
+                disputed = copies if not broken and any(outside(g, c["min"], c["max"]) for c in copies) else None
+                allowed = ("the documents give different limits: " + "; ".join(
+                    f"{limits(c['min'], c['max'])} {r['unit']} [{', '.join(c['sections'])}]" for c in sides(copies))
+                    + (", outside all of them" if broken else ", outside some of them" if disputed else
+                       ", inside all of them") if copies else f"the protocol allows {limits(lo, hi)} {r['unit']}")
                 fact = (f"{_label(r['to_event_id'])} ({b['date']} {b.get('time') or ''}) is {g:g} {r['unit']} after "
-                        f"{_label(r['from_event_id'])} ({a['date']} {a.get('time') or ''}); the protocol allows "
-                        f"{allowed} {r['unit']}")
+                        f"{_label(r['from_event_id'])} ({a['date']} {a.get('time') or ''}); {allowed}")
                 status = "planned" if "planned" in (a["status"], b["status"]) else "done"
                 add(r, re.sub(r" +", " ", fact).replace(" )", ")"), [a["quote"], b["quote"]], broken, status,
                     {"from": r["from_event_id"], "to": r["to_event_id"], "from_date": a["date"],
                      "from_time": a.get("time") or "", "to_date": b["date"], "to_time": b.get("time") or "",
-                     "gap": g, "unit": r["unit"], "min": lo, "max": hi, "status": status})
+                     "gap": g, "unit": r["unit"], "min": lo, "max": hi, "status": status,
+                     **({"disputed": [{k: c[k] for k in ("min", "max", "section_id")} for c in disputed]}
+                        if disputed else {})}, disputed)
         elif k == "order":
             for b in real(r["then_event_id"]):
                 for a in by.get(r["first_event_id"], []):
@@ -549,13 +623,20 @@ def finding(d: dict) -> dict:
     r = d["rule"]
     cond = f" This applies {r['applies_when']}." if r.get("applies_when") else ""
     exc = f" Unless: {r['exception']}." if r.get("exception") else ""
-    return {"problem": d["fact"][0].upper() + d["fact"][1:] + ".",
-            "email_quote": " ... ".join(d["quotes"])[:400], "protocol_quote": r["quote"],
-            "section_id": r["section_id"], "why": f"Checked by code: {d['fact']}. Rule: {r['text']}{cond}{exc}",
-            "next_step": "Confirm the dates and values; if they are right, record this as a protocol deviation and "
-                         "follow the protocol's steps for it.",
-            "severity": "moderate", "certainty": "conflict", "pattern_class": pattern_class(r),
-            "status": d["status"], "from_fact": d["fact"], "from_code": r["id"], "code_numbers": d.get("numbers")}
+    out = {"problem": d["fact"][0].upper() + d["fact"][1:] + ".",
+           "email_quote": " ... ".join(d["quotes"])[:400], "protocol_quote": r["quote"],
+           "section_id": r["section_id"], "why": f"Checked by code: {d['fact']}. Rule: {r['text']}{cond}{exc}",
+           "next_step": "Confirm the dates and values; if they are right, record this as a protocol deviation and "
+                        "follow the protocol's steps for it.",
+           "severity": "moderate", "certainty": "conflict", "pattern_class": pattern_class(r),
+           "status": d["status"], "from_fact": d["fact"], "from_code": r["id"], "code_numbers": d.get("numbers")}
+    if d.get("disputed"):
+        out.update(certainty="cannot_tell", disputed=d["disputed"],
+                   why=f"Checked by code: {d['fact']}. The documents disagree: "
+                       + " | ".join(f"[{c['section_id']}] {c['quote']}" for c in d["disputed"]),
+                   next_step="Ask the sponsor which limit applies; record a protocol deviation only if it is the "
+                             "one this was outside.")
+    return out
 
 
 _ACRONYMS = {"ate", "pk", "csf", "sae", "cc", "edc", "si", "nti", "bcrp", "oat3", "als", "ecg", "ae", "ip", "et",
@@ -605,6 +686,15 @@ def explain(n: dict | None) -> dict:
     rel = f"{_span(abs(g), unit)} {'after' if g >= 0 else 'before'}"
     detail = (f"{b[0].upper() + b[1:]}: {when(n['to_date'], n['to_time'])}, {rel} {a} "
               f"({when(n['from_date'], n['from_time'])}). Allowed: {allowed}.")
+    if n.get("disputed"):
+        span = lambda c: (f"{_span(c['min'], unit)} to {_span(c['max'], unit)}" if None not in (c["min"], c["max"])  # noqa: E731
+                          else f"at least {_span(c['min'], unit)}" if c["min"] is not None
+                          else f"at most {_span(c['max'], unit)}")
+        return {"detail": detail.rsplit(" Allowed:", 1)[0] + " The documents give different limits: "
+                + "; ".join(f"{span(c)} ({', '.join(c['sections'])})" for c in sides(n["disputed"])) + ".",
+                "headline": f"The documents disagree on the limit for {b}.",
+                "next_step": "Ask the sponsor which limit applies; record a protocol deviation only if it is the one "
+                             "this was outside."}
     out = {"detail": detail}
     if unit == "days" and lo is not None and hi is not None and n["from"] in _ANCHORS and _VISIT.match(n["to"]):
         done = n.get("status") != "planned"
@@ -653,8 +743,11 @@ def render_coverage(c: dict) -> str:
              f"  follow-up (duties table): {c['follow_up']}",
              f"  judgment (AI reads the briefs): {c['judgment']}",
              f"  by kind: " + ", ".join(f"{k} {n}" for k, n in sorted(c["by_kind"].items())),
-             f"  conflicting limits settled: {len(c['conflicts'])} pairs, {c['superseded']} copies set aside",
-             *(f"    {x['events']}: kept {x['kept']}  from " + ", ".join(x["copies"]) for x in c["conflicts"]),
+             f"  limits given more than once with different values: {len(c['conflicts'])} pairs, "
+             f"{sum(1 for x in c['conflicts'] if x.get('disputed'))} real disagreements (shown as not sure, ask the "
+             f"sponsor), {c['superseded']} copies folded into one rule",
+             *(f"    {x['events']}: {'DISAGREE, ' if x.get('disputed') else ''}code checks {x['kept']}  from "
+               + ", ".join(x["copies"]) for x in c["conflicts"]),
              f"  washouts set by 'whichever is longer': {len(c.get('washouts_set_by_half_life', []))}",
              *(f"    {x}" for x in c.get("washouts_set_by_half_life", [])),
              f"  dropped, quote not found in the protocol: {c['dropped_quote_not_found']}",

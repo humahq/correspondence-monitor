@@ -2,8 +2,8 @@
 
 A site email about dosing is checked against the dosing pack, not against each document in turn. A pack holds the
 documents' own words (verbatim excerpts, each tagged with its source section), grouped under short headings, with
-rationale and boilerplate left out. Where a study-specific appendix replaces a Master Protocol step, the pack keeps
-both and says which one governs.
+rationale and boilerplate left out. No document outranks another: where two give different rules for the same
+thing, the pack keeps both, and the monitor shows both and asks the sponsor.
 
 Every excerpt is found in its source by code, and the rule-like sentences of each source section that no excerpt
 covers are offered to a second pass, so a requirement is not silently left out. Each pack then also carries the
@@ -102,18 +102,10 @@ _RULE_WORDS = re.compile(
     re.I)
 
 
-def _override_note(study: Study, docs: list[str]) -> str:
-    bits = []
-    for d in docs:
-        for o in study.doc(d).get("overrides") or []:
-            if o in docs:
-                bits.append(f"Where {study.doc(d)['title']} ({d}) changes a step of {study.doc(o)['title']} ({o}), "
-                            f"{d} governs: include both and set note on the {o} excerpt to \"replaced by {d}: ...\".")
-    return " ".join(bits)
-
-
-def _and(names: list[str]) -> str:
-    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} or {names[-1]}"
+def _differ_note(docs: list[str]) -> str:
+    """No document outranks another: where they differ, both sides are kept for the monitor to show."""
+    return ("Where passages give different rules for the same thing, include every side as its own excerpt and set "
+            "note on each to \"differs from [section id]\"; never leave one out.") if len(docs) > 1 else ""
 
 
 def _block(sec: dict, titles: dict[str, str]) -> str:
@@ -347,7 +339,7 @@ def build_one(study: Study, topic: str, secs: list[dict], titles: dict[str, str]
               use_cache: bool = True) -> dict:
     by_id = {s["id"]: s for s in secs}
     docs = sorted({s["doc_id"] for s in secs})
-    system = PACK_SYSTEM.format(topic=topic, label=LABELS[topic], override=_override_note(study, docs))
+    system = PACK_SYSTEM.format(topic=topic, label=LABELS[topic], override=_differ_note(docs))
     user = "PROTOCOL SECTIONS:\n\n" + "\n\n".join(_block(s, titles) for s in secs)
     res = llm.structured("ingest", system, user, PACK_SCHEMA, "pack", use_cache=use_cache)
     mine: dict[str, list] = {}
@@ -409,15 +401,12 @@ def build(study: Study, log=print, use_cache: bool = True, reuse: bool = True) -
                 seen.add((ln["rule"], ln["section"]))
                 lines.append(dict(ln, topics=[u for u in PACK_TOPICS if ln in by_topic[u]]))
     lost = lost_numbers(items, lines)
-    governs = " ".join(f"Where {study.doc(d)['title']} differs from {_and(ws)}, {study.doc(d)['title']} governs."
-                       for d in docs if (ws := [study.doc(o)["title"] for o in study.doc(d).get("overrides") or []
-                                                if o in docs]))
     rows = []
     for n, topic in enumerate(PACK_TOPICS):
         mine = by_topic[topic]
         if not mine:
             continue
-        text = (governs + "\n" if governs else "") + render_brief(mine)
+        text = render_brief(mine)
         rows.append(dict(id=f"brief:{topic}", kind="brief", number="", title=LABELS[topic], path="", text=text,
                          about=LABELS[topic], topics=[topic],
                          ord=4000 + n))
