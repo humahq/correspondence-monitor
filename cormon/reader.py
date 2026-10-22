@@ -1367,8 +1367,9 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
             rec["quote_found"] = bool(found)
             rec["proof"] = [i["id"] for i in proof if i["kind"] == "section"]
             rec["confirm"] = c
-            if c["verdict"] == "rejected" and (f.get("code_fact") or _order_fact(f, notes)):
-                rec["kept_by_order_fact"] = True  # the numbers behind it were worked out by code
+            if c["verdict"] == "rejected" and (f.get("code_fact") or f.get("disputed") or _order_fact(f, notes)):
+                rec["kept_by_order_fact"] = True  # the numbers behind it were worked out by code; a judge that
+                # picks one side of a disagreement between the documents does not settle it
             elif (c["verdict"] == "rejected" and found and not f.get("from_fact")
                   and guide.checker(study).get("disputed", "check") == "check"):
                 rec["disputed"] = True
