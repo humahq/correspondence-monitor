@@ -1905,6 +1905,59 @@ def test_pages_need_a_google_sign_in_on_the_studys_people_list(monkeypatch):
         server.shutdown()
 
 
+def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monkeypatch):
+    import http.client, threading, time as _t
+    from http.server import ThreadingHTTPServer
+    from cormon import config, settings, webview, weblogin
+    conf = {"web.login.enabled": True, "web.login.client_id": "cid", "web.base_url": "https://mon.example",
+            "web.admin.emails": ["Peter@huma.ai"]}
+    real = settings.get
+    monkeypatch.setattr(settings, "get", lambda k, d=None: conf.get(k, real(k, d)))
+    study = next(iter(config.studies()))
+    db.ex("INSERT INTO messages (id, channel, external_id, thread_key, study_id, route, visibility, from_addr,"
+          " from_name, to_addrs, cc_addrs, subject, body_text, headers, received_at, status)"
+          " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (7, "email", "e7", "t7", study, "study", "direct", "site@x.org", "Site Nurse", "[]", "[]",
+           "Week 8 visit", "G-1 came in late for Week 8", "{}", db.now(), "processed"))
+    db.ex("INSERT INTO messages (id, channel, external_id, thread_key, study_id, route, visibility, from_addr,"
+          " subject, body_text, headers, received_at, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (8, "teams", "c8", "t8", study, "study", "channel", "a@x.org", None, "lunch at 1?", "{}", db.now(),
+           "processed"))
+    db.audit("not_trial_related", entity_type="message", entity_id=8)
+    db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind,"
+          " polarity, title, tier, evidence, link_token, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (3, study, "t7", 7, 7, "k3", "finding", "problem", "Week 8 visit late", "medium", "{}", "tok3",
+           db.now(), db.now()))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), webview.Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def get(path, email=None):
+        c = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        cookie = f"{weblogin.COOKIE}={weblogin._sign({'email': email, 'exp': _t.time() + 60})}" if email else None
+        c.request("GET", path, headers={"Cookie": cookie} if cookie else {})
+        r = c.getresponse()
+        return r.status, dict(r.getheaders()), r.read().decode()
+    try:
+        status, head, _ = get("/admin")
+        assert status == 302 and head["Location"].startswith(weblogin.AUTH)
+        status, _, body = get("/admin/messages", "someone@huma.ai")
+        assert status == 403 and "not on the admin list" in body
+        assert "Study monitor" in get("/admin", "peter@huma.ai")[2]
+        status, _, page = get("/admin/messages?days=all", "peter@huma.ai")
+        assert status == 200 and "New alert #3" in page and "Not about the trial" in page
+        page = get("/admin/messages/7", "peter@huma.ai")[2]
+        assert "G-1 came in late for Week 8" in page and "/items/tok3" in page
+        assert "Week 8 visit late" in get("/admin/alerts", "peter@huma.ai")[2]
+        assert "Sign-ins and use" in get("/admin/people", "peter@huma.ai")[2]
+        assert get("/admin/messages/999", "peter@huma.ai")[0] == 404
+        actions = [r["action"] for r in db.q("SELECT action FROM audit_log WHERE entity_type='web'")]
+        assert {"admin_viewed", "admin_refused"} <= set(actions)
+        conf["web.login.enabled"] = False
+        assert get("/admin", "peter@huma.ai")[0] == 403
+    finally:
+        server.shutdown()
+
+
 def test_patient_details_are_masked_in_logs_and_outgoing_messages_but_study_ids_stay():
     from cormon import phi
     text = ("Pt G-501-004, DOB 03/14/1961, MRN 00123456, call her on (617) 555-0142, SSN 123-45-6789. "

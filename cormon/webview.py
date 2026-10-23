@@ -1,4 +1,5 @@
-"""Read-only item and answer detail pages, reached only through the unguessable link in a draft or a reply."""
+"""Read-only item and answer detail pages, reached only through the unguessable link in a draft or a reply, and the
+read-only admin pages under /admin (adminview.py)."""
 
 from __future__ import annotations
 
@@ -205,6 +206,14 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/auth/logout"):
             code, headers, body = weblogin.logout()
             return self._send(code, body, "text/plain; charset=utf-8", headers)
+        if self.path == "/admin" or self.path.startswith(("/admin/", "/admin?")):
+            stop, email = weblogin.admin_gate(self.path, self.headers.get("Cookie"))
+            if stop:
+                return self._send(stop[0], stop[2], "text/plain; charset=utf-8", stop[1])
+            from . import adminview
+            page = adminview.render(self.path, email)
+            if page is not None:
+                return self._send(200, page)
         if self.path.startswith("/items/"):
             token = self.path.split("/items/", 1)[1].split("?")[0]
             row = db.q1("SELECT id, study_id FROM items WHERE link_token=?", (token,))

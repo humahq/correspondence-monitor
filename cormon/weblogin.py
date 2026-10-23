@@ -146,6 +146,22 @@ def gate(path: str, cookie_header: str | None, study_id: str, what: str, ref) ->
     return None
 
 
+def admin_gate(path: str, cookie_header: str | None) -> tuple[tuple[int, dict, str] | None, str | None]:
+    """(response to send instead, None) or (None, email) for an admin page. Unlike gate(), it stays shut while
+    sign-in is off, and only the people in web.admin.emails get in."""
+    if not enabled():
+        return (403, {}, "The admin pages need Google sign-in turned on (web.login.enabled)."), None
+    email = signed_in(cookie_header)
+    if not email:
+        return (302, {"Location": sign_in_url(path)}, ""), None
+    if email not in [e.lower() for e in settings.get("web.admin.emails") or []]:
+        db.audit("admin_refused", entity_type="web", entity_id=path[:200], email=email)
+        return (403, {}, f"You are signed in as {email}, which is not on the admin list. "
+                         f"Sign in with another account at /auth/logout."), None
+    db.audit("admin_viewed", entity_type="web", entity_id=path[:200], email=email)
+    return None, email
+
+
 def logout() -> tuple[int, dict, str]:
     return 200, {"Set-Cookie": f"{COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"}, \
         "Signed out. Open the link again to sign in with another account."
