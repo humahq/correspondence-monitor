@@ -7,7 +7,7 @@ import re
 from dateutil import parser as dtparser
 
 from . import (answers, asks, capture, careful, checks, config, conversation, db, events, guide, items, matching,
-               reader, routing, senders, settings, textutil, timing, triage)
+               outbox, reader, routing, senders, settings, textutil, timing, triage)
 from .config import Study
 from . import drafting
 from .drafting import item_link, local_time
@@ -294,6 +294,40 @@ def _acknowledge(study: Study, msg: dict, summary: dict, trial_related: bool) ->
     summary["acknowledged"] = text
 
 
+RECEIPT = "Thanks for reaching out. Give me a moment while I check the study documents."
+RECEIPT_MINUTES = 5
+_INSTRUCTION = re.compile(r"\b(?:cleared|disregard|ignore (?:this|that|it|#?\d+)|resolved|never ?mind)\b", re.I)
+
+
+def _receipt(study: Study, msg: dict) -> int | None:
+    """A quick "give me a moment" when someone asks the bot something in chat (a 1-on-1 chat, or a group message
+    that names or replies to the bot), sent before the slow read. Decided by code alone and on the safe side: not
+    for a statement, an instruction (cleared, disregard), serious harm (its warning comes first), a group chat
+    the bot only listens to, or a second message in the same chat while the bot is still on the first."""
+    text = msg.get("body_text") or ""
+    if (msg.get("channel") != "teams" or not settings.get("chat.receipt", True)
+            or capture.turn(msg) not in ("direct", "addressed") or not answers.asks_something(text)
+            or _INSTRUCTION.search(text) or answers.HARM_WORDS.search(text)):
+        return None
+    m = re.fullmatch(r"teams:((spaces/[^/]+)/threads/[^/]+)", msg.get("thread_key") or "")
+    if not m:
+        return None
+    key = f"receipt:{m.group(2)}"
+    last = db.get_state(key)
+    if last and last > db.later(-RECEIPT_MINUTES) and not db.q1(
+            "SELECT 1 FROM outbox WHERE channel='teams' AND purpose!='chat_received' AND created_at>=?"
+            " AND json_extract(meta, '$.target.space')=?", (last, m.group(2))):
+        return None   # still working on the message that got the last one
+    db.set_state(key, db.now())
+    oid = routing.enqueue(purpose="chat_received", channel="teams", destination="teams_study_channel",
+                          body=settings.get("chat.receipt_text") or RECEIPT, message_id=msg["id"],
+                          study_id=study.study_id,
+                          meta={"target": {"space": m.group(2), "thread": m.group(1), "key": "study_channel"}})
+    if not outbox.is_paused():
+        outbox.dispatch(only_id=oid)
+    return oid
+
+
 def _target_item(msg: dict) -> int | None:
     if msg.get("in_reply_to"):
         row = db.q1("SELECT item_id FROM outbox WHERE rfc_message_id=? AND item_id IS NOT NULL",
@@ -445,6 +479,14 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
             return summary
 
         study = config.study(msg["study_id"])
+        if not rerun:
+            timing.step("receipt")
+            try:  # a receipt that fails must not stop the read
+                if _receipt(study, msg):
+                    summary["receipt"] = True
+            except Exception as e:
+                db.audit("chat_receipt_failed", entity_type="message", entity_id=msg_id, study_id=study.study_id,
+                         error=str(e)[:500])
         history = capture.thread_history(msg["thread_key"], msg_id)
         timing.step("extract")
         data = events.extract(study, msg, history, use_cache=use_cache)

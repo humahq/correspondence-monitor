@@ -39,6 +39,7 @@ def recent(msg: dict) -> list[dict]:
                       " AND thread_key LIKE ? AND id<? AND received_at>=? ORDER BY id DESC LIMIT ?",
                       (f"teams:{space}/threads/%", msg["id"], since, TURNS))
         bot = db.q("SELECT body, sent_at FROM outbox WHERE channel='teams' AND status='sent'"
+                   " AND purpose!='chat_received'"   # "give me a moment" is not an answer
                    " AND json_extract(meta, '$.target.space')=? AND sent_at>=? AND sent_at<=?"
                    " ORDER BY id DESC LIMIT ?", (space, since, at, TURNS))
     else:

@@ -3,8 +3,8 @@
 A Workspace Events subscription, made with the bot account's sign-in, watches every space the bot is in
 (direct messages, group chats, the study spaces) and sends a note to a Pub/Sub topic for each new message. The
 note carries only the message's name, no text. A background thread pulls the notes and wakes the service, which
-then reads Chat the usual way (capture keeps one copy of each message). The regular poll stays: a note that is
-lost or late costs at most the poll interval, and a stopped listener only makes the bot as slow as before.
+reads just the messages named (capture keeps one copy of each message). The regular poll stays, less often: a
+note that is lost or late costs at most the chat poll interval, and a stopped listener only makes the bot slower.
 
 Setup (once): a topic in the Cloud project of the bot's OAuth client, with chat-api-push@system.gserviceaccount.com
 as Pub/Sub Publisher; a pull subscription on it that the machine's account may read (Pub/Sub Subscriber); both
@@ -14,6 +14,8 @@ subscription and checks the pull.
 
 from __future__ import annotations
 
+import base64
+import json
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -130,12 +132,41 @@ def pubsub_session():
     return AuthorizedSession(creds)
 
 
+_named: list[str] = []
+_named_lock = threading.Lock()
+
+
+def _message_names(note: dict) -> list[str]:
+    """The Chat messages a note is about (spaces/S/messages/M): one, or several for a batch."""
+    try:
+        data = json.loads(base64.b64decode(note.get("data") or b"") or b"{}")
+    except ValueError:
+        data = {}
+    found = [m["message"]["name"] for m in [data] + list(data.get("messages") or [])
+             if isinstance((m or {}).get("message"), dict) and (m["message"].get("name") or "").startswith("spaces/")]
+    subject = ((note.get("attributes") or {}).get("ce-subject") or "").removeprefix("//chat.googleapis.com/")
+    return found or ([subject] if "/messages/" in subject else [])
+
+
+def take_named() -> list[str]:
+    """The messages named by notes since the last call (each once)."""
+    with _named_lock:
+        out = list(dict.fromkeys(_named))
+        _named.clear()
+    return out
+
+
 def pull(http, wait: bool = True) -> int:
-    """Takes the waiting notes off the subscription and acknowledges them; returns how many there were."""
+    """Takes the waiting notes off the subscription and acknowledges them; returns how many there were. The
+    messages they name are kept for take_named()."""
     r = http.post(f"{PUBSUB}/{subscription()}:pull", json={"maxMessages": 100, "returnImmediately": not wait},
                   timeout=PULL_SECONDS + 30)
     r.raise_for_status()
-    ids = [m["ackId"] for m in r.json().get("receivedMessages", [])]
+    got = r.json().get("receivedMessages", [])
+    names = [n for m in got for n in _message_names(m.get("message") or {})]
+    with _named_lock:
+        _named.extend(names)
+    ids = [m["ackId"] for m in got]
     if ids:
         http.post(f"{PUBSUB}/{subscription()}:acknowledge", json={"ackIds": ids}, timeout=30).raise_for_status()
     return len(ids)

@@ -10,14 +10,35 @@ from . import backup, capture, config, db, digest, outbox, phi, pipeline, settin
 from .channels import chat_events, email_channel, teams_channel
 
 
-def poll_channels(log=print) -> int:
+_last_poll: dict[str, float] = {}
+
+
+def poll_seconds(name: str) -> int:
+    """How often a channel is read in full. With Chat push on, the Chat poll only catches up on lost notes."""
+    every = int(settings.get("system.poll_seconds", 20))
+    if name == "teams":
+        return int(settings.get("system.chat_poll_seconds") or (60 if chat_events.enabled() else every))
+    return int(settings.get("system.email_poll_seconds") or every)
+
+
+def poll_channels(log=print, named: list[str] | None = None, force: bool = False) -> int:
+    """Reads each channel whose poll is due, and the Chat messages push notes named."""
     n = 0
     for name, get in (("email", email_channel), ("teams", teams_channel)):
+        due = force or time.monotonic() - _last_poll.get(name, -1e9) >= poll_seconds(name)
+        quick = name == "teams" and named and not due
+        if not (due or quick):
+            continue
         try:
             adapter = get()
             if adapter is None:
                 continue
-            for inb in adapter.fetch():
+            if quick and hasattr(adapter, "fetch_named"):
+                got = adapter.fetch_named(named)
+            else:
+                _last_poll[name] = time.monotonic()
+                got = adapter.fetch()
+            for inb in got:
                 mid = capture.capture(inb)
                 if hasattr(adapter, "ack"):
                     adapter.ack(inb)
@@ -25,6 +46,8 @@ def poll_channels(log=print) -> int:
                     n += 1
                     log(f"captured {name} message {mid}")  # no message text: the system log is not for patient data
         except Exception as e:
+            if quick:  # the full read is made next tick instead
+                _last_poll.pop(name, None)
             db.audit("channel_error", entity_type="channel", entity_id=name, error=str(e)[:500])
             log(f"{name} channel error: {e}")
     return n
@@ -39,10 +62,11 @@ def _safely(step, log) -> None:
         log(f"{step.__qualname__} failed: {e}")
 
 
-def tick(log=print) -> None:
+def tick(log=print, named: list[str] | None = None, force: bool = True) -> None:
+    """One round. force: read every channel now (tests, --once); the listener reads each when its poll is due."""
     t0 = time.perf_counter()
     config.record_config_changes()
-    captured = poll_channels(log)  # capture continues while paused, so nothing is dropped
+    captured = poll_channels(log, named, force)  # capture continues while paused, so nothing is dropped
     t1 = time.perf_counter()
     db.set_state("heartbeat", db.now())
     _safely(backup.daily, log)
@@ -95,7 +119,7 @@ def run(once: bool = False, log=print) -> None:
         while True:
             wake.clear()
             try:
-                tick(log)
+                tick(log, chat_events.take_named(), force=False)
             except Exception:
                 log(traceback.format_exc())
             if once:

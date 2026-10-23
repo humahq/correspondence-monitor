@@ -5,7 +5,15 @@ system:
   # The studies this copy runs. Leave empty to run every folder under studies/.
   studies: [NCT04098666, NCT05842941]
   poll_seconds: 20
+  # How often each channel is read in full (empty: poll_seconds; Chat with push on: 60, catch-up only).
+  chat_poll_seconds:
+  email_poll_seconds:
   timezone: America/New_York
+
+chat:
+  # A quick "give me a moment" when someone asks the bot something in chat, before the slow read.
+  receipt: true
+  receipt_text: "Thanks for reaching out. Give me a moment while I check the study documents."
 
 matching:
   # Forwarded or attached content about events older than this is treated as historical (no alert),

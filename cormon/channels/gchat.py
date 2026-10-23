@@ -103,6 +103,7 @@ class GoogleChatChannel:
         self._users: dict[str, str] = {}
         self._lookup_failed: dict[str, float] = {}
         self._app = None
+        self._places: dict[str, tuple[str, str | None] | str] = {}
 
     def _get(self, url: str, **params) -> dict:
         r = self.http.get(url if url.startswith("http") else CHAT + url, params=params or None, timeout=30)
@@ -234,6 +235,44 @@ class GoogleChatChannel:
                         out.append(inb)
                         newest = max(newest, _time(m["createTime"]))
         db.set_state("gchat_since", (newest + timedelta(minutes=10)).isoformat())
+        return sorted(out, key=lambda i: i.sent_at)
+
+    def _place(self, space: str) -> tuple[str, str | None] | None:
+        """How fetch() reads a space: (visibility, study id or None to work out from the sender); None: not read."""
+        if space not in self._places:
+            place = None
+            for study in config.studies().values():
+                if (study.teams.get("study_channel") or {}).get("space") == space:
+                    place = ("channel", study.study_id)
+                    break
+                if (study.teams.get("alert_channel") or {}).get("space") == space:
+                    place = "skip"
+            if place is None:
+                kind = self._get(f"/{space}").get("spaceType")
+                if kind == "DIRECT_MESSAGE":
+                    place = ("direct", None) if settings.get("gchat.read_direct_chats", True) else "skip"
+                else:
+                    place = ("group", None) if settings.get("gchat.read_group_chats", True) else "skip"
+            self._places[space] = place
+        return None if self._places[space] == "skip" else self._places[space]
+
+    def fetch_named(self, names: list[str]) -> list[Inbound]:
+        """The messages a push note named, read one by one and kept the way fetch() keeps them. One that can't be
+        read is left to the next fetch(), which reads every space."""
+        out: list[Inbound] = []
+        for name in dict.fromkeys(names):
+            space = "/".join(name.split("/")[:2])
+            place = self._place(space)
+            if place is None:
+                continue
+            visibility, study_id = place
+            inb = self._to_inbound(self._get(f"/{name}"), study_id=study_id, visibility=visibility)
+            if inb and visibility == "direct":
+                inb.study_id = study_for_person(inb.from_addr)
+            elif inb and visibility == "group":
+                inb.study_id = study_for_person(inb.from_addr, known_only=True)
+            if inb:
+                out.append(inb)
         return sorted(out, key=lambda i: i.sent_at)
 
     # -------------------------------------------------------------- outbound

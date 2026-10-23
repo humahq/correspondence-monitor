@@ -154,7 +154,7 @@ def check_post(*, study_id: str | None, purpose: str, body: str, item_id: int | 
     """The careful check on one chat post, before it is queued. None: post it as it is (no careful person in the
     room). Otherwise {action: send | reword | withhold, body, status, note}, logged as careful_check."""
     target = (meta or {}).get("target") or {}
-    if not study_id or not target.get("space"):
+    if not study_id or not target.get("space") or purpose == "chat_received":   # fixed text naming nobody
         return None
     try:
         study = config.study(study_id)

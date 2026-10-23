@@ -2561,3 +2561,108 @@ def test_a_chat_push_note_wakes_the_service_and_a_failing_pull_leaves_the_poll(m
     listener.join(5)
     assert len(errors) == 1 and "regular poll goes on" in errors[0]
     assert len(db.q("SELECT 1 FROM audit_log WHERE action='chat_events_error'")) == 1
+
+
+def test_a_push_note_names_its_message_and_only_that_message_is_read(monkeypatch):
+    import base64
+    import json as js
+
+    from cormon import config, service
+    from cormon.channels import chat_events
+    from cormon.channels.gchat import GoogleChatChannel
+
+    b64 = lambda d: base64.b64encode(js.dumps(d).encode()).decode()
+    assert chat_events._message_names({"data": b64({"message": {"name": "spaces/A/messages/1"}})}) == \
+        ["spaces/A/messages/1"]
+    assert chat_events._message_names({"data": b64({"messages": [{"message": {"name": "spaces/A/messages/2"}},
+                                                                 {"message": {"name": "spaces/A/messages/3"}}]})}) == \
+        ["spaces/A/messages/2", "spaces/A/messages/3"]
+    assert chat_events._message_names({"attributes": {"ce-subject": "//chat.googleapis.com/spaces/A/messages/4"}}) == \
+        ["spaces/A/messages/4"]
+    assert chat_events._message_names({"data": "not json"}) == []
+
+    study = config.study("NCT04098666")
+    monkeypatch.setattr(study, "teams", {"study_channel": {"space": "spaces/S1"}, "alert_channel": {"space": "spaces/AL"}})
+    monkeypatch.setattr(config, "studies", lambda: {study.study_id: study})
+    one = lambda name, user: {"name": name, "sender": {"name": f"users/{user}", "type": "HUMAN"},
+                              "createTime": "2026-10-23T15:00:00Z", "text": "What is the Week 12 window?",
+                              "thread": {"name": name.rsplit("/messages", 1)[0] + "/threads/T"}}
+
+    class Fake(_FakeGoogle):
+        def get(self, url, params=None, timeout=None):
+            path = url.split("/v1/", 1)[-1]
+            if "/messages/" in path:
+                self.read.append(path)
+                return self._reply(one(path, 7))
+            if path.startswith("spaces/") and path.count("/") == 1:
+                self.read.append(path)
+                return self._reply({"name": path, "spaceType": "DIRECT_MESSAGE" if "dm" in path else "SPACE"})
+            return super().get(url, params, timeout)
+    fake = Fake({})
+    fake.read = []
+    ch = GoogleChatChannel(session=fake)
+    got = ch.fetch_named(["spaces/dm1/messages/9", "spaces/S1/messages/5", "spaces/AL/messages/6",
+                          "spaces/dm1/messages/9"])
+    assert [(i.external_id, i.visibility, i.study_id) for i in got] == [
+        ("spaces/dm1/messages/9", "direct", "NCT04098666"), ("spaces/S1/messages/5", "channel", "NCT04098666")]
+    assert fake.read == ["spaces/dm1", "spaces/dm1/messages/9", "spaces/S1/messages/5"]   # the alert space is not read
+    ch.fetch_named(["spaces/dm1/messages/10"])
+    assert fake.read[-1] == "spaces/dm1/messages/10" and fake.read.count("spaces/dm1") == 1  # its kind is kept
+
+    calls = []
+
+    class Adapter:
+        def fetch(self):
+            calls.append("full")
+            return []
+
+        def fetch_named(self, names):
+            calls.append(("named", tuple(names)))
+            return []
+    monkeypatch.setattr(service, "teams_channel", lambda: Adapter())
+    monkeypatch.setattr(service, "email_channel", lambda: None)
+    monkeypatch.setattr(service, "_last_poll", {})
+    monkeypatch.setattr(service, "poll_seconds", lambda name: 60)
+    service.poll_channels(lambda *a: None)                                  # first round: the full read
+    service.poll_channels(lambda *a: None, ["spaces/dm1/messages/11"])      # a note: only its message
+    service.poll_channels(lambda *a: None)                                  # nothing due, nothing named
+    service.poll_channels(lambda *a: None, force=True)
+    assert calls == ["full", ("named", ("spaces/dm1/messages/11",)), "full"]
+
+
+def test_a_question_to_the_bot_gets_a_quick_receipt_but_listening_statements_and_instructions_do_not(monkeypatch):
+    from cormon import capture, config, conversation, outbox, pipeline
+
+    study = config.study("NCT04098666")
+    sent = []
+    monkeypatch.setattr(outbox, "dispatch", lambda only_id=None, **k: sent.append(only_id))
+    turn = {"t": "direct"}
+    monkeypatch.setattr(capture, "turn", lambda msg: turn["t"])
+    n = iter(range(1, 100))
+
+    def ask(text, space="spaces/dm1"):
+        i = next(n)
+        mid = db.ex("INSERT INTO messages(channel, external_id, thread_key, route, visibility, body_text, sent_at,"
+                    " received_at) VALUES ('teams', ?, ?, 'study', 'direct', ?, ?, ?)",
+                    (f"x{i}", f"teams:{space}/threads/T{i}", text, db.now(), db.now()))
+        return pipeline._receipt(study, capture.message(mid))
+
+    first = ask("What is the Week 12 window?")
+    row = db.q1("SELECT * FROM outbox WHERE id=?", (first,))
+    assert row["purpose"] == "chat_received" and row["body"] == pipeline.RECEIPT and sent == [first]
+    assert db.unjs(row["meta"])["target"]["space"] == "spaces/dm1"
+    assert ask("And Week 24?") is None                                     # still on the first question
+    db.ex("INSERT INTO outbox(purpose, channel, destination, body, meta, created_at) VALUES"
+          " ('question_answer', 'teams', 'teams_study_channel', 'Day 84', ?, ?)",
+          (db.js({"target": {"space": "spaces/dm1"}}), db.now()))
+    assert ask("And Week 24?")                                             # answered since: a new receipt
+    assert ask("What about Week 36?", space="spaces/dm2")                  # another chat
+    assert ask("G-401-052 baseline done today, all fine.", space="spaces/dm3") is None   # a statement
+    assert ask("cleared #20, can you close it?", space="spaces/dm4") is None            # an instruction
+    assert ask("G-401-053 was admitted to hospital, what do I do?", space="spaces/dm5") is None  # harm: warning first
+    turn["t"] = "quiet"
+    assert ask("Does anyone know the Week 8 window?", space="spaces/g1") is None        # only listening
+
+    db.ex("UPDATE outbox SET status='sent', sent_at=?", (db.now(),))
+    later = {"id": 999, "channel": "teams", "thread_key": "teams:spaces/dm1/threads/T99", "received_at": db.later(1)}
+    assert all("moment" not in t["text"] for t in conversation.recent(later))  # a receipt is not an answer
