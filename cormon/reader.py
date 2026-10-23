@@ -886,11 +886,13 @@ def _soft(sec: dict | None, quote: str) -> str:
     sentence or in the line that introduces the list it is in."""
     if not sec or not quote:
         return ""
-    text = sec.get("text") or ""
-    first = quote.split(" ... ")[0]
-    span = textutil.find_quote(first, text)
+    return next((w for part in quote.split(" ... ") if (w := _soft_part(sec.get("text") or "", part))), "")
+
+
+def _soft_part(text: str, part: str) -> str:
+    span = textutil.find_quote(part, text)
     if not span:
-        return (m.group(0) if (m := _SOFT.search(quote)) else "")
+        return (m.group(0) if (m := _SOFT.search(part)) else "")
     start = text.rfind("\n", 0, span[0]) + 1
     end = text.find("\n", span[1])
     near = text[start:end if end >= 0 else len(text)]

@@ -2344,6 +2344,7 @@ def test_a_reworded_brief_quote_is_traced_to_its_sentence_and_a_preference_is_so
     assert hit[0] is sec and hit[1].startswith("CGI-C should be completed")
     assert r._soft(*hit) == "whenever possible"
     assert r._soft(sec, "19. The assessments listed must be completed.") == ""
+    assert r._soft(sec, "Notes: ... CGI-C should be completed after all clinical assessments") == "whenever possible"
     listed = {"text": "Visits are monthly.\nThe following are listed in preferred order to be completed:\n"
                       "Collect vital signs\nPerform SVC\nAdminister ALSFRS-R"}
     assert r._soft(listed, "Perform SVC") == "preferred"
