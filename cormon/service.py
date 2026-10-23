@@ -21,14 +21,20 @@ def poll_seconds(name: str) -> int:
     return int(settings.get("system.email_poll_seconds") or every)
 
 
+poll_times: dict[str, float] = {}   # seconds each channel took in the last round, for the timing line
+
+
 def poll_channels(log=print, named: list[str] | None = None, force: bool = False) -> int:
-    """Reads each channel whose poll is due, and the Chat messages push notes named."""
+    """Reads each channel whose poll is due, and the Chat messages push notes named. A round started by a push
+    note reads Chat only: a slow mailbox must not hold the message back (email is read next round)."""
     n = 0
-    for name, get in (("email", email_channel), ("teams", teams_channel)):
+    poll_times.clear()
+    for name, get in (("teams", teams_channel), ("email", email_channel)):
         due = force or time.monotonic() - _last_poll.get(name, -1e9) >= poll_seconds(name)
-        quick = name == "teams" and named and not due
-        if not (due or quick):
+        quick = name == "teams" and bool(named) and not force   # a due full read waits one round
+        if not (due or quick) or (named and name == "email" and not force):
             continue
+        began = time.perf_counter()
         try:
             adapter = get()
             if adapter is None:
@@ -50,6 +56,8 @@ def poll_channels(log=print, named: list[str] | None = None, force: bool = False
                 _last_poll.pop(name, None)
             db.audit("channel_error", entity_type="channel", entity_id=name, error=str(e)[:500])
             log(f"{name} channel error: {e}")
+        poll_times[("chat" if name == "teams" else name) + (" (pushed)" if quick else "")] = \
+            time.perf_counter() - began
     return n
 
 
@@ -93,7 +101,8 @@ def tick(log=print, named: list[str] | None = None, force: bool = True) -> None:
     if res["sent"] or res["failed"]:
         log(f"outbox: sent {res['sent']}, failed {res['failed']}")
     if captured or done or res["sent"] or res["failed"]:
-        log(f"timing: poll {t1 - t0:.1f}s, read {len(done)} message(s) {t3 - t2:.1f}s, "
+        each = ", ".join(f"{k} {v:.1f}s" for k, v in poll_times.items())
+        log(f"timing: poll {t1 - t0:.1f}s ({each or 'none due'}), read {len(done)} message(s) {t3 - t2:.1f}s, "
             f"send {time.perf_counter() - t4:.1f}s, tick {time.perf_counter() - t0:.1f}s")
 
 

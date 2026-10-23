@@ -2619,15 +2619,24 @@ def test_a_push_note_names_its_message_and_only_that_message_is_read(monkeypatch
         def fetch_named(self, names):
             calls.append(("named", tuple(names)))
             return []
+    class Mail:
+        def fetch(self):
+            calls.append("mail")
+            return []
     monkeypatch.setattr(service, "teams_channel", lambda: Adapter())
-    monkeypatch.setattr(service, "email_channel", lambda: None)
+    monkeypatch.setattr(service, "email_channel", lambda: Mail())
     monkeypatch.setattr(service, "_last_poll", {})
     monkeypatch.setattr(service, "poll_seconds", lambda name: 60)
-    service.poll_channels(lambda *a: None)                                  # first round: the full read
+    service.poll_channels(lambda *a: None)                                  # first round: both read in full
     service.poll_channels(lambda *a: None, ["spaces/dm1/messages/11"])      # a note: only its message
     service.poll_channels(lambda *a: None)                                  # nothing due, nothing named
+    service._last_poll.clear()                                              # both due, and a note comes
+    service.poll_channels(lambda *a: None, ["spaces/dm1/messages/12"])
+    service.poll_channels(lambda *a: None)                                  # the full reads, a round later
     service.poll_channels(lambda *a: None, force=True)
-    assert calls == ["full", ("named", ("spaces/dm1/messages/11",)), "full"]
+    assert calls == ["full", "mail", ("named", ("spaces/dm1/messages/11",)), ("named", ("spaces/dm1/messages/12",)),
+                     "full", "mail", "full", "mail"]
+    assert "chat" in service.poll_times and "email" in service.poll_times
 
 
 def test_a_question_to_the_bot_gets_a_quick_receipt_but_listening_statements_and_instructions_do_not(monkeypatch):
