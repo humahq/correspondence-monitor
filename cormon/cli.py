@@ -311,6 +311,26 @@ def cmd_message(args):
         print(json.dumps(db.unjs(ev["data"]), indent=2, ensure_ascii=False))
 
 
+def cmd_timings(args):
+    from . import timing
+    rep = timing.report(args.limit)
+    if args.json:
+        print(json.dumps(rep, indent=2))
+        return
+    print("Latest reads (seconds). wait: sent until the bot picked it up; queue: picked up until the read began;\n"
+          "reply: sent until the bot's first reply went out.")
+    rows = [dict(m, steps=" ".join(f"{k} {v:.0f}" for k, v in m["steps"].items() if v >= 0.5),
+                 tokens=f"{m['input_tokens']:,}/{m['output_tokens']:,}") for m in rep["messages"]]
+    table(rows, [("message_id", "msg", 5), ("channel", "chan", 6), ("to_capture", "wait", 6), ("to_start", "queue", 6),
+                 ("seconds", "read", 6), ("to_first_reply", "reply", 6), ("ai_calls", "AI", 4),
+                 ("cache_hits", "cache", 6), ("tokens", "tokens in/out", 16), ("steps", "steps", 60)])
+    print("\nAI calls by task (slowest total first; avg leaves out cache hits)")
+    table(rep["tasks"], [("task", "task", 22), ("model", "model", 14), ("calls", "calls", 6),
+                         ("cache_hits", "cache", 6), ("avg_seconds", "avg s", 6), ("max_seconds", "max s", 6),
+                         ("input_tokens", "tokens in", 11), ("output_tokens", "tokens out", 11),
+                         ("failed", "failed", 6)])
+
+
 def cmd_items(args):
     sql = "SELECT * FROM items WHERE 1=1"
     params: list = []
@@ -755,6 +775,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_messages)
     s = sub.add_parser("message", help="one message, its attachments and event model"); s.add_argument("id", type=int)
     s.set_defaults(fn=cmd_message)
+    s = sub.add_parser("timings", help="where the time goes: each read's waits and steps, and AI time and tokens")
+    s.add_argument("--limit", type=int, default=20); s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_timings)
 
     s = sub.add_parser("items", help="list items")
     s.add_argument("--study"); s.add_argument("--tier", choices=TIERS); s.add_argument("--state")

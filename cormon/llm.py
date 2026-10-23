@@ -12,7 +12,7 @@ import os
 import time
 from typing import Any
 
-from . import db, settings
+from . import db, settings, timing
 
 _client = None
 
@@ -74,6 +74,7 @@ def structured(
     if use_cache:
         row = db.q1("SELECT response FROM llm_cache WHERE key=?", (key,))
         if row:
+            timing.llm_call(task, model, 0, cached=True)
             return json.loads(row["response"])
 
     kwargs: dict[str, Any] = dict(
@@ -91,6 +92,7 @@ def structured(
         kwargs["reasoning_effort"] = effort
 
     last_err: Exception | None = None
+    began = time.perf_counter()
     for attempt in range(4):
         try:
             resp = client().chat.completions.create(**kwargs)
@@ -101,7 +103,10 @@ def structured(
             last_err = e
             time.sleep(2 * (attempt + 1))
     else:
+        timing.llm_call(task, model, time.perf_counter() - began, cached=False, attempts=4, ok=False)
         raise RuntimeError(f"LLM call failed for {task}: {last_err}")
+    timing.llm_call(task, model, time.perf_counter() - began, cached=False, usage=getattr(resp, "usage", None),
+                    attempts=attempt + 1)
 
     db.ex(
         "INSERT OR REPLACE INTO llm_cache(key, model, response, created_at) VALUES (?,?,?,?)",

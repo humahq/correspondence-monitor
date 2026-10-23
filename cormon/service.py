@@ -39,17 +39,22 @@ def _safely(step, log) -> None:
 
 
 def tick(log=print) -> None:
+    t0 = time.perf_counter()
     config.record_config_changes()
-    poll_channels(log)  # capture continues while paused, so nothing is dropped
+    captured = poll_channels(log)  # capture continues while paused, so nothing is dropped
+    t1 = time.perf_counter()
     db.set_state("heartbeat", db.now())
     _safely(backup.daily, log)
     _safely(phi.daily, log)
     if outbox.is_paused():
         return
     _safely(pipeline.recover_messages, log)
-    for r in pipeline.process_pending(log):
+    t2 = time.perf_counter()
+    done = pipeline.process_pending(log)
+    for r in done:
         if r.get("items_created"):
             log(f"message {r['message_id']}: items {r['items_created']}")
+    t3 = time.perf_counter()
     _safely(pipeline.route_missed, log)
     if digest.due():
         digest.send()
@@ -57,9 +62,13 @@ def tick(log=print) -> None:
         log("daily digest queued")
     _safely(outbox.recover, log)
     _safely(stuck.warn, log)
+    t4 = time.perf_counter()
     res = outbox.dispatch()
     if res["sent"] or res["failed"]:
         log(f"outbox: sent {res['sent']}, failed {res['failed']}")
+    if captured or done or res["sent"] or res["failed"]:
+        log(f"timing: poll {t1 - t0:.1f}s, read {len(done)} message(s) {t3 - t2:.1f}s, "
+            f"send {time.perf_counter() - t4:.1f}s, tick {time.perf_counter() - t0:.1f}s")
 
 
 def run(once: bool = False, log=print) -> None:

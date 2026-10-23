@@ -283,6 +283,34 @@ CREATE TABLE IF NOT EXISTS llm_cache (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS message_timings (
+    id INTEGER PRIMARY KEY,
+    message_id INTEGER NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    seconds REAL,
+    steps TEXT,
+    status TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_timings_message ON message_timings(message_id);
+
+CREATE TABLE IF NOT EXISTS llm_calls (
+    id INTEGER PRIMARY KEY,
+    ts TEXT NOT NULL,
+    run_id INTEGER,
+    step TEXT,
+    task TEXT NOT NULL,
+    model TEXT NOT NULL,
+    seconds REAL NOT NULL,
+    cached INTEGER NOT NULL,
+    input_tokens INTEGER NOT NULL,
+    cached_input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    attempts INTEGER NOT NULL,
+    ok INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_llm_calls_run ON llm_calls(run_id);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY,
     ts TEXT NOT NULL,

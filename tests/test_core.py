@@ -2401,3 +2401,47 @@ def test_a_manual_is_briefed_beside_the_protocol_with_no_document_ranked_and_the
     assert any("no topic" in w for w in res["warnings"]) and any("2 site rules" in w for w in res["warnings"])
     assert coverage.last("S")["warnings"] == res["warnings"]
     assert db.q1("SELECT action FROM audit_log WHERE action='coverage_gate'")
+
+
+def test_each_ai_call_and_each_step_of_a_read_is_timed_with_its_tokens(monkeypatch):
+    from types import SimpleNamespace as NS
+
+    from cormon import llm, pipeline, timing
+
+    usage = NS(prompt_tokens=1200, completion_tokens=80, prompt_tokens_details=NS(cached_tokens=1000))
+    reply = NS(choices=[NS(message=NS(content='{"ok": true}'))], usage=usage)
+    monkeypatch.setattr(llm, "_client", NS(chat=NS(completions=NS(create=lambda **k: reply))))
+    schema = llm.obj({"ok": {"type": "boolean"}})
+    mid = db.ex("INSERT INTO messages(channel, external_id, thread_key, route, visibility, sent_at, received_at)"
+                " VALUES ('teams', 'x1', 't1', 'study', 'direct', '2026-10-23T10:00:00+00:00',"
+                " '2026-10-23T10:00:20+00:00')")
+
+    timing.start(mid)
+    timing.step("extract")
+    assert llm.structured("extract", "s", "u", schema, "x") == {"ok": True}
+    timing.step("reader")
+    assert llm.structured("extract", "s", "u", schema, "x") == {"ok": True}    # the cache answers
+    timing.finish("processed")
+    llm.structured("ingest", "s", "other", schema, "x")                        # outside a read
+
+    run = db.q1("SELECT * FROM message_timings WHERE message_id=?", (mid,))
+    assert run["status"] == "processed" and set(db.unjs(run["steps"])) == {"extract", "reader"}
+    calls = [dict(r) for r in db.q("SELECT run_id, step, task, cached, input_tokens, cached_input_tokens,"
+                                   " output_tokens, ok FROM llm_calls ORDER BY id")]
+    assert calls == [
+        {"run_id": run["id"], "step": "extract", "task": "extract", "cached": 0, "input_tokens": 1200,
+         "cached_input_tokens": 1000, "output_tokens": 80, "ok": 1},
+        {"run_id": run["id"], "step": "reader", "task": "extract", "cached": 1, "input_tokens": 0,
+         "cached_input_tokens": 0, "output_tokens": 0, "ok": 1},
+        {"run_id": None, "step": None, "task": "ingest", "cached": 0, "input_tokens": 1200,
+         "cached_input_tokens": 1000, "output_tokens": 80, "ok": 1}]
+
+    rep = timing.report()
+    m = rep["messages"][0]
+    assert (m["message_id"], m["to_capture"], m["ai_calls"], m["cache_hits"], m["input_tokens"]) == (mid, 20.0, 1, 1, 1200)
+    assert {t["task"]: t["calls"] for t in rep["tasks"]} == {"extract": 2, "ingest": 1}
+
+    with pytest.raises(Exception):
+        pipeline.process(999)                                                  # a read that fails is still timed
+    assert db.q1("SELECT status FROM message_timings WHERE message_id=999")["status"] == "error"
+    timing.step("late")                                                        # no read open: nothing happens

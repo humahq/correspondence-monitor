@@ -7,6 +7,8 @@ can't tell -> failed, so a person decides (`cormon outbox --send ID`) rather tha
 
 from __future__ import annotations
 
+import time
+
 from . import db
 from .channels import email_channel, teams_channel
 
@@ -71,7 +73,9 @@ def dispatch(limit: int = 50, only_id: int | None = None) -> dict:
             continue  # another sender has it
         r["attempts"] += 1
         try:
-            _mark_sent(r, _adapter(r["channel"]).send(r))
+            began = time.perf_counter()
+            result = _adapter(r["channel"]).send(r)
+            _mark_sent(r, result, send_seconds=round(time.perf_counter() - began, 2))
             sent += 1
         except Exception as e:
             last = r["attempts"] > len(RETRY_MINUTES)

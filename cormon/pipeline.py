@@ -7,7 +7,7 @@ import re
 from dateutil import parser as dtparser
 
 from . import (answers, asks, capture, careful, checks, config, conversation, db, events, guide, items, matching,
-               reader, routing, senders, settings, textutil, triage)
+               reader, routing, senders, settings, textutil, timing, triage)
 from .config import Study
 from . import drafting
 from .drafting import item_link, local_time
@@ -421,6 +421,18 @@ def first_writer_while_absent(msg: dict) -> str | None:
 # ---------------------------------------------------------------- main entry
 
 def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: str = "system") -> dict:
+    timing.start(msg_id)
+    status = "error"
+    try:
+        summary = _process(msg_id, use_cache=use_cache, rerun=rerun, actor=actor)
+        status = "processed"
+        return summary
+    finally:
+        timing.finish(status)
+
+
+def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
+    timing.step("load")
     msg = capture.message(msg_id)
     summary: dict = {"message_id": msg_id, "route": msg["route"], "items_created": [], "items_repeat": [],
                      "historical": 0, "hypothetical": 0, "prevented": 0, "out_of_scope": 0, "findings": 0}
@@ -434,6 +446,7 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
 
         study = config.study(msg["study_id"])
         history = capture.thread_history(msg["thread_key"], msg_id)
+        timing.step("extract")
         data = events.extract(study, msg, history, use_cache=use_cache)
         event_id = events.store(msg_id, data, source="operator-rerun" if rerun else "system")
         db.audit("event_extracted", entity_type="message", entity_id=msg_id, study_id=study.study_id,
@@ -452,12 +465,14 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                              study_id=study.study_id, attachment=att["filename"], what=a["what_it_is"])
 
         told = data["instruction_to_monitor"]
+        timing.step("instruction")
         if handle_instruction(study, msg, told) or (told or {}).get("type") in ("disregard", "cleared"):
             summary["instruction"] = told["type"]
             if not data["events"]:  # a bare "cleared #19" is an answer to us, not site news to check
                 db.ex("UPDATE messages SET status='processed' WHERE id=?", (msg_id,))
                 return summary
 
+        timing.step("events")
         if not data["trial_related"]:
             db.audit("not_trial_related", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                      summary=data["summary"])
@@ -561,6 +576,7 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 good_news.append((event, pid, base))
 
         if reader_route:
+            timing.step("reader")
             found, trace = reader.check(study, msg, corpus, use_cache=use_cache)
             db.audit("reader_checked", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                      trace=trace)
@@ -591,6 +607,7 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 db.audit("sweep_finding_added", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                          rule_id=f.rule["id"], participant_id=pid, reasoning=f.reasoning)
 
+        timing.step("alerts")
         candidates = _drop_restatements(candidates, msg_id)
         summary["findings"] = len(candidates)
         groups: dict[tuple, list[dict]] = {}
@@ -687,6 +704,7 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
             else:
                 summary["items_repeat"].append(item_id)
 
+        timing.step("asks")
         turn = capture.turn(msg)
         summary["turn"] = turn
         text = f"{msg.get('subject') or ''}\n\n{msg.get('body_text') or ''}"
@@ -708,6 +726,7 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
             except Exception as e:
                 db.audit("request_sort_failed", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                          error=str(e)[:500])
+        timing.step("answers")
         if reader_route and not rerun:
             try:  # an answer that fails must not stop the problems from going out
                 said = answers.reply(study, msg, text, use_cache=use_cache,
@@ -718,11 +737,13 @@ def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: 
                 summary["answer_failed"] = True
                 db.audit("question_answer_failed", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                          error=str(e)[:500])
+        timing.step("acknowledge")
         if (turn in ("direct", "addressed") and not rerun and not summary.get("answered")
                 and not summary.get("answer_failed") and not summary.get("instruction")
                 and not (declined and declined["only"] and not summary["items_created"])):
             _acknowledge(study, msg, summary, data["trial_related"])
 
+        timing.step("finish")
         if rerun:
             previous = db.q("SELECT id FROM items WHERE first_message_id=? AND kind='finding'", (msg_id,))
             for row in previous:

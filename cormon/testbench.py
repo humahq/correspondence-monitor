@@ -386,9 +386,36 @@ def write_out(out: Path, cases: list[Case], summary: dict) -> None:
                         " | ".join(i.get("reasoning") or "" for i in c.result["items"]), " | ".join(c.result["sent"]),
                         c.result.get("message_id") or "", ",".join(str(i["id"]) for i in c.result["items"]),
                         c.result["seconds"], c.result["status"]])
-    from . import llm
+    from . import llm, timing
     summary["llm_usage"] = llm.USAGE
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=list))
+    (out / "timings.json").write_text(json.dumps(timing.report(limit=len(cases) * 2), indent=2))
+
+
+def time_report() -> str:
+    """Where this run's time went: the average read, each step's share, and the slowest AI tasks."""
+    from . import timing
+    rep = timing.report(limit=100000)
+    reads = [m for m in rep["messages"] if m["seconds"] is not None]
+    if not reads:
+        return "Time: no reads recorded"
+    avg = lambda xs: sum(xs) / len(xs) if xs else 0  # noqa: E731
+    steps: dict[str, list[float]] = {}
+    for m in reads:
+        for k, v in m["steps"].items():
+            steps.setdefault(k, []).append(v)
+    lines = [f"Time: {len(reads)} reads, average {avg([m['seconds'] for m in reads]):.1f}s, "
+             f"longest {max(m['seconds'] for m in reads):.1f}s; "
+             f"average {avg([m['ai_calls'] for m in reads]):.1f} AI calls and "
+             f"{avg([m['input_tokens'] for m in reads]):,.0f} input / {avg([m['output_tokens'] for m in reads]):,.0f}"
+             f" output tokens per read",
+             "  average seconds per step: " + ", ".join(
+                 f"{k} {sum(v) / len(reads):.1f}" for k, v in sorted(steps.items(), key=lambda kv: -sum(kv[1]))
+                 if sum(v) / len(reads) >= 0.05),
+             "  slowest AI tasks (total seconds, calls, average): " + ", ".join(
+                 f"{t['task']} {t['avg_seconds'] * (t['calls'] - t['cache_hits']):.0f}s/{t['calls'] - t['cache_hits']}"
+                 f"/{t['avg_seconds']:.1f}s" for t in rep["tasks"][:6] if t["avg_seconds"])]
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------- entry points
@@ -428,6 +455,7 @@ def child_main(argv: list[str]) -> None:
               f"{ {True: 'right', False: 'WRONG', None: ''}[v]}", flush=True)
     summary = score(cases)
     print("\n" + report(cases, summary))
+    print("\n" + time_report())
     if args.out:
         write_out(Path(args.out), cases, summary)
         print(f"\nwrote {Path(args.out) / 'results.csv'} and summary.json")
