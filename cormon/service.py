@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import threading
 import time
 import traceback
 
 from . import backup, capture, config, db, digest, outbox, phi, pipeline, settings, stuck, webview
-from .channels import email_channel, teams_channel
+from .channels import chat_events, email_channel, teams_channel
 
 
 def poll_channels(log=print) -> int:
@@ -62,6 +63,7 @@ def tick(log=print) -> None:
         log("daily digest queued")
     _safely(outbox.recover, log)
     _safely(stuck.warn, log)
+    _safely(chat_push, log)
     t4 = time.perf_counter()
     res = outbox.dispatch()
     if res["sent"] or res["failed"]:
@@ -71,22 +73,37 @@ def tick(log=print) -> None:
             f"send {time.perf_counter() - t4:.1f}s, tick {time.perf_counter() - t0:.1f}s")
 
 
+def chat_push(log=print) -> None:
+    """Keeps the Google Chat push subscription alive (renewed well before Google ends it)."""
+    if chat_events.enabled():
+        chat_events.ensure(teams_channel().http, log)
+
+
 def run(once: bool = False, log=print) -> None:
     server = None if once else webview.start_background()
     if server:
         log(f"item pages on {settings.get('web.base_url')}")
     db.audit("listener_started", entity_type="service", entity_id="listener", once=once)
     interval = int(settings.get("system.poll_seconds", 20))
+    wake = threading.Event()   # set by the Chat push listener: a message was posted, read now
+    pushed = None
+    if not once and chat_events.enabled():
+        pushed = chat_events.Listener(wake, log)
+        pushed.start()
+        log("chat push listener on; the poll stays as a fallback")
     try:
         while True:
+            wake.clear()
             try:
                 tick(log)
             except Exception:
                 log(traceback.format_exc())
             if once:
                 break
-            time.sleep(interval)
+            wake.wait(interval)
     except KeyboardInterrupt:
         pass
     finally:
+        if pushed:
+            pushed.stop.set()
         db.audit("listener_stopped", entity_type="service", entity_id="listener")

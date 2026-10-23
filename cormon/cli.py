@@ -662,6 +662,19 @@ def cmd_chat_spaces(args):
     table(GoogleChatChannel().list_spaces(), [("name", "name", 30), ("type", "type", 16), ("space", "space", 24)])
 
 
+def cmd_chat_events(args):
+    from .channels import chat_events
+    from .channels.gchat import GoogleChatChannel
+
+    if not (chat_events.topic() and chat_events.subscription()):
+        sys.exit("set gchat.events.topic and gchat.events.subscription in config/settings.yaml first")
+    res = chat_events.ensure(GoogleChatChannel().http, force=True)
+    print(f"Workspace subscription {res['name']}: {res['state']}, until {res['expires']} ({res['action']})")
+    n = chat_events.pull(chat_events.pubsub_session(), wait=False)
+    print(f"Pub/Sub pull from {chat_events.subscription()}: works, {n} note(s) waiting (taken)")
+    print(f"last note: {db.get_state('gchat_event_at') or 'none yet'}")
+
+
 def cmd_gmail(args):
     from .channels.gmail import GmailChannel
 
@@ -855,6 +868,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("teams-channels", help="list Teams channels the bot can see (for study.yaml)").set_defaults(fn=cmd_teams)
     sub.add_parser("chat-spaces", help="list Google Chat spaces the bot is in (for study.yaml)").set_defaults(
         fn=cmd_chat_spaces)
+    sub.add_parser("chat-events", help="make or renew the Google Chat push subscription and check the Pub/Sub pull"
+                   ).set_defaults(fn=cmd_chat_events)
     s = sub.add_parser("gmail", help="Gmail setup helpers"); s.add_argument("action", choices=["send-as", "add-aliases"])
     s.set_defaults(fn=cmd_gmail)
     return p

@@ -2445,3 +2445,119 @@ def test_each_ai_call_and_each_step_of_a_read_is_timed_with_its_tokens(monkeypat
         pipeline.process(999)                                                  # a read that fails is still timed
     assert db.q1("SELECT status FROM message_timings WHERE message_id=999")["status"] == "error"
     timing.step("late")                                                        # no read open: nothing happens
+
+
+class _FakePush:
+    """Workspace Events and Pub/Sub as far as the push listener uses them."""
+
+    def __init__(self):
+        self.subs, self.calls, self.notes, self.acked, self.made = {}, [], [], [], 0
+
+    def _r(self, status=200, body=None):
+        from types import SimpleNamespace as NS
+
+        def check():
+            if status >= 400:
+                raise RuntimeError(status)
+        return NS(status_code=status, json=lambda: body or {}, text=str(body), raise_for_status=check)
+
+    def get(self, url, params=None, timeout=None):
+        self.calls.append(("get", url))
+        if url.endswith("/subscriptions"):
+            return self._r(body={"subscriptions": list(self.subs.values())})
+        name = url.split("/v1/", 1)[1]
+        return self._r(body=self.subs[name]) if name in self.subs else self._r(404)
+
+    def post(self, url, json=None, timeout=None, params=None):
+        self.calls.append(("post", url))
+        if url.endswith("/subscriptions"):
+            self.made += 1
+            name = f"subscriptions/s{self.made}"
+            self.subs[name] = {"name": name, "state": "ACTIVE", "expireTime": "2026-10-30T00:00:00Z",
+                               "notificationEndpoint": json["notificationEndpoint"]}
+            return self._r(body={"name": "operations/1", "done": True, "response": self.subs[name]})
+        if url.endswith(":pull"):
+            got, self.notes = self.notes, []
+            return self._r(body={"receivedMessages": [{"ackId": a} for a in got]})
+        if url.endswith(":acknowledge"):
+            self.acked += json["ackIds"]
+            return self._r()
+        raise AssertionError(url)
+
+    def patch(self, url, params=None, json=None, timeout=None):
+        self.calls.append(("patch", url))
+        name = url.split("/v1/", 1)[1]
+        self.subs[name]["expireTime"] = "2026-10-31T00:00:00Z"
+        return self._r(body={"name": "operations/2", "done": True, "response": self.subs[name]})
+
+    def delete(self, url, timeout=None):
+        self.calls.append(("delete", url))
+        self.subs.pop(url.split("/v1/", 1)[1], None)
+        return self._r()
+
+
+def test_the_chat_push_subscription_is_made_renewed_and_made_again_when_google_ends_it(monkeypatch):
+    from datetime import datetime, timezone
+
+    from cormon.channels import chat_events
+
+    conf = {"channels.teams": "gchat", "gchat.events.topic": "projects/p/topics/chat",
+            "gchat.events.subscription": "projects/p/subscriptions/chat-vm"}
+    monkeypatch.setattr(chat_events.settings, "get", lambda k, d=None: conf.get(k, d))
+    g = _FakePush()
+    assert chat_events.enabled()
+
+    res = chat_events.ensure(g, log=lambda *a: None)
+    assert res["action"] == "made" and db.get_state("gchat_events_sub") == "subscriptions/s1"
+    assert chat_events.ensure(g, log=lambda *a: None) == {"action": "checked lately"}   # not every tick
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 28, tzinfo=timezone.utc)                       # two days before the end
+    monkeypatch.setattr(chat_events, "datetime", Clock)
+    assert chat_events.ensure(g, log=lambda *a: None, force=True)["action"] == "renewed"
+    assert chat_events.ensure(g, log=lambda *a: None, force=True)["action"] == "ok"     # three days left now
+
+    g.subs["subscriptions/s1"]["state"] = "SUSPENDED"                                 # e.g. a new sign-in
+    res = chat_events.ensure(g, log=lambda *a: None, force=True)
+    assert res["action"] == "made" and res["name"] == "subscriptions/s2" and "subscriptions/s1" not in g.subs
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='chat_events_ended'")
+
+    monkeypatch.setitem(conf, "gchat.events.topic", "")
+    assert not chat_events.enabled()                                                  # poll only
+
+
+def test_a_chat_push_note_wakes_the_service_and_a_failing_pull_leaves_the_poll(monkeypatch):
+    import threading
+    import time
+
+    from cormon.channels import chat_events
+
+    conf = {"gchat.events.subscription": "projects/p/subscriptions/chat-vm"}
+    monkeypatch.setattr(chat_events.settings, "get", lambda k, d=None: conf.get(k, d))
+    g = _FakePush()
+    g.notes = ["a1", "a2"]
+    assert chat_events.pull(g, wait=False) == 2 and g.acked == ["a1", "a2"]
+    assert chat_events.pull(g, wait=False) == 0
+
+    wake = threading.Event()
+    g.notes = ["a3"]
+    listener = chat_events.Listener(wake, log=lambda *a: None, session=g)
+    listener.start()
+    assert wake.wait(5)
+    listener.stop.set()
+    listener.join(5)
+    assert g.acked[-1] == "a3"
+
+    class Broken:
+        def post(self, *a, **k):
+            raise RuntimeError("403 no permission")
+    errors = []
+    listener = chat_events.Listener(threading.Event(), log=errors.append, session=Broken())
+    listener.start()
+    time.sleep(1.5)                                                                   # retried, recorded once
+    listener.stop.set()
+    listener.join(5)
+    assert len(errors) == 1 and "regular poll goes on" in errors[0]
+    assert len(db.q("SELECT 1 FROM audit_log WHERE action='chat_events_error'")) == 1

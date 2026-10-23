@@ -85,6 +85,12 @@ gchat:
   token_file: secrets/gchat_token.json
   # Direct messages to the bot account are read as well.
   read_direct_chats: true
+  # Push: Google sends a note to this Pub/Sub topic when a message is posted, so the bot reads Chat at once
+  # instead of at the next poll. Empty: poll only. See cormon/channels/chat_events.py and `cormon chat-events`.
+  events:
+    topic: ""          # projects/PROJECT/topics/TOPIC
+    subscription: ""   # projects/PROJECT/subscriptions/SUBSCRIPTION (pull)
+    key_file: ""       # optional service account key for Pub/Sub; empty: the machine's own account
 
 digest:
   # Local time the daily digest goes out, chosen so it is read at the start of the day.
