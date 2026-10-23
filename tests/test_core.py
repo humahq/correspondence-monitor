@@ -2329,6 +2329,28 @@ def test_a_disagreement_is_confirmed_against_both_sides():
     assert {"lab:4"} <= {i["id"] for i in reader._proof(ai, [], sources)}
 
 
+def test_a_reworded_brief_quote_is_traced_to_its_sentence_and_a_preference_is_soft():
+    from cormon import reader as r
+    sec = {"id": "g:s010", "kind": "section", "text": (
+        "Notes:\n17. PGI-C should be completed by the participant prior to other clinical assessments whenever possible."
+        "\n18. CGI-C should be completed after all clinical assessments are completed by the investigator whenever "
+        "possible.\n19. The assessments listed must be completed.")}
+    brief = {"id": "brief:assessments", "kind": "brief", "text": (
+        "- Perform CGI-C at Week 16. [g:s010]\n"
+        "- The investigator should complete CGI-C after all clinical assessments whenever possible. [g:s010]")}
+    f = {"problem": "CGI-C done first", "why": "CGI-C comes after the clinical assessments", "email_quote": "CGI-C first"}
+    hit = r._via_brief("The investigator should complete CGI-C after all clinical assessments whenever possible.",
+                       [brief], [sec], f)
+    assert hit[0] is sec and hit[1].startswith("CGI-C should be completed")
+    assert r._soft(*hit) == "whenever possible"
+    assert r._soft(sec, "19. The assessments listed must be completed.") == ""
+    listed = {"text": "Visits are monthly.\nThe following are listed in preferred order to be completed:\n"
+                      "Collect vital signs\nPerform SVC\nAdminister ALSFRS-R"}
+    assert r._soft(listed, "Perform SVC") == "preferred"
+    prose = {"text": "Order:\nVisits are monthly.\nVital capacity should be performed at the start of a visit."}
+    assert r._soft(prose, "Vital capacity should be performed at the start of a visit.") == ""
+
+
 def test_a_finding_resting_on_a_brief_points_to_the_section_the_brief_cites(monkeypatch):
     from cormon import guide, reader
     monkeypatch.setattr(guide, "documents", lambda study: ["master", "regimen_g"])

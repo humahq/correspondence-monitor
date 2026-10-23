@@ -681,6 +681,8 @@ allowance elsewhere in the sections. Write your reasons first, then the verdict:
 - rejected: the protocol allows it, the requirement is not in the text, the finding misreads the email or the
   numbers, or it applies a rule for a different visit, period or kind of participant.
 - unsure: the protocol is genuinely ambiguous on this point. A missing fact alone is not a reason to be unsure.
+  No document outranks another: when two passages in the sections ask for things that cannot both be done, it is
+  unsure, and the reasons name both passages.
 When a rule turns on a clinical judgement the protocol leaves to the site or medical monitor (for example whether a
 listed medicine has a narrow therapeutic index), answer it from standard clinical knowledge where that is clear. The
 judgement itself is required even if consulting the medical monitor "may" be done: going ahead with no sign anyone
@@ -851,6 +853,56 @@ def _exact_words(quote: str, proof: list[dict], sources: list[dict], cited: str,
     if _nums(quote) and not any(_nums(quote) & _nums(k) for k in keep):
         return None  # the rule's numbers are not in what was found: it is about something else
     return best[0], " ... ".join(dict.fromkeys(keep))
+
+
+def _sentences(text: str) -> list[str]:
+    return [s.strip() for ln in text.splitlines() for s in re.split(r"(?<=[.!?])\s+", ln) if s.strip()]
+
+
+def _via_brief(quote: str, proof: list[dict], sources: list[dict], f: dict) -> tuple[dict, str] | None:
+    """A quote of a brief line, which rewords the documents, traced to the sentence it was written from in the
+    section the line cites: most of the line's words and all its numbers must be in that sentence."""
+    by_id = {s["id"]: s for s in sources + proof if s["kind"] not in _OWN_TEXT}
+    about = _about(f)
+    for own in (i for i in proof if i["kind"] in _OWN_TEXT):
+        for line in own["text"].splitlines():
+            tag = re.search(r"\[([\w.-]+:[\w.:-]+)\]\s*$", line)
+            text = _TAG.sub("", line).lstrip("- ").strip()
+            if not tag or tag.group(1) not in by_id or not textutil.find_quote(_TAG.sub("", quote), line):
+                continue
+            sec, want = by_id[tag.group(1)], _words(text)
+            best = max(_sentences(sec["text"]), key=lambda s: len(want & _words(s)), default="")
+            if (want and len(want & _words(best)) >= 0.6 * len(want) and _nums(text) <= _nums(best)
+                    and _fits(text, best, about)):
+                return sec, best
+    return None
+
+
+_SOFT = re.compile(r"\b(?:whenever|wherever|when|where|if) possible\b|\bpreferr?(?:ed|ably|able)\b|\bideally\b", re.I)
+
+
+def _soft(sec: dict | None, quote: str) -> str:
+    """The words making a rule a preference ("whenever possible", "listed in preferred order"), in the quoted
+    sentence or in the line that introduces the list it is in."""
+    if not sec or not quote:
+        return ""
+    text = sec.get("text") or ""
+    first = quote.split(" ... ")[0]
+    span = textutil.find_quote(first, text)
+    if not span:
+        return (m.group(0) if (m := _SOFT.search(quote)) else "")
+    start = text.rfind("\n", 0, span[0]) + 1
+    end = text.find("\n", span[1])
+    near = text[start:end if end >= 0 else len(text)]
+    intro = ""
+    for ln in reversed(text[:start].splitlines()[-30:]):  # up the list to its lead-in; prose ends the search
+        if ln.rstrip().endswith(":"):
+            intro = ln
+            break
+        if ln.rstrip().endswith((".", "!", "?")) and not _LIST_LINE.match(ln):
+            break
+    m = _SOFT.search(near) or _SOFT.search(intro)
+    return m.group(0) if m else ""
 
 
 def _norm(s: str) -> str:
@@ -1364,6 +1416,9 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
                      or _exact_words(found[1] if found else c["protocol_words"], proof, sources, f["section_id"], f)
                      or (not found and _exact_words(f["protocol_quote"], proof, sources, f["section_id"], f))
                      or found)
+            traced = None if found else (_via_brief(f["protocol_quote"], proof, sources, f)
+                                         or (c["protocol_words"] and _via_brief(c["protocol_words"], proof, sources, f)))
+            found = found or traced
             rec["quote_found"] = bool(found)
             rec["proof"] = [i["id"] for i in proof if i["kind"] == "section"]
             rec["confirm"] = c
@@ -1376,8 +1431,9 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
             elif c["verdict"] == "rejected":
                 rec["outcome"] = "rejected"
                 continue
-            certainty = ("clear" if c["verdict"] == "confirmed" and found and not doubt and not f.get("disputed")
-                         else "unsure")
+            certainty = ("clear" if c["verdict"] == "confirmed" and found and not traced and not doubt
+                         and not f.get("disputed") else "unsure")  # a sentence matched through a brief's rewording
+            # is shown and keeps the finding, but is not proof enough for a firm alert
             rec["outcome"] = certainty
             kept.append(f)
             if g is not None:
@@ -1400,6 +1456,12 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
                 sec = _cited_section(study, sec, _TAG.sub("", f["protocol_quote"]), sources)
             sec = sec or {"id": f["section_id"], "doc_id": guide.documents(study)[0], "title": "", "number": "",
                           "text": "", "kind": "section", "path": ""}
+            soft = _soft(sec, quote) if found else ""
+            if soft:
+                certainty = rec["outcome"] = "unsure"
+                rec["soft"] = soft
+                f = dict(f, next_step=f["next_step"].rstrip(". ") + f'. The protocol asks for this "{soft}": if it '
+                         "could not be done, note why in the source; that is not a protocol deviation.")
             pid = part["participant"] or None
             event = {"participant_id": pid, "event_type": "other", "description": f["problem"],
                      "quote": f["email_quote"], "temporality": "current" if f["status"] == "done" else "planned",
@@ -1417,10 +1479,12 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
                        "date_notes": notes[:8],
                        "problem_key": hashlib.sha1(f"{_norm(f['email_quote'])}|{sec['id']}".encode()).hexdigest()[:10],
                        "unsure_reason": None if certainty == "clear" else
-                       ("the code's date check put a visit date mentioned here inside its window" if doubt else
+                       (f'the protocol asks for this only "{soft}"' if soft else
+                        "the code's date check put a visit date mentioned here inside its window" if doubt else
                         c["reasons"] if c["verdict"] == "unsure" else
                         f["why"] if f["certainty"] == "cannot_tell" else
-                        "the exact words were not found in the protocol")}))
+                        "the protocol sentence shown was matched through the bot's summary, not word for word"
+                        if traced else "the exact words were not found in the protocol")}))
         if guide.checker(study).get("duty_table"):  # off until it clears its pass mark: 40.5/49 and 11 false alarms
             pt["duties"] = _attach_duties(study, part, said, notes, email, out, meta, start, use_cache)
         if log:
