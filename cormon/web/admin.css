@@ -41,6 +41,8 @@ a.card { display: block; color: inherit; transition: border-color .15s, box-shad
 a.card:hover { text-decoration: none; border-color: #c9d6ff; box-shadow: 0 2px 8px rgba(47,91,234,.08); }
 a.card span { display: block; }
 h2.period { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 4px 0 10px; }
+.head .state { text-align: right; align-self: flex-start; }
+.head .state .small { margin-top: 4px; }
 .pad-h { padding: 16px 20px 4px; }
 .pad { padding: 10px 20px 14px; }
 .bad-text { color: var(--red); }

@@ -134,8 +134,12 @@
       const peak = Math.max(1, ...d.days.map((x) => x.messages));
       return html`
       <div class="head"><div><h1>Study monitor</h1><div class="sub">What came in and what the bot did. Pick the days
-        to look at; click any number to see those messages or alerts.</div></div>
-        <${Badge} cls=${d.bot.state} dot>${{ running: "Running", paused: "Paused", down: "Not responding" }[d.bot.state]}<//></div>
+        to look at; click any number to see those messages or alerts.</div>
+        <div class="gap-top"><a href="/admin/alerts" onClick=${linkTo("/admin/alerts")}><b>${d.open_now} open
+          alert${d.open_now === 1 ? "" : "s"}</b></a>${" "}${d.open_by_tier.map((x) => html`<${Badge} key=${x.tier}
+          cls=${x.tier}>${x.label}: ${x.n}<//> `)}</div></div>
+        <div class="state"><${Badge} cls=${d.bot.state} dot>${{ running: "Running", paused: "Paused", down: "Not responding" }[d.bot.state]}<//>
+          <div class="small muted">checked in ${d.bot.checkin.ago}</div></div></div>
       <div class="filters"><${Period} q=${q} set=${set} /></div>
       <h2 class="period">${d.period.label}</h2>
       <div class="cards">
@@ -155,18 +159,6 @@
           <td><${Count} n=${x.safety} href=${alerts({ date: x.date }, "safety")} cls="safety" /></td>
           <td><${Count} n=${x.answered} href=${msgs({ date: x.date })} /></td></tr>`)}</tbody></table>
         ${d.capped && html`<div class="small muted pad">Showing the latest 90 days. Pick a day above to see an older one.</div>`}</div>`}
-      <div class="grid2">
-        <div class="panel"><h2>Right now</h2><dl class="facts">
-          <dt>Last checked in</dt><dd>${d.bot.checkin.ago}</dd>
-          <dt>Last message received</dt><dd>${d.bot.last_message.ago}</dd>
-          <dt>Open alerts</dt><dd><a href="/admin/alerts" onClick=${linkTo("/admin/alerts")}><b>${d.open_now}</b></a>
-            ${" "}${d.open_by_tier.map((x) => html`<${Badge} key=${x.tier} cls=${x.tier}>${x.label}: ${x.n}<//> `)}</dd></dl></div>
-        <div class="panel"><h2>Speed (last ${d.speed.messages} messages)</h2><dl class="facts">
-          <dt>Typical time to the bot's first reply</dt>
-          <dd><b>${d.speed.first_reply == null ? "no data yet" : d.speed.first_reply + " s"}</b></dd>
-          <dt>Typical time to read and check one message</dt>
-          <dd><b>${d.speed.read == null ? "no data yet" : d.speed.read + " s"}</b></dd></dl></div>
-      </div>
       <div class="panel"><h2>Problems</h2>${d.problems.length
         ? html`<ul class="problems">${d.problems.map((p, i) => html`<li key=${i}>${p.link
             ? html`<a href=${p.link} onClick=${p.link.startsWith("/admin") ? linkTo(p.link) : undefined}>${p.text}</a>`

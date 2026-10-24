@@ -6,14 +6,13 @@ from __future__ import annotations
 
 import html
 import re
-import statistics
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
-from . import capture, config, coverage, db, outbox, settings, timing
+from . import capture, config, coverage, db, outbox, settings
 from .drafting import local_time
 from .triage import TIER_LABELS
 
@@ -221,11 +220,6 @@ def _problems() -> list[dict]:
     return out
 
 
-def _median(xs) -> float | None:
-    xs = [x for x in xs if x is not None]
-    return round(statistics.median(xs), 1) if xs else None
-
-
 MAX_DAYS = 90
 COUNTS = ("messages", "email", "chat", "problems", "safety", "answered", "errors")
 
@@ -282,7 +276,6 @@ def home(query: dict | None = None) -> dict:
         except ValueError:
             pass
     p = period(query or {}, "7")
-    rep = timing.report(20)["messages"]
     return {
         "bot": {"state": "paused" if outbox.is_paused() else "running" if fresh else "down",
                 "checkin": _when(beat), "last_message": _when(db.q1("SELECT MAX(received_at) AS at FROM messages")["at"]),
@@ -294,8 +287,6 @@ def home(query: dict | None = None) -> dict:
         "open_now": db.q1("SELECT COUNT(*) AS n FROM items WHERE state='open' AND counts=1")["n"],
         "open_by_tier": [{"tier": r["tier"], "label": TIER_LABELS.get(r["tier"], r["tier"]), "n": r["n"]} for r in db.q(
             "SELECT tier, COUNT(*) n FROM items WHERE state='open' AND counts=1 GROUP BY tier")],
-        "speed": {"messages": len(rep), "first_reply": _median(m["to_first_reply"] for m in rep),
-                  "read": _median(m["seconds"] for m in rep)},
         "problems": _problems(),
     }
 
