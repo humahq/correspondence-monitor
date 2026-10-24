@@ -43,6 +43,8 @@ a.card span { display: block; }
 h2.period { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 4px 0 10px; }
 .head .state { text-align: right; align-self: flex-start; }
 .head .state .small { margin-top: 4px; }
+.team-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 16px 20px 12px; }
+.team-head h2 { margin-bottom: 4px; }
 .pad-h { padding: 16px 20px 4px; }
 .pad { padding: 10px 20px 14px; }
 .bad-text { color: var(--red); }

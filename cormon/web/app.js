@@ -135,31 +135,35 @@
       <div class="head"><div><h1>Study monitor</h1><div class="sub">What came in and what the bot did. Pick the days
         to look at; click any number to see those messages or alerts.</div>
         <div class="gap-top"><a href="/admin/alerts" onClick=${linkTo("/admin/alerts")}><b>${d.open_now} open
-          alert${d.open_now === 1 ? "" : "s"}</b></a>${" "}${d.open_by_tier.map((x) => html`<${Badge} key=${x.tier}
-          cls=${x.tier}>${x.label}: ${x.n}<//> `)}</div></div>
+          alert${d.open_now === 1 ? "" : "s"}</b></a>${" "}${d.open_by_tier.map((x) => html`<a key=${x.tier}
+          href=${"/admin/alerts?tier=" + x.tier} onClick=${linkTo("/admin/alerts?tier=" + x.tier)}><${Badge}
+          cls=${x.tier}>${x.label}: ${x.n}<//></a> `)}</div></div>
         <div class="state"><${Badge} cls=${d.bot.state} dot>${{ running: "Running", paused: "Paused", down: "Not responding" }[d.bot.state]}<//>
           <div class="small muted">checked in ${d.bot.checkin.ago}</div></div></div>
       <div class="filters"><${Period} q=${q} set=${set} /></div>
       <h2 class="period">${d.period.label}</h2>
       <div class="cards">
-        ${card(t.messages, "Messages", msgs(p), t.messages > 0 && html`<span class="small muted">${t.email} email · ${t.chat} chat${t.errors
-          ? html` · <span class="bad-text">${t.errors} could not be read</span>` : ""}</span>`)}
-        ${card(t.problems, "Protocol problems found", alerts(p, "protocol"), html`<span class="small muted">each one opens
-          an alert</span>`)}
+        ${card(t.messages, "Messages", msgs(p), t.messages > 0 && html`<span class="small muted">${t.email} email · ${t.chat} chat</span>`)}
+        ${card(t.problems, "Protocol problems found", alerts(p, "protocol"))}
         ${card(t.safety, "Patient safety messages", alerts(p, "safety"), html`<span class="small muted">not reviewed by
           the bot; the sender is told to contact the medical monitor</span>`)}
-        ${card(t.answered, "Questions answered", msgs(p))}</div>
+        ${card(t.answered, "Questions answered", msgs({ ...p, did: "answered" }))}</div>
+      ${t.errors > 0 && html`<div class="error gap-bottom"><a href=${msgs({ ...p, did: "error" })}
+        onClick=${linkTo(msgs({ ...p, did: "error" }))}>${t.errors} message${t.errors === 1 ? "" : "s"} in this period could
+        not be read by the bot</a></div>`}
       ${d.days.length > 0 && html`<div class="panel table"><h2 class="pad-h">Day by day</h2><table class="days">
         <thead><tr><th>Day</th><th>Messages</th><th>Protocol problems found</th><th>Patient safety messages</th>
           <th>Questions answered</th></tr></thead>
         <tbody>${d.days.map((x) => html`<tr key=${x.date} class=${x.messages || x.problems || x.safety ? "" : "quiet"}>
           <td class="nowrap">${x.label}</td>
           <td><${Count} n=${x.messages} href=${msgs({ date: x.date })} />
-            ${x.errors > 0 && html` <${Badge} cls="bad">${x.errors} not read<//>`}</td>
+            ${x.errors > 0 && html` <a href=${msgs({ date: x.date, did: "error" })} onClick=${linkTo(msgs({ date: x.date, did: "error" }))}><${Badge}
+              cls="bad">${x.errors} not read<//></a>`}</td>
           <td><${Count} n=${x.problems} href=${alerts({ date: x.date }, "protocol")} /></td>
           <td><${Count} n=${x.safety} href=${alerts({ date: x.date }, "safety")} cls="red" /></td>
-          <td><${Count} n=${x.answered} href=${msgs({ date: x.date })} /></td></tr>`)}</tbody></table>
+          <td><${Count} n=${x.answered} href=${msgs({ date: x.date, did: "answered" })} /></td></tr>`)}</tbody></table>
         ${d.capped && html`<div class="small muted pad">Showing the latest 90 days. Pick a day above to see an older one.</div>`}</div>`}
+      <${Team} team=${d.team} />
       <div class="panel"><h2>Is anything wrong with the bot?</h2>${d.problems.length
         ? html`<ul class="problems">${d.problems.map((p, i) => html`<li key=${i}>${p.link
             ? html`<a href=${p.link} onClick=${p.link.startsWith("/admin") ? linkTo(p.link) : undefined}>${p.text}</a>`
@@ -167,9 +171,28 @@
         : html`<div class="status"><${Badge} cls="ok" dot>None<//> Nothing is stuck or failed.</div>`}</div>`; }}<//>`;
   }
 
+  function Team({ team }) {
+    const main = team[0];
+    const [id, setId] = useState(main ? main.study : "");
+    const s = team.find((x) => x.study === id);
+    if (!s) return html`<div class="panel"><h2>Study team</h2><div class="error">No study files were found on the
+      server, so the study team cannot be shown.</div></div>`;
+    return html`<div class="panel table"><div class="team-head">
+        <div><h2>Study team</h2><div class="small muted">${s.short_name} · ${s.title}</div>
+          <div class="small">Sponsor: <b>${s.sponsor || "not set"}</b> · Sites: ${s.sites.join(", ") || "none listed"}</div></div>
+        ${team.length > 1 && html`<${Select} value=${id} onChange=${setId}
+          options=${team.map((x) => ({ value: x.study, label: x.study + " · " + x.short_name }))} />`}</div>
+      ${s.people.length ? html`<table><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Sites</th></tr></thead>
+        <tbody>${s.people.map((p, i) => html`<tr key=${i}><td>${p.name}</td><td>${p.roles.join(", ")}</td>
+          <td>${p.email ? html`<a href=${"mailto:" + p.email}>${p.email}</a>` : html`<span class="muted">no email on file</span>`}</td>
+          <td class="small">${p.sites}</td></tr>`)}</tbody></table>`
+        : html`<div class="empty pad">No people are listed for this study.</div>`}
+      <div class="small muted pad">Exactly as listed in the study's settings file on the server.</div></div>`;
+  }
+
   // ------------------------------------------------------------------ messages
   function Messages({ options }) {
-    const [q, set] = useQuery({ days: "7", date: "", channel: "", study: "", before: "" });
+    const [q, set] = useQuery({ days: "7", date: "", channel: "", study: "", did: "", before: "" });
     const state = useData("/admin/api/messages?" + new URLSearchParams(q));
     const studies = [{ value: "", label: "All studies" }].concat(options.studies.map((s) => ({ value: s, label: s })));
     return html`
@@ -180,6 +203,8 @@
         <${Select} value=${q.channel} onChange=${(v) => set("channel", v)} options=${[{ value: "", label: "Chat and email" },
           { value: "teams", label: "Chat only" }, { value: "email", label: "Email only" }]} />
         <${Select} value=${q.study} onChange=${(v) => set("study", v)} options=${studies} />
+        <${Select} value=${q.did} onChange=${(v) => set("did", v)} options=${[{ value: "", label: "Everything" },
+          { value: "answered", label: "Questions answered" }, { value: "error", label: "Could not be read" }]} />
       </div>
       <${Loading} state=${state}>${(d) => html`<div class="panel table">${d.rows.length ? html`<table>
         <thead><tr><th>Received</th><th>From</th><th>Message</th><th>What the bot did</th></tr></thead>
@@ -289,7 +314,7 @@
 
   // ------------------------------------------------------------------ alerts
   function Alerts({ options }) {
-    const [q, set] = useQuery({ state: "open", days: "all", date: "", type: "", tier: "", before: "" });
+    const [q, set] = useQuery({ state: "open", days: "all", date: "", type: "", tier: "", person: "", before: "" });
     const state = useData("/admin/api/alerts?" + new URLSearchParams(q));
     return html`
       <div class="head"><div><h1>Alerts</h1><div class="sub">Problems the bot raised. Click one to see its message and
@@ -299,6 +324,7 @@
           { value: "cleared", label: "Cleared" }, { value: "suppressed", label: "Disregarded" }, { value: "all", label: "All alerts" }]} />
         <${Select} value=${q.type} onChange=${(v) => set("type", v)} options=${options.types} />
         <${Select} value=${q.tier} onChange=${(v) => set("tier", v)} options=${options.tiers} />
+        <${Select} value=${q.person} onChange=${(v) => set("person", v)} options=${options.people} />
         <${Period} q=${q} set=${set} />
       </div>
       <${Loading} state=${state}>${(d) => html`<div class="panel table">${d.rows.length ? html`<table>

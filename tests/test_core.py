@@ -1998,6 +1998,31 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
             "An earlier error was looked at and resolved"]
         db.ex("UPDATE messages SET status='error' WHERE id=10")
         assert len(data("/admin/api/alerts?state=all&days=1")["rows"]) == 2
+        db.audit("question_answered", entity_type="message", entity_id=9)
+        for q in ("", "?days=1", "?days=all", f"?date={old_day}"):
+            h = data("/admin/api/home" + q)
+            p = q.lstrip("?") or "days=7"
+            n = lambda path: len(data(path)["rows"])
+            assert h["totals"]["messages"] == n(f"/admin/api/messages?{p}"), q
+            assert h["totals"]["answered"] == n(f"/admin/api/messages?{p}&did=answered"), q
+            assert h["totals"]["errors"] == n(f"/admin/api/messages?{p}&did=error"), q
+            assert h["totals"]["problems"] == n(f"/admin/api/alerts?state=all&type=protocol&{p}"), q
+            assert h["totals"]["safety"] == n(f"/admin/api/alerts?state=all&type=safety&{p}"), q
+            for d in h["days"]:
+                assert d["messages"] == n(f"/admin/api/messages?date={d['date']}")
+                assert d["answered"] == n(f"/admin/api/messages?date={d['date']}&did=answered")
+                assert d["problems"] == n(f"/admin/api/alerts?state=all&type=protocol&date={d['date']}")
+        assert h["open_now"] == n("/admin/api/alerts")
+        assert [m["id"] for m in data("/admin/api/messages?days=all&did=answered")["rows"]] == [9]
+        db.ex("UPDATE items SET recipient_person='ernest-cra' WHERE id=3")
+        assert [a["id"] for a in data("/admin/api/alerts?state=all&person=ernest-cra")["rows"]] == [3]
+        assert [a["id"] for a in data("/admin/api/alerts?state=all&person=nobody")["rows"]] == [4]
+        team = data("/admin/api/home")["team"]
+        st = config.studies()[study]
+        mine = next(t for t in team if t["study"] == study)
+        assert mine["sponsor"] == st.sponsor and [p["email"] for p in mine["people"]] == [p.email for p in st.people]
+        assert team[0]["study"] == study
+        assert {"value": "nobody", "label": "Sent to nobody"} in data("/admin/api/options")["people"]
         assert adminview._plain('<p>See <a href="https://x.io/a?b=1">the <b>details</b></a></p>') == \
             "See <https://x.io/a?b=1|the details>"
         rows = {m["id"]: m for m in data("/admin/api/messages?days=all")["rows"]}

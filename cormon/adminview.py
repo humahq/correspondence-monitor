@@ -231,6 +231,8 @@ def _problems() -> list[dict]:
     return out
 
 
+ANSWERED = ("EXISTS (SELECT 1 FROM audit_log a WHERE a.entity_type='message' AND a.entity_id=CAST(messages.id AS TEXT)"
+            " AND a.action='question_answered')")
 MAX_DAYS = 90
 COUNTS = ("messages", "email", "chat", "problems", "safety", "answered", "errors")
 
@@ -248,19 +250,18 @@ def activity(p: dict) -> dict:
         for k in keys:
             row[k] += 1
 
+    # Each count uses the same filter as the page its number opens (messages(), alerts()), so the two agree.
     where, params = _between("received_at", p)
-    for m in db.q(f"SELECT received_at, channel, status FROM messages WHERE {where}", params):
+    for m in db.q(f"SELECT received_at, channel, status, {ANSWERED} AS answered FROM messages WHERE {where}",
+                  params):
         add(m["received_at"], "messages", "email" if m["channel"] == "email" else "chat",
-            *(["errors"] if m["status"] == "error" else []))
+            *(["errors"] if m["status"] == "error" else []), *(["answered"] if m["answered"] else []))
     where, params = _between("created_at", p)
-    for it in db.q(f"SELECT created_at, kind, counts FROM items WHERE {where}", params):
+    for it in db.q(f"SELECT created_at, kind FROM items WHERE {where}", params):
         if it["kind"] == "out_of_scope":
             add(it["created_at"], "safety")
-        elif it["kind"] == "finding" and it["counts"]:
+        elif it["kind"] == "finding":
             add(it["created_at"], "problems")
-    where, params = _between("ts", p)
-    for r in db.q(f"SELECT ts FROM audit_log WHERE action='question_answered' AND {where}", params):
-        add(r["ts"], "answered")
 
     totals = dict.fromkeys(COUNTS, 0)
     for row in by_day.values():
@@ -299,6 +300,7 @@ def home(query: dict | None = None) -> dict:
         "open_by_tier": [{"tier": r["tier"], "label": TIER_LABELS.get(r["tier"], r["tier"]), "n": r["n"]} for r in db.q(
             "SELECT tier, COUNT(*) n FROM items WHERE state='open' AND counts=1 GROUP BY tier")],
         "problems": _problems(),
+        "team": team(),
     }
 
 
@@ -311,7 +313,35 @@ def options() -> dict:
                       {"value": "protocol", "label": "Any protocol problem"}]
             + [{"value": f"area:{k}", "label": v} for k, v in areas.items()]
             + [{"value": "good_news", "label": "Good news"}],
-            "tiers": [{"value": "", "label": "Any urgency"}] + [{"value": k, "label": v} for k, v in TIER_LABELS.items()]}
+            "tiers": [{"value": "", "label": "Any urgency"}] + [{"value": k, "label": v} for k, v in TIER_LABELS.items()],
+            "people": [{"value": "", "label": "Sent to anyone"}] + _recipients()
+            + [{"value": "nobody", "label": "Sent to nobody"}]}
+
+
+def _recipients() -> list[dict]:
+    """Everyone in the study files, plus anyone an alert went to who is no longer listed there."""
+    known = {p.id: f"{p.name} ({', '.join(s.role_label(r) for r in p.roles)})"
+             for s in _studies().values() for p in s.people}
+    for r in db.q("SELECT DISTINCT recipient_person AS pid FROM items WHERE recipient_person IS NOT NULL"
+                  " AND recipient_person!=''"):
+        known.setdefault(r["pid"], f"{r['pid']} (not in the study files)")
+    return [{"value": k, "label": v} for k, v in sorted(known.items(), key=lambda x: x[1].lower())]
+
+
+def team() -> list[dict]:
+    """Each study's sponsor, sites and people exactly as the study file lists them; the study with the latest
+    message first."""
+    latest = {r["study_id"]: r["at"] for r in db.q("SELECT study_id, MAX(received_at) AS at FROM messages"
+                                                    " GROUP BY study_id")}
+    out = []
+    for s in sorted(_studies().values(), key=lambda s: latest.get(s.study_id) or "", reverse=True):
+        sites = {x["id"]: x["name"] for x in s.sites}
+        out.append({"study": s.study_id, "short_name": s.short_name, "title": s.title, "sponsor": s.sponsor,
+                    "sites": list(sites.values()),
+                    "people": [{"name": p.name, "email": p.email, "roles": [s.role_label(r) for r in p.roles],
+                                "sites": "All sites" if "*" in p.sites else ", ".join(sites.get(x, x) for x in p.sites)}
+                               for p in s.people]})
+    return out
 
 
 def _row(m: dict) -> dict:
@@ -327,6 +357,10 @@ def messages(query: dict) -> dict:
     channel, study, before = query.get("channel", ""), query.get("study", ""), query.get("before", "")
     where, params = _between("received_at", period(query, "7"))
     sql = f"SELECT * FROM messages WHERE {where}"
+    if query.get("did") == "answered":
+        sql += f" AND {ANSWERED}"
+    elif query.get("did") == "error":
+        sql += " AND status='error'"
     if channel in CHANNEL:
         sql += " AND channel=?"; params.append(channel)
     if study:
@@ -432,6 +466,11 @@ def alerts(query: dict) -> dict:
         sql += " AND kind='finding'"
     elif kind.startswith("area:"):
         sql += " AND kind='finding' AND pattern_class=?"; params.append(kind[5:])
+    person = query.get("person", "")
+    if person == "nobody":
+        sql += " AND (recipient_person IS NULL OR recipient_person='')"
+    elif person:
+        sql += " AND recipient_person=?"; params.append(person)
     if before.isdigit():
         sql += " AND id<?"; params.append(int(before))
     rows = [dict(r) for r in db.q(sql + " ORDER BY id DESC LIMIT ?", (*params, PAGE + 1))]
