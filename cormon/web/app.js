@@ -193,22 +193,53 @@
         : html`<div class="empty pad">No messages ${q.date ? "on this day" : "in this period"}. Try another day or "All time".</div>`}</div>`}<//>`;
   }
 
-  function Bubble({ e }) {
+  function Clamp({ text, children }) {
     const [open, setOpen] = useState(false);
-    const long = (e.text || "").length > 400;
+    const long = (text || "").length > 400;
+    return html`<div class=${"text" + (long && !open ? " long" : "")}>${linkify(text || "")}</div>
+      ${(long || children) && html`<div class="foot">
+        ${long && html`<button onClick=${() => setOpen(!open)}>${open ? "Show less" : "Show all"}</button>`}${children}</div>`}`;
+  }
+
+  function Bubble({ e }) {
+    if (e.small)
+      return html`<div class="receipt"><div><b>${e.who}</b>${" "}<span class="muted">${e.kind} · <${When} w=${e.when} /></span></div>
+        <div class="muted">${e.text}</div></div>`;
     return html`<div class=${"bubble " + e.side + (e.current ? " current" : "")}>
       <div class="meta"><b>${e.who}</b>
-        ${e.side === "bot" ? html`<span>${e.kind}${e.to && e.to.includes("@") ? " to " + e.to : ""}</span>` : html`<span>${e.channel}</span>`}
+        <span>${e.side === "bot" ? e.kind : e.channel}</span>
         <span><${When} w=${e.when} /></span>
         ${e.side === "bot" && e.status !== "sent" && html`<${Badge} cls="warn">${e.status}<//>`}
         ${e.current && html`<${Badge} cls="protocol">This message<//>`}</div>
       ${e.subject && html`<div class="small"><b>${e.subject}</b></div>`}
-      <div class=${"text" + (long && !open ? " long" : "")}>${linkify(e.text || "")}</div>
-      <div class="foot">
-        ${long && html`<button onClick=${() => setOpen(!open)}>${open ? "Show less" : "Show all"}</button>`}
+      <${Clamp} text=${e.text}>
         ${e.side === "person" && !e.current && html`<a href=${"/admin/messages/" + e.message_id}
           onClick=${linkTo("/admin/messages/" + e.message_id)}>Open message ${e.message_id}</a>`}
-        ${e.side === "person" && !e.current && e.outcome && html`<${Outcome} items=${e.outcome} />`}</div></div>`;
+        ${e.side === "person" && !e.current && e.outcome && html`<${Outcome} items=${e.outcome} />`}<//></div>`;
+  }
+
+  const placeOf = (s) => (s.channel === "email" ? "Emailed to " + s.to : "Posted in the " + s.to);
+
+  function Sent({ s }) {
+    return html`<div class=${"sent " + s.channel}>
+      <div class="sent-head"><span class="pill">${s.channel === "email" ? "Email" : "Chat post"}</span>
+        ${s.subject ? html`<b>${s.subject}</b>` : html`<b>${s.kind}</b>`}
+        ${s.status !== "sent" && html`<${Badge} cls="warn">${s.status}<//>`}
+        <div class="small muted">${s.channel === "email" ? "To " + s.to : "In the " + s.to} · <${When} w=${s.when} /></div></div>
+      <${Clamp} text=${s.text} /></div>`;
+  }
+
+  function Notice({ e }) {
+    const [open, setOpen] = useState(false);
+    const a = e.alert;
+    return html`<div class="notice">
+      <div class="notice-line"><span class="notice-mark">!</span>
+        <div class="grow">
+          <div>${a ? html`<b>Alert #${a.id}</b> <${AlertTags} a=${a} />` : html`<b>${e.sent[0].kind}</b>`}</div>
+          ${a && html`<div class="clip">${a.title}</div>`}
+          <div class="small muted">${[...new Set(e.sent.map(placeOf))].join(" · ")} · <${When} w=${e.when} /></div></div>
+        <button class="link nowrap" onClick=${() => setOpen(!open)}>${open ? "Hide" : "See what was sent"}</button></div>
+      ${open && html`<div class="sent-list">${e.sent.map((s, i) => html`<${Sent} key=${i} s=${s} />`)}</div>`}</div>`;
   }
 
   function Message({ id }) {
@@ -221,8 +252,10 @@
         <${Badge} cls=${d.message.status === "Error" ? "bad" : d.message.status === "Done" ? "ok" : "warn"} dot>${d.message.status}<//></div>
       <div class="layout">
         <div class="panel"><h2>The whole conversation</h2>
-          <div class="sub lead">People on the left, the bot on the right. This message is outlined.</div>
-          <div class="chat">${d.conversation.map((e, i) => html`<${Bubble} key=${i} e=${e} />`)}</div></div>
+          <div class="sub lead">People on the left, the bot's replies on the right. Alerts the bot sent elsewhere
+            are the lines in between.</div>
+          <div class="chat">${d.conversation.map((e, i) => e.side === "notice"
+            ? html`<${Notice} key=${i} e=${e} />` : html`<${Bubble} key=${i} e=${e} />`)}</div></div>
         <div>
           <div class="panel"><h2>What the bot did</h2><${Outcome} items=${d.message.outcome} />
             ${d.answers.length > 0 && html`<div class="gap-top">${d.answers.map((a, i) => html`<div key=${i}>

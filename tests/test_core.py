@@ -1943,6 +1943,10 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
           " created_at, sent_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
           (3, 7, "email_cra", "email", "email", '["cra@x.org"]', "Alert #3", "The Week 8 visit was late.", "sent",
            db.now(), db.now()))
+    db.ex("INSERT INTO outbox (message_id, purpose, channel, destination, to_addrs, body, status, created_at, sent_at)"
+          " VALUES (?,?,?,?,?,?,?,?,?)", (7, "question_answer", "email", "email", '["site@x.org"]',
+                                           '<p>See <a href="https://mon.example/answers/a">the details</a></p>', "sent",
+                                           db.later(0.5), db.later(0.5)))
     db.ex("INSERT INTO messages (id, channel, external_id, thread_key, study_id, route, visibility, from_addr,"
           " subject, body_text, headers, received_at, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
           (10, "email", "e10", "t10", study, "study", "to", "b@x.org", "Old", "older note", "{}",
@@ -1994,10 +1998,12 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
         assert rows[7]["outcome"][0]["alert"]["link"] == "/items/tok3"
         page = data("/admin/api/messages/7")
         talk = page["conversation"]
-        assert [(e["side"], e["text"]) for e in talk] == [
-            ("person", "G-1 came in late for Week 8"), ("bot", "The Week 8 visit was late."),
-            ("person", "Thanks, looking into it")]
-        assert talk[0]["current"] and not talk[2]["current"] and talk[1]["to"] == "cra@x.org"
+        assert [e["side"] for e in talk] == ["person", "notice", "bot", "person"]
+        assert talk[0]["text"] == "G-1 came in late for Week 8" and talk[0]["current"] and not talk[3]["current"]
+        notice = talk[1]
+        assert notice["alert"]["id"] == 3 and [(s["channel"], s["to"], s["text"]) for s in notice["sent"]] == [
+            ("email", "cra@x.org", "The Week 8 visit was late.")]
+        assert talk[2]["kind"] == "Answer" and talk[2]["text"] == "See <https://mon.example/answers/a|the details>"
         open_alerts = data("/admin/api/alerts")["rows"]
         assert [a["title"] for a in open_alerts] == ["Week 8 visit late"]
         assert open_alerts[0]["type"]["label"] == "Protocol problem"

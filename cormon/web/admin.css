@@ -113,6 +113,27 @@ button.link { border: 0; background: none; color: var(--brand); padding: 0; font
 .bubble.person .text.long::after { background: linear-gradient(transparent, #fff); }
 .bubble .foot { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12px; }
 .bubble button { border: 0; background: none; color: var(--brand); padding: 0; font: inherit; cursor: pointer; }
+.receipt { align-self: flex-end; font-size: 12px; max-width: 78%; text-align: right; }
+.receipt b { color: var(--ink); font-weight: 600; }
+.notice { border: 1px dashed #f0c9a6; background: #fffaf3; border-radius: 10px; padding: 10px 14px; }
+.notice-line { display: flex; gap: 12px; align-items: flex-start; }
+.notice-mark { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--amber-soft); color: var(--amber);
+  font-weight: 700; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; margin-top: 1px; }
+.notice .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.notice .clip { max-width: none; }
+.sent-list { display: flex; flex-direction: column; gap: 10px; margin: 12px 0 2px 34px; }
+.sent { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.sent.email { border-left: 3px solid #9bb2f5; }
+.sent.chat { border-left: 3px solid #8fd0ab; }
+.sent-head { margin-bottom: 6px; }
+.sent-head b { margin-left: 6px; }
+.pill { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+  background: #eef1f6; border-radius: 4px; padding: 1px 6px; }
+.sent .text { white-space: pre-wrap; word-wrap: break-word; font-size: 13px; }
+.sent .text.long { max-height: 160px; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); }
+.sent .foot { margin-top: 6px; font-size: 12px; }
+.sent button { border: 0; background: none; color: var(--brand); padding: 0; font: inherit; cursor: pointer; }
+.sent .text a { word-break: break-all; }
 .facts dt { font-size: 12px; color: var(--muted); margin-top: 10px; }
 .facts dd { margin: 2px 0 0; }
 .steps { font-size: 12px; }

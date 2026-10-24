@@ -49,6 +49,9 @@ PURPOSE = {"chat_received": "Quick receipt", "question_answer": "Answer", "chat_
            "email_cra": "Alert email to the CRA", "email_sponsor": "Email to the sponsor", "digest": "Daily digest",
            "ops_warning": "Warning to the bot's operators", "copy_nudge": "Reminder to copy the bot"}
 
+# What the bot sends back into the conversation itself; everything else (alerts, operator notes) goes elsewhere.
+REPLIES = {"chat_received", "question_answer", "chat_acknowledgement", "copy_nudge"}
+
 WHERE = {("teams", "channel"): "Study group chat", ("teams", "direct"): "1-on-1 chat with the bot",
          ("teams", "group"): "Other group chat", ("email", "to"): "Email to the bot",
          ("email", "cc"): "Email, bot copied", ("email", "bcc"): "Email, bot blind-copied"}
@@ -190,10 +193,14 @@ def outcome(msg: dict) -> list[dict]:
         if words and words not in seen:
             seen.add(words)
             said.append({"kind": "error" if r["action"] == "processing_error" else "note", "text": words})
-    replies = db.q1("SELECT COUNT(*) AS n FROM outbox WHERE message_id=? AND status='sent'"
-                    " AND purpose!='chat_received'", (msg["id"],))["n"]
+    sent = [r["purpose"] for r in db.q("SELECT purpose FROM outbox WHERE message_id=? AND status='sent'"
+                                       " AND purpose!='chat_received'", (msg["id"],))]
+    replies = sum(p in REPLIES for p in sent)
     if replies:
         said.append({"kind": "note", "text": f"{replies} repl{'y' if replies == 1 else 'ies'} sent"})
+    if len(sent) > replies:
+        n = len(sent) - replies
+        said.append({"kind": "note", "text": f"{n} alert message{'' if n == 1 else 's'} sent elsewhere"})
     return said or [{"kind": "note", "text": "Checked: nothing to raise"}]
 
 
@@ -339,15 +346,24 @@ def conversation(m: dict) -> list[dict]:
     where = [f"message_id IN ({','.join('?' * len(ids))})"] if ids else []
     if item_ids:
         where.append(f"item_id IN ({','.join('?' * len(item_ids))})")
+    notices: dict = {}
     if where:
         for o in db.q(f"SELECT * FROM outbox WHERE ({' OR '.join(where)}) AND purpose!='digest' ORDER BY id",
                       (*ids, *item_ids)):
             to = ", ".join(db.unjs(o["to_addrs"], []))
-            out.append({"side": "bot", "who": "Study monitor", "when": _when(o["sent_at"] or o["created_at"]),
-                        "text": _plain(o["body"]), "subject": o["subject"],
-                        "kind": PURPOSE.get(o["purpose"], o["purpose"]),
-                        "to": to or _dest(o["destination"]), "status": o["status"],
-                        "item_id": o["item_id"]})
+            sent = {"when": _when(o["sent_at"] or o["created_at"]), "text": _plain(o["body"]), "subject": o["subject"],
+                    "kind": PURPOSE.get(o["purpose"], o["purpose"]), "channel": "email" if o["channel"] == "email"
+                    else "chat", "to": to or _dest(o["destination"]), "status": o["status"]}
+            if o["purpose"] in REPLIES:
+                out.append({"side": "bot", "who": "Study monitor", "small": o["purpose"] == "chat_received", **sent})
+                continue
+            key = o["item_id"] or f"o{o['id']}"
+            if key not in notices:
+                item = db.q1("SELECT * FROM items WHERE id=?", (o["item_id"],)) if o["item_id"] else None
+                notices[key] = {"side": "notice", "when": sent["when"], "alert": _alert(dict(item)) if item else None,
+                                "sent": []}
+                out.append(notices[key])
+            notices[key]["sent"].append(sent)
     return sorted(out, key=lambda e: e["when"]["at"] or "")
 
 
