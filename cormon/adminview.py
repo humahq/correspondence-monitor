@@ -8,7 +8,7 @@ import html
 import re
 import statistics
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
@@ -74,11 +74,53 @@ def _studies() -> dict:
     return _loaded["studies"]
 
 
-def _local_midnight(days_back: int = 0) -> str:
-    """UTC time of local midnight `days_back` days ago, in the same form as the database's times."""
-    tz = ZoneInfo(settings.get("system.timezone", "America/New_York"))
-    start = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days_back)
-    return start.astimezone(timezone.utc).isoformat(timespec="seconds")
+def _tz() -> ZoneInfo:
+    return ZoneInfo(settings.get("system.timezone", "America/New_York"))
+
+
+def _day_start(d: date) -> str:
+    """UTC time of local midnight starting day `d`, in the same form as the database's times."""
+    return datetime(d.year, d.month, d.day, tzinfo=_tz()).astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def _local_day(iso: str | None) -> date | None:
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(_tz()).date() if iso else None
+    except ValueError:
+        return None
+
+
+def _day_label(d: date) -> str:
+    today = datetime.now(_tz()).date()
+    return "Today" if d == today else "Yesterday" if d == today - timedelta(days=1) else f"{d:%a} {d.day} {d:%b %Y}"
+
+
+def period(query: dict, default: str = "7") -> dict:
+    """The days a page covers, in local days: one chosen day (date=YYYY-MM-DD), or days= 1 (today), yesterday,
+    a number of days up to today, or all. "from"/"to" are the UTC bounds; None means no bound."""
+    today = datetime.now(_tz()).date()
+    try:
+        chosen = date.fromisoformat(query.get("date", "")) if query.get("date") else None
+    except ValueError:
+        chosen = None
+    days = query.get("days", default)
+    if chosen:
+        first = last = chosen
+    elif days == "yesterday":
+        first = last = today - timedelta(days=1)
+    elif days.isdigit() and int(days) >= 1:
+        first, last = today - timedelta(days=min(int(days), 3660) - 1), today
+    else:
+        return {"from": None, "to": None, "first": None, "last": today, "label": "All time", "single": False}
+    label = _day_label(first) if first == last else f"Last {(last - first).days + 1} days"
+    return {"from": _day_start(first), "to": _day_start(last + timedelta(days=1)), "first": first, "last": last,
+            "label": label, "single": first == last}
+
+
+def _between(column: str, p: dict) -> tuple[str, list]:
+    if p["from"] is None:
+        return "1=1", []
+    return f"{column}>=? AND {column}<?", [p["from"], p["to"]]
 
 
 def _ago(iso: str | None) -> str:
@@ -184,7 +226,54 @@ def _median(xs) -> float | None:
     return round(statistics.median(xs), 1) if xs else None
 
 
-def home() -> dict:
+MAX_DAYS = 90
+COUNTS = ("messages", "email", "chat", "problems", "safety", "answered", "errors")
+
+
+def activity(p: dict) -> dict:
+    """What came in and what the bot did in a period: totals, and one row per local day (newest first, at most
+    MAX_DAYS rows, quiet days included so a gap shows)."""
+    by_day: dict[date, dict] = {}
+
+    def add(iso, *keys):
+        d = _local_day(iso)
+        if d is None:
+            return
+        row = by_day.setdefault(d, dict.fromkeys(COUNTS, 0))
+        for k in keys:
+            row[k] += 1
+
+    where, params = _between("received_at", p)
+    for m in db.q(f"SELECT received_at, channel, status FROM messages WHERE {where}", params):
+        add(m["received_at"], "messages", "email" if m["channel"] == "email" else "chat",
+            *(["errors"] if m["status"] == "error" else []))
+    where, params = _between("created_at", p)
+    for it in db.q(f"SELECT created_at, kind, counts FROM items WHERE {where}", params):
+        if it["kind"] == "out_of_scope":
+            add(it["created_at"], "safety")
+        elif it["kind"] == "finding" and it["counts"]:
+            add(it["created_at"], "problems")
+    where, params = _between("ts", p)
+    for r in db.q(f"SELECT ts FROM audit_log WHERE action='question_answered' AND {where}", params):
+        add(r["ts"], "answered")
+
+    totals = dict.fromkeys(COUNTS, 0)
+    for row in by_day.values():
+        for k in COUNTS:
+            totals[k] += row[k]
+    days, capped = [], False
+    if not p["single"]:
+        first = p["first"] or min(by_day, default=p["last"])
+        if (p["last"] - first).days + 1 > MAX_DAYS:
+            first, capped = p["last"] - timedelta(days=MAX_DAYS - 1), True
+        d = p["last"]
+        while d >= first:
+            days.append({"date": d.isoformat(), "label": _day_label(d), **by_day.get(d, dict.fromkeys(COUNTS, 0))})
+            d -= timedelta(days=1)
+    return {"totals": totals, "days": days, "capped": capped}
+
+
+def home(query: dict | None = None) -> dict:
     beat = db.get_state("heartbeat")
     fresh = False
     if beat:
@@ -192,21 +281,17 @@ def home() -> dict:
             fresh = (datetime.now(timezone.utc) - datetime.fromisoformat(beat)).total_seconds() < 300
         except ValueError:
             pass
-    today = _local_midnight(0)
-    n = lambda sql, *p: db.q1(sql, p)["n"]
+    p = period(query or {}, "7")
     rep = timing.report(20)["messages"]
     return {
         "bot": {"state": "paused" if outbox.is_paused() else "running" if fresh else "down",
                 "checkin": _when(beat), "last_message": _when(db.q1("SELECT MAX(received_at) AS at FROM messages")["at"]),
                 "last_push": _when(db.get_state("gchat_event_at")),
                 "email": settings.get("channels.email"), "chat": settings.get("channels.teams")},
-        "today": [
-            {"label": "Messages today", "n": n("SELECT COUNT(*) AS n FROM messages WHERE received_at>=?", today)},
-            {"label": "Alerts today", "n": n("SELECT COUNT(*) AS n FROM items WHERE created_at>=? AND counts=1", today)},
-            {"label": "Questions answered today",
-             "n": n("SELECT COUNT(*) AS n FROM audit_log WHERE action='question_answered' AND ts>=?", today)},
-            {"label": "Open alerts", "n": n("SELECT COUNT(*) AS n FROM items WHERE state='open' AND counts=1")},
-        ],
+        "period": {"label": p["label"], "single": p["single"],
+                   "date": p["first"].isoformat() if p["single"] else None},
+        **activity(p),
+        "open_now": db.q1("SELECT COUNT(*) AS n FROM items WHERE state='open' AND counts=1")["n"],
         "open_by_tier": [{"tier": r["tier"], "label": TIER_LABELS.get(r["tier"], r["tier"]), "n": r["n"]} for r in db.q(
             "SELECT tier, COUNT(*) n FROM items WHERE state='open' AND counts=1 GROUP BY tier")],
         "speed": {"messages": len(rep), "first_reply": _median(m["to_first_reply"] for m in rep),
@@ -237,11 +322,9 @@ def _row(m: dict) -> dict:
 
 
 def messages(query: dict) -> dict:
-    days, channel = query.get("days", "7"), query.get("channel", "")
-    study, before = query.get("study", ""), query.get("before", "")
-    sql, params = "SELECT * FROM messages WHERE 1=1", []
-    if days.isdigit():
-        sql += " AND received_at>=?"; params.append(_local_midnight(int(days) - 1))
+    channel, study, before = query.get("channel", ""), query.get("study", ""), query.get("before", "")
+    where, params = _between("received_at", period(query, "7"))
+    sql = f"SELECT * FROM messages WHERE {where}"
     if channel in CHANNEL:
         sql += " AND channel=?"; params.append(channel)
     if study:
@@ -278,12 +361,15 @@ def conversation(m: dict) -> list[dict]:
 
 
 def _plain(text: str | None) -> str:
-    """A bot post as people saw it: chat posts are stored as HTML and emails mark bold with **."""
+    """A bot post as people saw it: chat posts are stored as HTML and emails mark bold with **. HTML links become
+    <address|words>, the chat form of a link, which the page shows as a link."""
     text = text or ""
     if re.search(r"</?(p|b|i|br|ul|li|a)\b", text):
+        text = re.sub(r"""<a\s[^>]*href=["'](https?://[^"']+)["'][^>]*>(.*?)</a>""",
+                      lambda m: f"\x00{m[1]}|{re.sub(r'<[^>]+>', '', m[2]) or m[1]}\x01", text, flags=re.S | re.I)
         text = re.sub(r"<br\s*/?>|</p>|</li>", "\n", text)
         text = re.sub(r"<li[^>]*>", "• ", text)
-        text = html.unescape(re.sub(r"<[^>]+>", "", text))
+        text = html.unescape(re.sub(r"<[^>]+>", "", text)).replace("\x00", "<").replace("\x01", ">")
     return re.sub(r"\n{3,}", "\n\n", text.replace("**", "")).strip()
 
 
@@ -317,7 +403,8 @@ def message(msg_id: int) -> dict | None:
 def alerts(query: dict) -> dict:
     state, tier, kind, before = (query.get(k, d) for k, d in (("state", "open"), ("tier", ""), ("type", ""),
                                                                ("before", "")))
-    sql, params = "SELECT * FROM items WHERE 1=1", []
+    where, params = _between("created_at", period(query, "all"))
+    sql = f"SELECT * FROM items WHERE {where}"
     if state == "open" and kind == "safety":
         sql += " AND state='out_of_scope'"
     elif state == "open":
@@ -409,7 +496,7 @@ def api(path: str) -> dict | None:
     query = {k: v[0] for k, v in parse_qs(url.query).items()}
     p = url.path.removeprefix("/admin/api").rstrip("/")
     if p == "/home":
-        return home()
+        return home(query)
     if p == "/options":
         return options()
     if p == "/messages":

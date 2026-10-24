@@ -37,6 +37,24 @@ h2 { font-size: 15px; margin: 0 0 12px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
 .card b { display: block; font-size: 28px; line-height: 1.1; margin-bottom: 4px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+a.card { display: block; color: inherit; transition: border-color .15s, box-shadow .15s; }
+a.card:hover { text-decoration: none; border-color: #c9d6ff; box-shadow: 0 2px 8px rgba(47,91,234,.08); }
+a.card span { display: block; }
+h2.period { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 4px 0 10px; }
+.pad-h { padding: 16px 20px 4px; }
+.pad { padding: 10px 20px 14px; }
+.bad-text { color: var(--red); }
+table.days td { padding: 8px 10px; }
+tr.quiet td { color: var(--muted); background: #fcfcfe; }
+a.count { font-weight: 600; }
+a.count.safety { color: var(--red); }
+.barcell { display: flex; align-items: center; gap: 10px; }
+.barcell a, .barcell .muted { min-width: 22px; }
+.bar { display: inline-block; height: 8px; border-radius: 4px; background: #c9d6ff; max-width: 160px; flex: none; }
+.pick { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+input[type=date] { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font: inherit; color: var(--ink);
+  background: #fff; }
+.bubble .text a { word-break: break-all; }
 
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px;
   font-weight: 600; background: #eef1f6; color: #3c4660; white-space: nowrap; }

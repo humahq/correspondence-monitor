@@ -1943,6 +1943,11 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
           " created_at, sent_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
           (3, 7, "email_cra", "email", "email", '["cra@x.org"]', "Alert #3", "The Week 8 visit was late.", "sent",
            db.now(), db.now()))
+    db.ex("INSERT INTO messages (id, channel, external_id, thread_key, study_id, route, visibility, from_addr,"
+          " subject, body_text, headers, received_at, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (10, "email", "e10", "t10", study, "study", "to", "b@x.org", "Old", "older note", "{}",
+           db.later(-3 * 24 * 60), "error"))
+    old_day = adminview._local_day(db.later(-3 * 24 * 60)).isoformat()
     server = ThreadingHTTPServer(("127.0.0.1", 0), webview.Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
@@ -1967,7 +1972,23 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
         assert status == 200 and 'id="root"' in page and "default-src 'self'" in head["Content-Security-Policy"]
         assert get("/admin/static/app.js", "peter@huma.ai")[0] == 200
         assert get("/admin/static/../settings.py", "peter@huma.ai")[0] == 404
-        assert data("/admin/api/home")["bot"]["state"] in ("running", "paused", "down")
+        week = data("/admin/api/home")
+        assert week["bot"]["state"] in ("running", "paused", "down") and week["period"]["label"] == "Last 7 days"
+        assert week["totals"]["messages"] >= 3 and week["totals"]["problems"] == 1 and week["totals"]["safety"] == 1
+        assert len(week["days"]) == 7 and week["days"][0]["label"] == "Today"
+        old = next(d for d in week["days"] if d["date"] == old_day)
+        assert (old["messages"], old["email"], old["errors"], old["problems"]) == (1, 1, 1, 0)
+        today = data("/admin/api/home?days=1")
+        assert today["period"]["single"] and today["days"] == [] and today["totals"]["errors"] == 0
+        assert data(f"/admin/api/home?date={old_day}")["totals"]["messages"] == 1
+        assert data("/admin/api/home?days=all")["period"]["label"] == "All time"
+        assert data("/admin/api/home?date=not-a-day")["period"]["label"] == "Last 7 days"
+        assert [m["id"] for m in data(f"/admin/api/messages?date={old_day}")["rows"]] == [10]
+        assert 10 not in [m["id"] for m in data("/admin/api/messages?days=1")["rows"]]
+        assert data(f"/admin/api/alerts?state=all&date={old_day}")["rows"] == []
+        assert len(data("/admin/api/alerts?state=all&days=1")["rows"]) == 2
+        assert adminview._plain('<p>See <a href="https://x.io/a?b=1">the <b>details</b></a></p>') == \
+            "See <https://x.io/a?b=1|the details>"
         rows = {m["id"]: m for m in data("/admin/api/messages?days=all")["rows"]}
         assert [o["text"] for o in rows[8]["outcome"]] == ["Not about the trial"]
         assert rows[7]["outcome"][0]["alert"]["link"] == "/items/tok3"
