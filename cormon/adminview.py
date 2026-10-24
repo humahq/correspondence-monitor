@@ -50,6 +50,19 @@ PURPOSE = {"chat_received": "Quick receipt", "question_answer": "Answer", "chat_
            "email_cra": "Alert email to the CRA", "email_sponsor": "Email to the sponsor", "digest": "Daily digest",
            "ops_warning": "Warning to the bot's operators", "copy_nudge": "Reminder to copy the bot"}
 
+WHERE = {("teams", "channel"): "Study group chat", ("teams", "direct"): "1-on-1 chat with the bot",
+         ("teams", "group"): "Other group chat", ("email", "to"): "Email to the bot",
+         ("email", "cc"): "Email, bot copied", ("email", "bcc"): "Email, bot blind-copied"}
+
+
+def _where(channel: str, visibility: str) -> str:
+    return WHERE.get((channel, visibility), f"{CHANNEL.get(channel, channel)} ({visibility})")
+
+
+def _dest(d: str) -> str:
+    return "email" if d == "email" else "study chat" if d.startswith("teams") else d.replace("_", " ")
+
+
 _loaded: dict = {"at": 0.0, "studies": {}}
 
 
@@ -106,7 +119,7 @@ def alert_type(item: dict) -> dict:
 
 def _alert(a: dict) -> dict:
     study = _studies().get(a["study_id"])
-    dest = sorted({o["destination"].replace("_", " ") for o in db.q(
+    dest = sorted({_dest(o["destination"]) for o in db.q(
         "SELECT destination FROM outbox WHERE item_id=?", (a["id"],))})
     return {"id": a["id"], "link": f"/items/{a['link_token']}", "title": a["title"], "type": alert_type(a),
             "tier": a["tier"], "tier_label": TIER_LABELS.get(a["tier"], a["tier"]),
@@ -216,7 +229,8 @@ def options() -> dict:
 
 def _row(m: dict) -> dict:
     return {"id": m["id"], "received": _when(m["received_at"]), "channel": CHANNEL.get(m["channel"], m["channel"]),
-            "visibility": m["visibility"], "from": m["from_name"] or m["from_addr"], "from_addr": m["from_addr"],
+            "where": _where(m["channel"], m["visibility"]),
+            "from": m["from_name"] or m["from_addr"], "from_addr": m["from_addr"],
             "study": m["study_id"], "subject": m["subject"],
             "summary": m["subject"] or (m["body_text"] or "")[:120] or "(no text)",
             "status": STATUS.get(m["status"], m["status"]), "outcome": outcome(m)}
@@ -258,7 +272,7 @@ def conversation(m: dict) -> list[dict]:
             out.append({"side": "bot", "who": "Study monitor", "when": _when(o["sent_at"] or o["created_at"]),
                         "text": _plain(o["body"]), "subject": o["subject"],
                         "kind": PURPOSE.get(o["purpose"], o["purpose"]),
-                        "to": to or o["destination"].replace("_", " "), "status": o["status"],
+                        "to": to or _dest(o["destination"]), "status": o["status"],
                         "item_id": o["item_id"]})
     return sorted(out, key=lambda e: e["when"]["at"] or "")
 
@@ -343,21 +357,24 @@ def people() -> dict:
         w["signed_in"] += r["action"] == "signed_in"
         w["pages"] += r["action"] in ("page_viewed", "admin_viewed")
         w["last"] = r["ts"]
-    wrote = {((r["who"] or "").lower(), r["study_id"]): dict(r) for r in db.q(
-        "SELECT from_addr AS who, study_id, COUNT(*) AS n, MAX(received_at) AS last FROM messages"
-        " GROUP BY from_addr, study_id")}
-    rows = []
+    wrote = {(r["who"] or "").lower(): dict(r) for r in db.q(
+        "SELECT lower(from_addr) AS who, COUNT(*) AS n, MAX(received_at) AS last FROM messages GROUP BY lower(from_addr)")}
+    by_email: dict = {}
     for st in _studies().values():
         for p in st.people:
             if not p.email:
                 continue
             e = p.email.lower()
-            w, m = web.get(e, {}), wrote.get((e, st.study_id), {})
-            rows.append({"name": p.name, "email": e, "study": st.study_id,
-                         "roles": ", ".join(st.role_label(r) for r in p.roles),
-                         "last_visit": _when(w.get("last")), "pages": w.get("pages", 0),
-                         "messages": m.get("n", 0), "last_message": _when(m.get("last"))})
-    listed = {p.email.lower() for st in _studies().values() for p in st.people if p.email}
+            row = by_email.setdefault(e, {"name": p.name, "email": e, "studies": [], "roles": []})
+            row["studies"].append(st.study_id)
+            row["roles"] += [st.role_label(r) for r in p.roles if st.role_label(r) not in row["roles"]]
+    rows = []
+    for e, row in by_email.items():
+        w, m = web.get(e, {}), wrote.get(e, {})
+        rows.append(dict(row, studies=", ".join(row["studies"]), roles=", ".join(row["roles"]),
+                         last_visit=_when(w.get("last")), pages=w.get("pages", 0),
+                         messages=m.get("n", 0), last_message=_when(m.get("last"))))
+    listed = set(by_email)
     return {"people": rows,
             "others": [{"email": e, "last_visit": _when(w["last"]), "pages": w["pages"]}
                        for e, w in web.items() if e not in listed],

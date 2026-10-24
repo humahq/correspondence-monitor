@@ -97,10 +97,8 @@
         <span class="muted">${c.label}</span></div>`)}</div>
       <div class="grid2">
         <div class="panel"><h2>The bot</h2><dl class="facts">
-          <dt>Last check-in</dt><dd>${d.bot.checkin.ago}</dd>
-          <dt>Last message received</dt><dd>${d.bot.last_message.ago}</dd>
-          <dt>Last instant chat notice</dt><dd>${d.bot.last_push.ago}</dd>
-          <dt>Channels</dt><dd>Email: ${d.bot.email} · Chat: ${d.bot.chat}</dd></dl></div>
+          <dt>Last checked in</dt><dd>${d.bot.checkin.ago}</dd>
+          <dt>Last message received</dt><dd>${d.bot.last_message.ago}</dd></dl></div>
         <div class="panel"><h2>Speed (last ${d.speed.messages} messages)</h2><dl class="facts">
           <dt>Typical time to the bot's first reply</dt>
           <dd><b>${d.speed.first_reply == null ? "no data yet" : d.speed.first_reply + " s"}</b></dd>
@@ -133,13 +131,12 @@
         <${Select} value=${q.study} onChange=${(v) => set("study", v)} options=${studies} />
       </div>
       <${Loading} state=${state}>${(d) => html`<div class="panel table">${d.rows.length ? html`<table>
-        <thead><tr><th>#</th><th>Received</th><th>From</th><th>Channel</th><th>Message</th><th>What the bot did</th></tr></thead>
+        <thead><tr><th>Received</th><th>From</th><th>Message</th><th>What the bot did</th></tr></thead>
         <tbody>${d.rows.map((m) => html`<tr key=${m.id} class="click" onClick=${() => go("/admin/messages/" + m.id)}>
-          <td><a href=${"/admin/messages/" + m.id} onClick=${linkTo("/admin/messages/" + m.id)}>${m.id}</a></td>
-          <td class="small"><${When} w=${m.received} /></td>
-          <td>${m.from}<div class="small muted">${m.study || "no study"}</div></td>
-          <td>${m.channel}<div class="small muted">${m.visibility}</div></td>
-          <td><div class="clip">${m.summary}</div></td>
+          <td class="small nowrap"><${When} w=${m.received} /><div class="muted">${m.received.ago}</div></td>
+          <td>${m.from}<div class="small muted">${m.where}</div></td>
+          <td><a class="plain" href=${"/admin/messages/" + m.id} onClick=${linkTo("/admin/messages/" + m.id)}>
+            <div class="clip">${m.summary}</div></a></td>
           <td><${Outcome} items=${m.outcome} /></td></tr>`)}</tbody></table>
         ${d.more && html`<a class="more" href="#" onClick=${(e) => { e.preventDefault();
           go(location.pathname + "?" + new URLSearchParams({ ...q, before: d.rows[d.rows.length - 1].id })); }}>Older messages</a>`}`
@@ -148,10 +145,10 @@
 
   function Bubble({ e }) {
     const [open, setOpen] = useState(false);
-    const long = (e.text || "").length > 700;
+    const long = (e.text || "").length > 400;
     return html`<div class=${"bubble " + e.side + (e.current ? " current" : "")}>
       <div class="meta"><b>${e.who}</b>
-        ${e.side === "bot" ? html`<span>${e.kind}${e.to ? " → " + e.to : ""}</span>` : html`<span>${e.channel}</span>`}
+        ${e.side === "bot" ? html`<span>${e.kind}${e.to && e.to.includes("@") ? " to " + e.to : ""}</span>` : html`<span>${e.channel}</span>`}
         <span><${When} w=${e.when} /></span>
         ${e.side === "bot" && e.status !== "sent" && html`<${Badge} cls="warn">${e.status}<//>`}
         ${e.current && html`<${Badge} cls="protocol">This message<//>`}</div>
@@ -161,7 +158,7 @@
         ${long && html`<button onClick=${() => setOpen(!open)}>${open ? "Show less" : "Show all"}</button>`}
         ${e.side === "person" && !e.current && html`<a href=${"/admin/messages/" + e.message_id}
           onClick=${linkTo("/admin/messages/" + e.message_id)}>Open message ${e.message_id}</a>`}
-        ${e.side === "person" && e.outcome && html`<${Outcome} items=${e.outcome} />`}</div></div>`;
+        ${e.side === "person" && !e.current && e.outcome && html`<${Outcome} items=${e.outcome} />`}</div></div>`;
   }
 
   function Message({ id }) {
@@ -169,8 +166,8 @@
     return html`<a class="back" href="/admin/messages" onClick=${(e) => { e.preventDefault();
         history.length > 1 ? history.back() : go("/admin/messages"); }}>← Back to messages</a>
       <${Loading} state=${state}>${(d) => html`
-      <div class="head"><div><h1>Message ${d.message.id}</h1><div class="sub">${d.message.from} · ${d.message.channel}
-        · ${d.message.study || "no study"} · ${d.message.received.text}</div></div>
+      <div class="head"><div><h1>Message ${d.message.id}</h1><div class="sub">${d.message.from} · ${d.message.where}
+        · ${d.message.received.text}</div></div>
         <${Badge} cls=${d.message.status === "Error" ? "bad" : d.message.status === "Done" ? "ok" : "warn"} dot>${d.message.status}<//></div>
       <div class="layout">
         <div class="panel"><h2>The whole conversation</h2>
@@ -186,16 +183,24 @@
             <div class="small muted">Sent to ${a.sent_to}${a.destinations.length ? " · " + a.destinations.join(", ") : ""}</div></div>`)}</div>`}
           <div class="panel"><h2>Details</h2><dl class="facts">
             <dt>From</dt><dd>${d.message.from} <span class="muted small">${d.message.from_addr}</span></dd>
+            <dt>Where</dt><dd>${d.message.where}</dd>
             ${d.message.to.length > 0 && html`<dt>To</dt><dd>${d.message.to.join(", ")}</dd>`}
             ${d.message.cc.length > 0 && html`<dt>Cc</dt><dd>${d.message.cc.join(", ")}</dd>`}
-            <dt>Sent / received</dt><dd>${d.message.sent.text || "unknown"} / ${d.message.received.text}</dd>
-            <dt>Seen as</dt><dd>${d.message.visibility}</dd>
+            <dt>When</dt><dd>${d.message.sent.text || d.message.received.text}</dd>
             ${d.message.attachments.length > 0 && html`<dt>Attachments</dt><dd>${d.message.attachments.map((a) => a.name).join(", ")}</dd>`}
-            <dt>Speed</dt><dd>${d.speed.seconds == null ? "No timing saved" : "Read and checked in " + d.speed.seconds + " s"}
-              ${d.speed.steps.length > 0 && html`<div class="small muted">${d.speed.steps.map((s) => s.name + " " + s.seconds + " s").join(" · ")}</div>`}</dd></dl></div>
-          <div class="panel"><h2>Steps logged</h2><table class="steps"><tbody>${d.log.map((r, i) => html`<tr key=${i}>
-            <td class="muted">${r.when.text}</td><td>${r.what}</td></tr>`)}</tbody></table></div>
+            ${d.speed.seconds != null && html`<dt>Time the bot took to check it</dt><dd>${d.speed.seconds} seconds</dd>`}</dl>
+            <${Technical} d=${d} /></div>
         </div></div>`}<//>`;
+  }
+
+  function Technical({ d }) {
+    const [open, setOpen] = useState(false);
+    return html`<div class="gap-top"><button class="link" onClick=${() => setOpen(!open)}>
+        ${open ? "Hide technical details" : "Show technical details"}</button>
+      ${open && html`<div class="gap-top small">
+        ${d.speed.steps.length > 0 && html`<div class="muted">Time per step: ${d.speed.steps.map((s) => s.name + " " + s.seconds + " s").join(" · ")}</div>`}
+        <table class="steps gap-top"><tbody>${d.log.map((r, i) => html`<tr key=${i}>
+          <td class="muted nowrap">${r.when.text}</td><td>${r.what}</td></tr>`)}</tbody></table></div>`}</div>`;
   }
 
   // ------------------------------------------------------------------ alerts
@@ -206,23 +211,22 @@
       <div class="head"><div><h1>Alerts</h1><div class="sub">Problems the bot raised. Click one to see its message and
         conversation.</div></div></div>
       <div class="filters">
-        <${Select} value=${q.state} onChange=${(v) => set("state", v)} options=${[{ value: "open", label: "Open" },
-          { value: "cleared", label: "Cleared" }, { value: "suppressed", label: "Disregarded" }, { value: "all", label: "All" }]} />
+        <${Select} value=${q.state} onChange=${(v) => set("state", v)} options=${[{ value: "open", label: "Open alerts" },
+          { value: "cleared", label: "Cleared" }, { value: "suppressed", label: "Disregarded" }, { value: "all", label: "All alerts" }]} />
         <${Select} value=${q.type} onChange=${(v) => set("type", v)} options=${options.types} />
         <${Select} value=${q.tier} onChange=${(v) => set("tier", v)} options=${options.tiers} />
       </div>
       <${Loading} state=${state}>${(d) => html`<div class="panel table">${d.rows.length ? html`<table>
-        <thead><tr><th>#</th><th>Opened</th><th>Type</th><th>Urgency</th><th>State</th><th>Site</th><th>Participant</th>
-          <th>Problem</th><th>Sent to</th></tr></thead>
+        <thead><tr><th>Opened</th><th>Type and urgency</th><th>Problem</th><th>Site and participant</th>
+          <th>Sent to</th><th>State</th></tr></thead>
         <tbody>${d.rows.map((a) => html`<tr key=${a.id} class="click" onClick=${() => go("/admin/messages/" + a.message_id)}>
-          <td><a href=${a.link} target="_blank" rel="noopener" onClick=${(e) => e.stopPropagation()}>#${a.id}</a></td>
-          <td class="small"><${When} w=${a.opened} /><div class="muted">${a.opened.ago}</div></td>
-          <td><${Badge} cls=${a.type.kind}>${a.type.label}<//></td>
-          <td><${Badge} cls=${a.tier}>${a.tier_label}<//></td>
-          <td>${a.state}${!a.counts && html`<div class="small muted">does not count</div>`}</td>
-          <td>${a.site}</td><td>${a.participant || "-"}</td>
-          <td><div class="clip">${a.title}</div></td>
-          <td>${a.sent_to}<div class="small muted">${a.destinations.join(", ") || "not sent"}</div></td></tr>`)}</tbody></table>
+          <td class="small nowrap"><${When} w=${a.opened} /><div class="muted">${a.opened.ago}</div></td>
+          <td><div class="stack"><${Badge} cls=${a.type.kind}>${a.type.label}<//><${Badge} cls=${a.tier}>${a.tier_label}<//></div></td>
+          <td><div class="clip">${a.title}</div>
+            <a class="small" href=${a.link} target="_blank" rel="noopener" onClick=${(e) => e.stopPropagation()}>Alert #${a.id} details</a></td>
+          <td>${a.site}<div class="small muted">${a.participant || "participant not named"}</div></td>
+          <td>${a.sent_to}<div class="small muted">${a.destinations.join(", ") || "not sent"}</div></td>
+          <td>${a.state}${!a.counts && html`<div class="small muted">does not count</div>`}</td></tr>`)}</tbody></table>
         ${d.more && html`<a class="more" href="#" onClick=${(e) => { e.preventDefault();
           go(location.pathname + "?" + new URLSearchParams({ ...q, before: d.rows[d.rows.length - 1].id })); }}>Older alerts</a>`}`
         : html`<div class="empty pad">No alerts here.</div>`}</div>`}<//>`;
@@ -234,11 +238,13 @@
     return html`<div class="head"><div><h1>Sign-ins and use</h1><div class="sub">Who has used the web pages and who has
       written to the bot.</div></div></div>
       <${Loading} state=${state}>${(d) => html`
-      <div class="panel table"><table><thead><tr><th>Name</th><th>Email</th><th>Study</th><th>Role</th>
-        <th>Last web visit</th><th>Pages opened</th><th>Messages to the bot</th></tr></thead>
-        <tbody>${d.people.map((p, i) => html`<tr key=${i}><td>${p.name}</td><td class="small">${p.email}</td>
-          <td class="small">${p.study}</td><td class="small">${p.roles}</td><td class="small"><${When} w=${p.last_visit} /></td>
-          <td>${p.pages}</td><td>${p.messages ? html`${p.messages} <span class="small muted">last ${p.last_message.text}</span>`
+      <div class="panel table"><table><thead><tr><th>Person</th><th>Role</th><th>Last web visit</th>
+        <th>Messages to the bot</th></tr></thead>
+        <tbody>${d.people.map((p, i) => html`<tr key=${i}><td>${p.name}<div class="small muted">${p.email}</div></td>
+          <td class="small">${p.roles}<div class="muted">${p.studies}</div></td>
+          <td class="small">${p.last_visit.at ? html`${p.last_visit.ago}<div class="muted">${p.pages} pages opened</div>`
+            : html`<span class="muted">never</span>`}</td>
+          <td class="small">${p.messages ? html`${p.messages}<div class="muted">last ${p.last_message.ago}</div>`
             : html`<span class="muted">none</span>`}</td></tr>`)}</tbody></table></div>
       <div class="grid2">
         <div class="panel"><h2>Others who visited the web pages</h2>${d.others.length ? html`<table><tbody>
