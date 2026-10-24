@@ -49,10 +49,7 @@ h2.period { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; c
 table.days td { padding: 8px 10px; }
 tr.quiet td { color: var(--muted); background: #fcfcfe; }
 a.count { font-weight: 600; }
-a.count.safety { color: var(--red); }
-.barcell { display: flex; align-items: center; gap: 10px; }
-.barcell a, .barcell .muted { min-width: 22px; }
-.bar { display: inline-block; height: 8px; border-radius: 4px; background: #c9d6ff; max-width: 160px; flex: none; }
+a.count.red { color: var(--red); }
 .pick { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
 input[type=date] { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font: inherit; color: var(--ink);
   background: #fff; }

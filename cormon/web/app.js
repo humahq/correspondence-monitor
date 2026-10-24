@@ -131,7 +131,6 @@
       const t = d.totals, p = periodOf(q);
       const card = (n, label, href, extra) => html`<a class="card click" href=${href} onClick=${linkTo(href)}>
         <b>${n}</b><span class="muted">${label}</span>${extra}</a>`;
-      const peak = Math.max(1, ...d.days.map((x) => x.messages));
       return html`
       <div class="head"><div><h1>Study monitor</h1><div class="sub">What came in and what the bot did. Pick the days
         to look at; click any number to see those messages or alerts.</div>
@@ -145,21 +144,23 @@
       <div class="cards">
         ${card(t.messages, "Messages", msgs(p), t.messages > 0 && html`<span class="small muted">${t.email} email · ${t.chat} chat${t.errors
           ? html` · <span class="bad-text">${t.errors} could not be read</span>` : ""}</span>`)}
-        ${card(t.problems, "Problems raised", alerts(p, "protocol"))}
-        ${card(t.safety, "Safety reports passed on", alerts(p, "safety"))}
+        ${card(t.problems, "Protocol problems found", alerts(p, "protocol"), html`<span class="small muted">each one opens
+          an alert</span>`)}
+        ${card(t.safety, "Patient safety messages", alerts(p, "safety"), html`<span class="small muted">not reviewed by
+          the bot; the sender is told to contact the medical monitor</span>`)}
         ${card(t.answered, "Questions answered", msgs(p))}</div>
       ${d.days.length > 0 && html`<div class="panel table"><h2 class="pad-h">Day by day</h2><table class="days">
-        <thead><tr><th>Day</th><th>Messages</th><th>Problems raised</th><th>Safety reports</th><th>Questions answered</th></tr></thead>
+        <thead><tr><th>Day</th><th>Messages</th><th>Protocol problems found</th><th>Patient safety messages</th>
+          <th>Questions answered</th></tr></thead>
         <tbody>${d.days.map((x) => html`<tr key=${x.date} class=${x.messages || x.problems || x.safety ? "" : "quiet"}>
           <td class="nowrap">${x.label}</td>
-          <td><div class="barcell"><${Count} n=${x.messages} href=${msgs({ date: x.date })} />
-            ${x.messages > 0 && html`<i class="bar" style=${{ width: Math.round((x.messages / peak) * 100) + "%" }}></i>`}
-            ${x.errors > 0 && html`<${Badge} cls="bad">${x.errors} not read<//>`}</div></td>
+          <td><${Count} n=${x.messages} href=${msgs({ date: x.date })} />
+            ${x.errors > 0 && html` <${Badge} cls="bad">${x.errors} not read<//>`}</td>
           <td><${Count} n=${x.problems} href=${alerts({ date: x.date }, "protocol")} /></td>
-          <td><${Count} n=${x.safety} href=${alerts({ date: x.date }, "safety")} cls="safety" /></td>
+          <td><${Count} n=${x.safety} href=${alerts({ date: x.date }, "safety")} cls="red" /></td>
           <td><${Count} n=${x.answered} href=${msgs({ date: x.date })} /></td></tr>`)}</tbody></table>
         ${d.capped && html`<div class="small muted pad">Showing the latest 90 days. Pick a day above to see an older one.</div>`}</div>`}
-      <div class="panel"><h2>Problems</h2>${d.problems.length
+      <div class="panel"><h2>Is anything wrong with the bot?</h2>${d.problems.length
         ? html`<ul class="problems">${d.problems.map((p, i) => html`<li key=${i}>${p.link
             ? html`<a href=${p.link} onClick=${p.link.startsWith("/admin") ? linkTo(p.link) : undefined}>${p.text}</a>`
             : p.text}</li>`)}</ul>`
