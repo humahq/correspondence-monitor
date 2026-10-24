@@ -1990,6 +1990,13 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
         assert [m["id"] for m in data(f"/admin/api/messages?date={old_day}")["rows"]] == [10]
         assert 10 not in [m["id"] for m in data("/admin/api/messages?days=1")["rows"]]
         assert data(f"/admin/api/alerts?state=all&date={old_day}")["rows"] == []
+        db.audit("processing_error", entity_type="message", entity_id=10, error="template broke")
+        assert [o["kind"] for o in data("/admin/api/messages/10")["message"]["outcome"]] == ["error"]
+        db.ex("UPDATE messages SET status='processed', error=NULL WHERE id=10")
+        db.audit("error_resolved", entity_type="message", entity_id=10, note="fixed")
+        assert [o["text"] for o in data("/admin/api/messages/10")["message"]["outcome"]] == [
+            "An earlier error was looked at and resolved"]
+        db.ex("UPDATE messages SET status='error' WHERE id=10")
         assert len(data("/admin/api/alerts?state=all&days=1")["rows"]) == 2
         assert adminview._plain('<p>See <a href="https://x.io/a?b=1">the <b>details</b></a></p>') == \
             "See <https://x.io/a?b=1|the details>"

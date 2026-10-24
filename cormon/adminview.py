@@ -39,6 +39,7 @@ OUTCOMES = {
     "instruction_not_applied": "An instruction was not applied",
     "outgoing_blocked": "A reply was held back",
     "processing_error": "Error while reading",
+    "error_resolved": "An earlier error was looked at and resolved",
 }
 
 CHANNEL = {"email": "Email", "teams": "Chat"}
@@ -187,12 +188,15 @@ def outcome(msg: dict) -> list[dict]:
         verb = "New alert" if it["first_message_id"] == msg["id"] else "Added to alert"
         said.append({"kind": "alert", "text": f"{verb} #{it['id']}", "alert": _alert(dict(it))})
     seen = set()
-    for r in db.q("SELECT action FROM audit_log WHERE entity_type='message' AND entity_id=? ORDER BY id",
-                  (str(msg["id"]),)):
-        words = OUTCOMES.get(r["action"])
+    log = [r["action"] for r in db.q("SELECT action FROM audit_log WHERE entity_type='message' AND entity_id=?"
+                                     " ORDER BY id", (str(msg["id"]),))]
+    if "error_resolved" in log:
+        seen.add(OUTCOMES["processing_error"])
+    for action in log:
+        words = OUTCOMES.get(action)
         if words and words not in seen:
             seen.add(words)
-            said.append({"kind": "error" if r["action"] == "processing_error" else "note", "text": words})
+            said.append({"kind": "error" if action == "processing_error" else "note", "text": words})
     sent = [r["purpose"] for r in db.q("SELECT purpose FROM outbox WHERE message_id=? AND status='sent'"
                                        " AND purpose!='chat_received'", (msg["id"],))]
     replies = sum(p in REPLIES for p in sent)
