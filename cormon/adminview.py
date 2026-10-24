@@ -162,16 +162,57 @@ def alert_type(item: dict) -> dict:
     return {"label": area["label"] if area else "Protocol problem", "kind": "protocol"}
 
 
+_sends: dict = {"key": None, "by_item": {}}
+
+
+def deliveries() -> dict[int, list[dict]]:
+    """Every outgoing message per alert, from the outbox. One email or chat post can carry several alerts of a
+    message (meta item_ids), so it is listed under each of them. Rebuilt only when the outbox changes."""
+    key = tuple(db.q1("SELECT MAX(id) AS m, COUNT(*) AS n, SUM(status='sent') AS s FROM outbox"))
+    if key != _sends["key"]:
+        by_item: dict[int, list[dict]] = {}
+        for o in db.q("SELECT * FROM outbox WHERE purpose!='digest' ORDER BY id"):
+            ids = {o["item_id"]} | set(db.unjs(o["meta"], {}).get("item_ids") or [])
+            row = {"channel": "email" if o["channel"] == "email" else "chat", "destination": o["destination"],
+                   "to": [a.lower() for a in db.unjs(o["to_addrs"], [])],
+                   "cc": [a.lower() for a in db.unjs(o["cc_addrs"], [])], "status": o["status"]}
+            for i in ids - {None}:
+                by_item.setdefault(int(i), []).append(row)
+        _sends.update(key=key, by_item=by_item)
+    return _sends["by_item"]
+
+
+def _who(study, addr: str) -> dict:
+    p = study.person_by_email(addr) if study else None
+    return {"name": p.name if p else addr, "email": addr,
+            "role": ", ".join(study.role_label(r) for r in p.roles) if p else "not in the study files"}
+
+
+def _sent_to(a: dict) -> dict:
+    """Who got this alert: each person once (main recipient before copy), whether it went to a chat room, and
+    how many of its messages are not sent (waiting for approval or failed)."""
+    study = _studies().get(a["study_id"])
+    rows = deliveries().get(a["id"], [])
+    people: dict[str, dict] = {}
+    for r in rows:
+        if r["status"] != "sent" or r["channel"] != "email":
+            continue
+        for how, addrs in (("to", r["to"]), ("copy", r["cc"])):
+            for addr in addrs:
+                if addr not in people or (how == "to" and people[addr]["how"] == "copy"):
+                    people[addr] = dict(_who(study, addr), how=how)
+    chats = sorted({_dest(r["destination"]) for r in rows if r["status"] == "sent" and r["channel"] == "chat"})
+    return {"people": sorted(people.values(), key=lambda p: p["how"] != "to"), "chats": chats,
+            "not_sent": sum(r["status"] != "sent" for r in rows)}
+
+
 def _alert(a: dict) -> dict:
     study = _studies().get(a["study_id"])
-    dest = sorted({_dest(o["destination"]) for o in db.q(
-        "SELECT destination FROM outbox WHERE item_id=?", (a["id"],))})
     return {"id": a["id"], "link": f"/items/{a['link_token']}", "title": a["title"], "type": alert_type(a),
             "tier": a["tier"], "tier_label": TIER_LABELS.get(a["tier"], a["tier"]),
             "state": STATE.get(a["state"], a["state"]), "counts": bool(a["counts"]),
             "site": study.site_name(a["site"]) if study else a["site"], "participant": a["participant_id"],
-            "sent_to": _name(a["study_id"], a["recipient_person"]), "destinations": dest,
-            "opened": _when(a["created_at"]), "message_id": a["first_message_id"]}
+            "sent": _sent_to(a), "opened": _when(a["created_at"]), "message_id": a["first_message_id"]}
 
 
 # ---------------------------------------------------------------- what the bot did with a message
@@ -318,13 +359,25 @@ def options() -> dict:
             + [{"value": "nobody", "label": "Sent to nobody"}]}
 
 
+def _alerts_for(person: str) -> list[int]:
+    """Alerts emailed to an address (main recipient or copy, sent). For "nobody": alerts with anything sent at
+    all, which the caller leaves out."""
+    if person == "nobody":
+        return sorted(i for i, rows in deliveries().items() if any(r["status"] == "sent" for r in rows))
+    addr = person.lower()
+    return sorted(i for i, rows in deliveries().items()
+                  if any(r["status"] == "sent" and addr in r["to"] + r["cc"] for r in rows))
+
+
 def _recipients() -> list[dict]:
-    """Everyone in the study files, plus anyone an alert went to who is no longer listed there."""
-    known = {p.id: f"{p.name} ({', '.join(s.role_label(r) for r in p.roles)})"
-             for s in _studies().values() for p in s.people}
-    for r in db.q("SELECT DISTINCT recipient_person AS pid FROM items WHERE recipient_person IS NOT NULL"
-                  " AND recipient_person!=''"):
-        known.setdefault(r["pid"], f"{r['pid']} (not in the study files)")
+    """Everyone with an email in the study files, plus any other address an alert was emailed to."""
+    known = {p.email.lower(): f"{p.name} ({', '.join(s.role_label(r) for r in p.roles)})"
+             for s in _studies().values() for p in s.people if p.email}
+    for rows in deliveries().values():
+        for r in rows:
+            if r["channel"] == "email" and r["status"] == "sent":
+                for addr in r["to"] + r["cc"]:
+                    known.setdefault(addr, f"{addr} (not in the study files)")
     return [{"value": k, "label": v} for k, v in sorted(known.items(), key=lambda x: x[1].lower())]
 
 
@@ -467,10 +520,11 @@ def alerts(query: dict) -> dict:
     elif kind.startswith("area:"):
         sql += " AND kind='finding' AND pattern_class=?"; params.append(kind[5:])
     person = query.get("person", "")
-    if person == "nobody":
-        sql += " AND (recipient_person IS NULL OR recipient_person='')"
-    elif person:
-        sql += " AND recipient_person=?"; params.append(person)
+    if person:
+        ids = _alerts_for(person)
+        if ids or person != "nobody":
+            sql += f" AND id {'NOT ' if person == 'nobody' else ''}IN ({','.join('?' * len(ids)) or 'NULL'})"
+            params += ids
     if before.isdigit():
         sql += " AND id<?"; params.append(int(before))
     rows = [dict(r) for r in db.q(sql + " ORDER BY id DESC LIMIT ?", (*params, PAGE + 1))]
@@ -505,12 +559,22 @@ def people() -> dict:
             row = by_email.setdefault(e, {"name": p.name, "email": e, "studies": [], "roles": []})
             row["studies"].append(st.study_id)
             row["roles"] += [st.role_label(r) for r in p.roles if st.role_label(r) not in row["roles"]]
+    got: dict = {}
+    for o in db.q("SELECT purpose, to_addrs, cc_addrs FROM outbox WHERE channel='email' AND status='sent'"):
+        kind = "summaries" if o["purpose"] == "digest" else "emails"
+        for how, addrs in (("", o["to_addrs"]), ("_copy", o["cc_addrs"])):
+            for a in {x.lower() for x in db.unjs(addrs, [])}:
+                g = got.setdefault(a, {"emails": 0, "emails_copy": 0, "summaries": 0, "summaries_copy": 0})
+                g[kind + how] += 1
     rows = []
     for e, row in by_email.items():
         w, m = web.get(e, {}), wrote.get(e, {})
+        g = got.get(e, {})
         rows.append(dict(row, studies=", ".join(row["studies"]), roles=", ".join(row["roles"]),
                          last_visit=_when(w.get("last")), pages=w.get("pages", 0),
-                         messages=m.get("n", 0), last_message=_when(m.get("last"))))
+                         messages=m.get("n", 0), last_message=_when(m.get("last")),
+                         emails=g.get("emails", 0) + g.get("emails_copy", 0), emails_copy=g.get("emails_copy", 0),
+                         summaries=g.get("summaries", 0) + g.get("summaries_copy", 0)))
     listed = set(by_email)
     return {"people": rows,
             "others": [{"email": e, "last_visit": _when(w["last"]), "pages": w["pages"]}

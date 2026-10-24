@@ -2014,11 +2014,34 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
                 assert d["problems"] == n(f"/admin/api/alerts?state=all&type=protocol&date={d['date']}")
         assert h["open_now"] == n("/admin/api/alerts")
         assert [m["id"] for m in data("/admin/api/messages?days=all&did=answered")["rows"]] == [9]
-        db.ex("UPDATE items SET recipient_person='ernest-cra' WHERE id=3")
-        assert [a["id"] for a in data("/admin/api/alerts?state=all&person=ernest-cra")["rows"]] == [3]
+        st = config.studies()[study]
+        lead = next(p for p in st.people if p.email)
+        db.ex("UPDATE outbox SET status='held' WHERE purpose='email_cra'")
+        assert [a["id"] for a in data("/admin/api/alerts?state=all&person=nobody")["rows"]] == [4, 3]
+        db.ex("UPDATE outbox SET status='sent' WHERE purpose='email_cra'")
+        assert [a["id"] for a in data("/admin/api/alerts?state=all&person=cra@x.org")["rows"]] == [3]
+        assert [a["id"] for a in data("/admin/api/alerts?state=all&person=nobody")["rows"]] == [4]
+        assert data(f"/admin/api/alerts?state=all&person={lead.email}")["rows"] == []
+        db.ex("INSERT INTO outbox (item_id, message_id, purpose, channel, destination, to_addrs, cc_addrs, body,"
+              " status, meta, created_at, sent_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+              (3, 7, "email_cra", "email", "email", '["cra@x.org"]', json.dumps([lead.email.upper()]), "Two alerts",
+               "sent", '{"item_ids": [3, 4]}', db.now(), db.now()))
+        db.ex("INSERT INTO outbox (item_id, purpose, channel, destination, to_addrs, body, status, created_at)"
+              " VALUES (?,?,?,?,?,?,?,?)", (4, "email_cra", "email", "email", '["x@x.org"]', "held", "held", db.now()))
+        db.ex("INSERT INTO outbox (purpose, channel, destination, to_addrs, body, status, created_at, sent_at)"
+              " VALUES (?,?,?,?,?,?,?,?)", ("digest", "email", "email", json.dumps([lead.email]), "d", "sent",
+                                            db.now(), db.now()))
+        assert [a["id"] for a in data(f"/admin/api/alerts?state=all&person={lead.email}")["rows"]] == [4, 3]
+        assert data("/admin/api/alerts?state=all&person=nobody")["rows"] == []
+        sent4 = next(a for a in data("/admin/api/alerts?state=all")["rows"] if a["id"] == 4)["sent"]
+        assert [(p["email"], p["how"]) for p in sent4["people"]] == [("cra@x.org", "to"), (lead.email.lower(), "copy")]
+        assert sent4["not_sent"] == 1 and sent4["people"][1]["name"] == lead.name
+        assert {"value": "cra@x.org", "label": "cra@x.org (not in the study files)"} in data("/admin/api/options")["people"]
+        me = next(r for r in data("/admin/api/people")["people"] if r["email"] == lead.email.lower())
+        assert (me["emails"], me["emails_copy"], me["summaries"]) == (1, 1, 1)
+        db.ex("DELETE FROM outbox WHERE body IN ('Two alerts', 'held', 'd')")
         assert [a["id"] for a in data("/admin/api/alerts?state=all&person=nobody")["rows"]] == [4]
         team = data("/admin/api/home")["team"]
-        st = config.studies()[study]
         mine = next(t for t in team if t["study"] == study)
         assert mine["sponsor"] == st.sponsor and [p["email"] for p in mine["people"]] == [p.email for p in st.people]
         assert team[0]["study"] == study

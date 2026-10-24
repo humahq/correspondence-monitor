@@ -109,6 +109,16 @@
     ? html`<a class=${"count " + (cls || "")} href=${href} onClick=${linkTo(href)}>${n}</a>`
     : html`<span class="muted">–</span>`;
 
+  function SentTo({ s }) {
+    if (!s.people.length && !s.chats.length)
+      return html`<span class="muted">${s.not_sent ? s.not_sent + " waiting, not sent" : "nobody"}</span>`;
+    return html`<div class="sentto">${s.people.map((p) => html`<div key=${p.email}>
+        ${p.how === "copy" && html`<span class="muted">copy: </span>`}${p.name}
+        <span class="small muted"> ${p.role}</span></div>`)}
+      ${s.chats.length > 0 && html`<div class="small muted">${s.people.length ? "and posted in the " : "posted in the "}${s.chats.join(", ")}</div>`}
+      ${s.not_sent > 0 && html`<div class="small muted">${s.not_sent} more waiting, not sent</div>`}</div>`;
+  }
+
   function AlertTags({ a }) {
     return html`<${Badge} cls=${a.type.kind}>${a.type.label}<//> <${Badge} cls=${a.tier}>${a.tier_label}<//>`;
   }
@@ -145,22 +155,19 @@
       <div class="cards">
         ${card(t.messages, "Messages", msgs(p), t.messages > 0 && html`<span class="small muted">${t.email} email · ${t.chat} chat</span>`)}
         ${card(t.problems, "Protocol problems found", alerts(p, "protocol"))}
-        ${card(t.safety, "Patient safety messages", alerts(p, "safety"), html`<span class="small muted">not reviewed by
-          the bot; the sender is told to contact the medical monitor</span>`)}
         ${card(t.answered, "Questions answered", msgs({ ...p, did: "answered" }))}</div>
       ${t.errors > 0 && html`<div class="error gap-bottom"><a href=${msgs({ ...p, did: "error" })}
         onClick=${linkTo(msgs({ ...p, did: "error" }))}>${t.errors} message${t.errors === 1 ? "" : "s"} in this period could
         not be read by the bot</a></div>`}
       ${d.days.length > 0 && html`<div class="panel table"><h2 class="pad-h">Day by day</h2><table class="days">
-        <thead><tr><th>Day</th><th>Messages</th><th>Protocol problems found</th><th>Patient safety messages</th>
+        <thead><tr><th>Day</th><th>Messages</th><th>Protocol problems found</th>
           <th>Questions answered</th></tr></thead>
-        <tbody>${d.days.map((x) => html`<tr key=${x.date} class=${x.messages || x.problems || x.safety ? "" : "quiet"}>
+        <tbody>${d.days.map((x) => html`<tr key=${x.date} class=${x.messages || x.problems ? "" : "quiet"}>
           <td class="nowrap">${x.label}</td>
           <td><${Count} n=${x.messages} href=${msgs({ date: x.date })} />
             ${x.errors > 0 && html` <a href=${msgs({ date: x.date, did: "error" })} onClick=${linkTo(msgs({ date: x.date, did: "error" }))}><${Badge}
               cls="bad">${x.errors} not read<//></a>`}</td>
           <td><${Count} n=${x.problems} href=${alerts({ date: x.date }, "protocol")} /></td>
-          <td><${Count} n=${x.safety} href=${alerts({ date: x.date }, "safety")} cls="red" /></td>
           <td><${Count} n=${x.answered} href=${msgs({ date: x.date, did: "answered" })} /></td></tr>`)}</tbody></table>
         ${d.capped && html`<div class="small muted pad">Showing the latest 90 days. Pick a day above to see an older one.</div>`}</div>`}
       <${Team} team=${d.team} />
@@ -289,7 +296,7 @@
           ${d.alerts.length > 0 && html`<div class="panel"><h2>Alerts</h2>${d.alerts.map((a) => html`<div key=${a.id}
             class="gap-bottom"><${AlertTags} a=${a} /> <span class="small muted">${a.state}</span>
             <div><a href=${a.link} target="_blank" rel="noopener">#${a.id}</a> ${a.title}</div>
-            <div class="small muted">Sent to ${a.sent_to}${a.destinations.length ? " · " + a.destinations.join(", ") : ""}</div></div>`)}</div>`}
+            <div class="small gap-top"><span class="muted">Sent to:</span> <${SentTo} s=${a.sent} /></div></div>`)}</div>`}
           <div class="panel"><h2>Details</h2><dl class="facts">
             <dt>From</dt><dd>${d.message.from} <span class="muted small">${d.message.from_addr}</span></dd>
             <dt>Where</dt><dd>${d.message.where}</dd>
@@ -336,7 +343,7 @@
           <td><div class="clip">${a.title}</div>
             <a class="small" href=${a.link} target="_blank" rel="noopener" onClick=${(e) => e.stopPropagation()}>Alert #${a.id} details</a></td>
           <td>${a.site}<div class="small muted">${a.participant || "participant not named"}</div></td>
-          <td>${a.sent_to}<div class="small muted">${a.destinations.join(", ") || "not sent"}</div></td>
+          <td><${SentTo} s=${a.sent} /></td>
           <td>${a.state}${!a.counts && html`<div class="small muted">does not count</div>`}</td></tr>`)}</tbody></table>
         ${d.more && html`<a class="more" href="#" onClick=${(e) => { e.preventDefault();
           go(location.pathname + "?" + new URLSearchParams({ ...q, before: d.rows[d.rows.length - 1].id })); }}>Older alerts</a>`}`
@@ -350,13 +357,16 @@
       written to the bot.</div></div></div>
       <${Loading} state=${state}>${(d) => html`
       <div class="panel table"><table><thead><tr><th>Person</th><th>Role</th><th>Last web visit</th>
-        <th>Messages to the bot</th></tr></thead>
+        <th>Messages to the bot</th><th>Emails from the bot</th></tr></thead>
         <tbody>${d.people.map((p, i) => html`<tr key=${i}><td>${p.name}<div class="small muted">${p.email}</div></td>
           <td class="small">${p.roles}<div class="muted">${p.studies}</div></td>
           <td class="small">${p.last_visit.at ? html`${p.last_visit.ago}<div class="muted">${p.pages} pages opened</div>`
             : html`<span class="muted">never</span>`}</td>
           <td class="small">${p.messages ? html`${p.messages}<div class="muted">last ${p.last_message.ago}</div>`
-            : html`<span class="muted">none</span>`}</td></tr>`)}</tbody></table></div>
+            : html`<span class="muted">none</span>`}</td>
+          <td class="small">${p.emails || p.summaries ? html`${p.emails} about alerts${p.emails_copy
+            ? html`<div class="muted">${p.emails_copy} of them as a copy</div>` : ""}${p.summaries
+            ? html`<div class="muted">plus ${p.summaries} daily ${p.summaries === 1 ? "summary" : "summaries"}</div>` : ""}` : html`<span class="muted">none</span>`}</td></tr>`)}</tbody></table></div>
       <div class="grid2">
         <div class="panel"><h2>Others who visited the web pages</h2>${d.others.length ? html`<table><tbody>
           ${d.others.map((o, i) => html`<tr key=${i}><td>${o.email}</td><td class="small"><${When} w=${o.last_visit} /></td>
