@@ -1961,6 +1961,10 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
         actions = [r["action"] for r in db.q("SELECT action FROM audit_log WHERE entity_type='web'")]
         assert {"admin_viewed", "admin_refused"} <= set(actions)
         conf["web.login.enabled"] = False
+        assert get("/admin", "peter@huma.ai")[0] == 200
+        assert get("/admin")[0] == 302
+        assert get("/items/tok3")[0] == 200
+        conf["web.login.client_id"] = ""
         assert get("/admin", "peter@huma.ai")[0] == 403
     finally:
         server.shutdown()

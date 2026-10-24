@@ -31,6 +31,11 @@ def enabled() -> bool:
     return bool(settings.get("web.login.enabled", False))
 
 
+def ready() -> bool:
+    """Google sign-in can run: on for every page, or set up (client id) for the admin pages only."""
+    return enabled() or bool(settings.get("web.login.client_id") and settings.get("web.admin.emails"))
+
+
 def _key() -> bytes:
     k = db.get_state("session_key")
     if not k:
@@ -148,9 +153,10 @@ def gate(path: str, cookie_header: str | None, study_id: str, what: str, ref) ->
 
 def admin_gate(path: str, cookie_header: str | None) -> tuple[tuple[int, dict, str] | None, str | None]:
     """(response to send instead, None) or (None, email) for an admin page. Unlike gate(), it stays shut while
-    sign-in is off, and only the people in web.admin.emails get in."""
-    if not enabled():
-        return (403, {}, "The admin pages need Google sign-in turned on (web.login.enabled)."), None
+    sign-in is not set up, and only the people in web.admin.emails get in. It needs only web.login.client_id
+    (and the secret), so the admin pages can ask for sign-in while the item and answer pages still do not."""
+    if not ready():
+        return (403, {}, "The admin pages need Google sign-in set up (web.login.client_id)."), None
     email = signed_in(cookie_header)
     if not email:
         return (302, {"Location": sign_in_url(path)}, ""), None

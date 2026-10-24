@@ -200,7 +200,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
             return self._send(200, "ok", "text/plain")
-        if self.path.startswith("/auth/callback") and weblogin.enabled():
+        if self.path.startswith("/auth/callback") and weblogin.ready():
             code, headers, body = weblogin.callback(self.path)
             return self._send(code, body, "text/plain; charset=utf-8", headers)
         if self.path.startswith("/auth/logout"):
