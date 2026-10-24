@@ -1928,6 +1928,11 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
           " polarity, title, tier, evidence, link_token, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
           (3, study, "t7", 7, 7, "k3", "finding", "problem", "Week 8 visit late", "medium", "{}", "tok3",
            db.now(), db.now()))
+    db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind,"
+          " polarity, title, tier, state, evidence, link_token, created_at, updated_at)"
+          " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (4, study, "t7", 7, 7, "k4", "out_of_scope", "neutral", "Safety note", "low", "out_of_scope", "{}", "tok4",
+           db.now(), db.now()))
     server = ThreadingHTTPServer(("127.0.0.1", 0), webview.Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
@@ -1947,7 +1952,10 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
         assert status == 200 and "New alert #3" in page and "Not about the trial" in page
         page = get("/admin/messages/7", "peter@huma.ai")[2]
         assert "G-1 came in late for Week 8" in page and "/items/tok3" in page
-        assert "Week 8 visit late" in get("/admin/alerts", "peter@huma.ai")[2]
+        page = get("/admin/alerts", "peter@huma.ai")[2]
+        assert "Week 8 visit late" in page and "Protocol problem" in page and "Safety note" not in page
+        page = get("/admin/alerts?type=safety", "peter@huma.ai")[2]
+        assert "Safety note" in page and "Patient safety" in page and "Week 8 visit late" not in page
         assert "Sign-ins and use" in get("/admin/people", "peter@huma.ai")[2]
         assert get("/admin/messages/999", "peter@huma.ai")[0] == 404
         actions = [r["action"] for r in db.q("SELECT action FROM audit_log WHERE entity_type='web'")]

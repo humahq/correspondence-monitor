@@ -47,7 +47,24 @@ OUTCOMES = {
 
 CHANNEL = {"email": "Email", "teams": "Chat"}
 STATUS = {"new": "Waiting", "processing": "Reading now", "processed": "Done", "error": "Error"}
-STATE = {"open": "Open", "cleared": "Cleared", "suppressed": "Disregarded"}
+STATE = {"open": "Open", "cleared": "Cleared", "suppressed": "Disregarded", "out_of_scope": "Not reviewed (safety)"}
+
+
+def alert_type(item: dict) -> str:
+    """Patient safety, good news, or the study area of a protocol problem (the study's pattern class label)."""
+    if item["kind"] == "out_of_scope":
+        return _tag("Patient safety", "bad")
+    if item["kind"] == "good_news":
+        return _tag("Good news", "ok")
+    study = config.studies().get(item["study_id"])
+    area = study.pattern(item["pattern_class"]) if study and item["pattern_class"] else None
+    return _tag(area["label"] if area else "Protocol problem")
+
+
+def _type_options() -> list[tuple[str, str]]:
+    areas = {p["id"]: p["label"] for s in config.studies().values() for p in s.pattern_classes}
+    return [("", "Any type"), ("safety", "Patient safety"), ("protocol", "Any protocol problem")] \
+        + [(f"area:{k}", f"  {v}") for k, v in areas.items()] + [("good_news", "Good news")]
 
 
 def _local_midnight(days_back: int = 0) -> str:
@@ -104,10 +121,10 @@ def outcome(msg: dict) -> list[str]:
     if msg["status"] in ("new", "processing"):
         return [_tag(STATUS[msg["status"]], "warn")]
     said = []
-    for it in db.q("SELECT id, tier, link_token, first_message_id FROM items WHERE first_message_id=?"
-                   " OR last_message_id=? ORDER BY id", (msg["id"], msg["id"])):
+    for it in db.q("SELECT id, study_id, kind, pattern_class, tier, link_token, first_message_id FROM items"
+                   " WHERE first_message_id=? OR last_message_id=? ORDER BY id", (msg["id"], msg["id"])):
         verb = "New alert" if it["first_message_id"] == msg["id"] else "Added to alert"
-        said.append(_tag(TIER_LABELS.get(it["tier"], it["tier"]), it["tier"])
+        said.append(alert_type(dict(it)) + _tag(TIER_LABELS.get(it["tier"], it["tier"]), it["tier"])
                     + f'<a href="/items/{_e(it["link_token"])}">{verb} #{it["id"]}</a>')
     seen = set()
     for r in db.q("SELECT action FROM audit_log WHERE entity_type='message' AND entity_id=? ORDER BY id",
@@ -242,7 +259,7 @@ def message(email: str, msg_id: int) -> str | None:
                                     (msg_id, msg_id))]
     study = config.studies().get(m["study_id"])
     name = lambda pid: (study.person(pid).name if study and study.person(pid) else pid) or "nobody"
-    alert_rows = [[f'<a href="/items/{_e(a["link_token"])}">#{a["id"]}</a>',
+    alert_rows = [[f'<a href="/items/{_e(a["link_token"])}">#{a["id"]}</a>', alert_type(a),
                    _tag(TIER_LABELS.get(a["tier"], a["tier"]), a["tier"]), _e(STATE.get(a["state"], a["state"])),
                    _e(a["title"]), _e(name(a["recipient_person"]))] for a in alerts]
     item_ids = [a["id"] for a in alerts]
@@ -274,7 +291,8 @@ Sent {_e(local_time(m['sent_at']))} · received {_e(local_time(m['received_at'])
 <h2>The message</h2><pre>{_e(m['body_text'] or '(the text is no longer kept)')}</pre>
 {f'<p class="muted">Attachments:</p><ul>{attachments}</ul>' if attachments else ''}
 <h2>What the bot did</h2><ul>{''.join(f'<li>{x}</li>' for x in outcome(m))}</ul>
-<h2>Alerts</h2>{_table(['#', 'Urgency', 'State', 'Title', 'Sent to'], alert_rows, 'No alert from this message.')}
+<h2>Alerts</h2>{_table(['#', 'Type', 'Urgency', 'State', 'Title', 'Sent to'], alert_rows,
+                        'No alert from this message.')}
 <h2>Messages the bot sent</h2>{_table(['When', 'Kind', 'To', 'Status', 'Text'], sent_rows, 'None.')}
 {f'<h2>Answers</h2><ul>{page_links}</ul>' if page_links else ''}
 <h2>Speed</h2><p>{_e(speed)}</p>
@@ -289,14 +307,25 @@ Sent {_e(local_time(m['sent_at']))} · received {_e(local_time(m['received_at'])
 def alerts(email: str, query: dict) -> str:
     state = query.get("state", "open")
     tier = query.get("tier", "")
+    kind = query.get("type", "")
     before = query.get("before", "")
     sql, params = "SELECT * FROM items WHERE 1=1", []
-    if state == "open":
+    if state == "open" and kind == "safety":
+        sql += " AND state='out_of_scope'"
+    elif state == "open":
         sql += " AND state='open' AND counts=1"
     elif state in STATE:
         sql += " AND state=?"; params.append(state)
     if tier in TIER_LABELS:
         sql += " AND tier=?"; params.append(tier)
+    if kind == "safety":
+        sql += " AND kind='out_of_scope'"
+    elif kind == "good_news":
+        sql += " AND kind='good_news'"
+    elif kind == "protocol":
+        sql += " AND kind='finding'"
+    elif kind.startswith("area:"):
+        sql += " AND kind='finding' AND pattern_class=?"; params.append(kind[5:])
     if before.isdigit():
         sql += " AND id<?"; params.append(int(before))
     rows = [dict(r) for r in db.q(sql + " ORDER BY id DESC LIMIT ?", (*params, PAGE + 1))]
@@ -304,6 +333,7 @@ def alerts(email: str, query: dict) -> str:
     rows = rows[:PAGE]
     filters = f"""<form class="filters" method="get">
 {_select("state", state, [("open", "Open"), ("cleared", "Cleared"), ("suppressed", "Disregarded"), ("all", "All")])}
+{_select("type", kind, _type_options())}
 {_select("tier", tier, [("", "Any urgency")] + [(k, v) for k, v in TIER_LABELS.items()])}<button>Show</button></form>"""
     out = []
     for a in rows:
@@ -312,7 +342,7 @@ def alerts(email: str, query: dict) -> str:
         study = config.studies().get(a["study_id"])
         person = study.person(a["recipient_person"]) if study else None
         out.append([f'<a href="/items/{_e(a["link_token"])}">#{a["id"]}</a>', _e(local_time(a["created_at"])),
-                    _tag(TIER_LABELS.get(a["tier"], a["tier"]), a["tier"]),
+                    alert_type(a), _tag(TIER_LABELS.get(a["tier"], a["tier"]), a["tier"]),
                     _e(STATE.get(a["state"], a["state"])) + ("" if a["counts"] else ' <span class="muted">(does not count)</span>'),
                     _e(study.site_name(a["site"]) if study else a["site"]), _e(a["participant_id"] or "-"),
                     _e(a["title"]), _e(person.name if person else a["recipient_person"] or "nobody")
@@ -321,7 +351,7 @@ def alerts(email: str, query: dict) -> str:
     nxt = ""
     if more:
         nxt = f'<p><a href="/admin/alerts?{urlencode(dict(query, before=rows[-1]["id"]))}">Older alerts</a></p>'
-    table = _table(["#", "Opened", "Urgency", "State", "Site", "Participant", "Problem", "Sent to", "Age"], out,
+    table = _table(["#", "Opened", "Type", "Urgency", "State", "Site", "Participant", "Problem", "Sent to", "Age"], out,
                    "No alerts here.")
     return _shell("Alerts", "/admin/alerts", email, filters + table + nxt)
 
