@@ -1908,7 +1908,8 @@ def test_pages_need_a_google_sign_in_on_the_studys_people_list(monkeypatch):
 def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monkeypatch):
     import http.client, threading, time as _t
     from http.server import ThreadingHTTPServer
-    from cormon import config, settings, webview, weblogin
+    from cormon import adminview, config, settings, webview, weblogin
+    adminview._loaded["at"] = 0.0
     conf = {"web.login.enabled": True, "web.login.client_id": "cid", "web.base_url": "https://mon.example",
             "web.admin.emails": ["Peter@huma.ai"]}
     real = settings.get

@@ -4,6 +4,7 @@ the bot did with it, every alert, and who has signed in or written. Nothing on t
 from __future__ import annotations
 
 import statistics
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlencode, urlparse
 from zoneinfo import ZoneInfo
@@ -56,15 +57,26 @@ def alert_type(item: dict) -> str:
         return _tag("Patient safety", "bad")
     if item["kind"] == "good_news":
         return _tag("Good news", "ok")
-    study = config.studies().get(item["study_id"])
+    study = _studies().get(item["study_id"])
     area = study.pattern(item["pattern_class"]) if study and item["pattern_class"] else None
     return _tag(area["label"] if area else "Protocol problem")
 
 
 def _type_options() -> list[tuple[str, str]]:
-    areas = {p["id"]: p["label"] for s in config.studies().values() for p in s.pattern_classes}
+    areas = {p["id"]: p["label"] for s in _studies().values() for p in s.pattern_classes}
     return [("", "Any type"), ("safety", "Patient safety"), ("protocol", "Any protocol problem")] \
         + [(f"area:{k}", f"  {v}") for k, v in areas.items()] + [("good_news", "Good news")]
+
+
+_loaded: dict = {"at": 0.0, "studies": {}}
+
+
+def _studies() -> dict:
+    """The study files, read at most every 30 seconds: a page uses them once per row."""
+    if time.monotonic() - _loaded["at"] > 30:
+        _loaded["studies"] = config.studies()
+        _loaded["at"] = time.monotonic()
+    return _loaded["studies"]
 
 
 def _local_midnight(days_back: int = 0) -> str:
@@ -154,7 +166,7 @@ def _problems() -> list[str]:
     for r in db.q("SELECT id, link_token FROM items WHERE routed=0 AND state!='suppressed' AND counts=1"
                   " AND created_at<?", (db.later(-15),)):
         out.append(f'<a href="/items/{_e(r["link_token"])}">Alert #{r["id"]}</a> was made but not sent yet.')
-    for st in config.studies().values():
+    for st in _studies().values():
         g = coverage.last(st.study_id)
         if g and g["warnings"]:
             out.append(f"Study {_e(st.study_id)}: the document check has warnings: {_e('; '.join(g['warnings']))}")
@@ -231,7 +243,7 @@ def messages(email: str, query: dict) -> str:
     rows = [dict(r) for r in db.q(sql + " ORDER BY id DESC LIMIT ?", (*params, PAGE + 1))]
     more = len(rows) > PAGE
     rows = rows[:PAGE]
-    studies = [("", "All studies")] + [(s, s) for s in config.studies()]
+    studies = [("", "All studies")] + [(s, s) for s in _studies()]
     filters = f"""<form class="filters" method="get">
 {_select("days", days, [("1", "Today"), ("7", "Last 7 days"), ("30", "Last 30 days"), ("all", "All time")])}
 {_select("channel", channel, [("", "Chat and email"), ("teams", "Chat only"), ("email", "Email only")])}
@@ -257,7 +269,7 @@ def message(email: str, msg_id: int) -> str | None:
         return None
     alerts = [dict(r) for r in db.q("SELECT * FROM items WHERE first_message_id=? OR last_message_id=? ORDER BY id",
                                     (msg_id, msg_id))]
-    study = config.studies().get(m["study_id"])
+    study = _studies().get(m["study_id"])
     name = lambda pid: (study.person(pid).name if study and study.person(pid) else pid) or "nobody"
     alert_rows = [[f'<a href="/items/{_e(a["link_token"])}">#{a["id"]}</a>', alert_type(a),
                    _tag(TIER_LABELS.get(a["tier"], a["tier"]), a["tier"]), _e(STATE.get(a["state"], a["state"])),
@@ -339,7 +351,7 @@ def alerts(email: str, query: dict) -> str:
     for a in rows:
         dest = ", ".join(sorted({o["destination"] for o in db.q("SELECT destination FROM outbox WHERE item_id=?",
                                                                 (a["id"],))})) or "not sent"
-        study = config.studies().get(a["study_id"])
+        study = _studies().get(a["study_id"])
         person = study.person(a["recipient_person"]) if study else None
         out.append([f'<a href="/items/{_e(a["link_token"])}">#{a["id"]}</a>', _e(local_time(a["created_at"])),
                     alert_type(a), _tag(TIER_LABELS.get(a["tier"], a["tier"]), a["tier"]),
@@ -377,7 +389,7 @@ def people(email: str) -> str:
         "SELECT from_addr AS who, study_id, COUNT(*) AS n, MAX(received_at) AS last FROM messages"
         " GROUP BY from_addr, study_id")}
     rows = []
-    for st in config.studies().values():
+    for st in _studies().values():
         for p in st.people:
             if not p.email:
                 continue
@@ -387,7 +399,7 @@ def people(email: str) -> str:
                          _e(local_time(w["last"])) if w.get("last") else '<span class="muted">never</span>',
                          _e(w.get("pages", 0)),
                          (f"{m['n']} · last {_e(local_time(m['last']))}") if m else '<span class="muted">none</span>'])
-    listed = {p.email.lower() for st in config.studies().values() for p in st.people if p.email}
+    listed = {p.email.lower() for st in _studies().values() for p in st.people if p.email}
     others = [[_e(e), _e(local_time(w["last"])), _e(w["pages"])] for e, w in web.items() if e not in listed]
     recent = db.q(f"SELECT ts, action, details FROM audit_log WHERE action IN ({marks}) ORDER BY id DESC LIMIT 100",
                   acts)
