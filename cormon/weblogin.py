@@ -151,7 +151,8 @@ def gate(path: str, cookie_header: str | None, study_id: str, what: str, ref) ->
     return None
 
 
-def admin_gate(path: str, cookie_header: str | None) -> tuple[tuple[int, dict, str] | None, str | None]:
+def admin_gate(path: str, cookie_header: str | None, log: bool = True
+               ) -> tuple[tuple[int, dict, str] | None, str | None]:
     """(response to send instead, None) or (None, email) for an admin page. Unlike gate(), it stays shut while
     sign-in is not set up, and only the people in web.admin.emails get in. It needs only web.login.client_id
     (and the secret), so the admin pages can ask for sign-in while the item and answer pages still do not."""
@@ -164,7 +165,8 @@ def admin_gate(path: str, cookie_header: str | None) -> tuple[tuple[int, dict, s
         db.audit("admin_refused", entity_type="web", entity_id=path[:200], email=email)
         return (403, {}, f"You are signed in as {email}, which is not on the admin list. "
                          f"Sign in with another account at /auth/logout."), None
-    db.audit("admin_viewed", entity_type="web", entity_id=path[:200], email=email)
+    if log:
+        db.audit("admin_viewed", entity_type="web", entity_id=path[:200], email=email)
     return None, email
 
 

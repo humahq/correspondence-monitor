@@ -1,0 +1,277 @@
+/* Admin pages: a small React app (React 18 + htm, no build step). Data comes from /admin/api/...; links open
+   in place with history.pushState, and the alert and answer pages (/items, /answers) open in a new tab. */
+(function () {
+  "use strict";
+  const { useState, useEffect } = React;
+  const html = htm.bind(React.createElement);
+  const EMAIL = document.body.dataset.email || "";
+
+  const NAV = [["/admin", "Home"], ["/admin/messages", "Messages"], ["/admin/alerts", "Alerts"],
+               ["/admin/people", "Sign-ins and use"]];
+
+  function go(to) { history.pushState(null, "", to); window.dispatchEvent(new Event("popstate")); window.scrollTo(0, 0); }
+  function linkTo(to) {
+    return (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+      e.preventDefault(); go(to);
+    };
+  }
+
+  function useLocation() {
+    const [loc, setLoc] = useState(location.pathname + location.search);
+    useEffect(() => {
+      const on = () => setLoc(location.pathname + location.search);
+      window.addEventListener("popstate", on);
+      return () => window.removeEventListener("popstate", on);
+    }, []);
+    return loc;
+  }
+
+  function useData(url) {
+    const [state, setState] = useState({ loading: true });
+    useEffect(() => {
+      let live = true;
+      setState((s) => ({ ...s, loading: true }));
+      fetch(url, { credentials: "same-origin", redirect: "manual" })
+        .then((r) => {
+          if (r.type === "opaqueredirect" || r.status === 302) throw new Error("signin");
+          if (r.status === 404) throw new Error("notfound");
+          if (!r.ok) throw new Error("http " + r.status);
+          return r.json();
+        })
+        .then((data) => live && setState({ data }))
+        .catch((e) => live && setState({ error: e.message }));
+      return () => { live = false; };
+    }, [url]);
+    return state;
+  }
+
+  function Loading({ state, children }) {
+    if (state.error === "signin")
+      return html`<div class="error">Your sign-in has ended. <a href=${location.pathname}>Sign in again</a>.</div>`;
+    if (state.error === "notfound") return html`<div class="error">Not found.</div>`;
+    if (state.error) return html`<div class="error">Could not load this page (${state.error}). Please reload.</div>`;
+    if (!state.data) return html`<div class="muted">Loading…</div>`;
+    return children(state.data);
+  }
+
+  const Badge = ({ cls, children, dot }) => html`<span class=${"badge " + (cls || "") + (dot ? " dot" : "")}>${children}</span>`;
+  const When = ({ w }) => w && w.at ? html`<span title=${w.text}>${w.text}</span>` : html`<span class="muted">never</span>`;
+
+  function Select({ value, onChange, options }) {
+    return html`<select value=${value} onChange=${(e) => onChange(e.target.value)}>
+      ${options.map((o) => html`<option key=${o.value} value=${o.value}>${o.label}</option>`)}</select>`;
+  }
+
+  function useQuery(defaults) {
+    const params = new URLSearchParams(location.search);
+    const q = {};
+    for (const k in defaults) q[k] = params.get(k) ?? defaults[k];
+    const set = (k, v) => {
+      const next = new URLSearchParams({ ...q, [k]: v });
+      next.delete("before");
+      go(location.pathname + "?" + next.toString());
+    };
+    return [q, set];
+  }
+
+  function AlertTags({ a }) {
+    return html`<${Badge} cls=${a.type.kind}>${a.type.label}<//> <${Badge} cls=${a.tier}>${a.tier_label}<//>`;
+  }
+
+  function Outcome({ items }) {
+    return html`<div class="outcome">${items.map((o, i) => o.alert
+      ? html`<span key=${i}><${AlertTags} a=${o.alert} /> <a href=${o.alert.link} target="_blank" rel="noopener"
+          onClick=${(e) => e.stopPropagation()}>${o.text}</a></span>`
+      : html`<span key=${i} class=${o.kind}>${o.kind === "error" || o.kind === "waiting"
+          ? html`<${Badge} cls=${o.kind === "error" ? "bad" : "warn"}>${o.text}<//>` : o.text}</span>`)}</div>`;
+  }
+
+  // ------------------------------------------------------------------ home
+  function Home() {
+    const state = useData("/admin/api/home");
+    return html`<${Loading} state=${state}>${(d) => html`
+      <div class="head"><div><h1>Study monitor</h1><div class="sub">How the bot is doing right now</div></div>
+        <${Badge} cls=${d.bot.state} dot>${{ running: "Running", paused: "Paused", down: "Not responding" }[d.bot.state]}<//></div>
+      <div class="cards">${d.today.map((c) => html`<div class="card" key=${c.label}><b>${c.n}</b>
+        <span class="muted">${c.label}</span></div>`)}</div>
+      <div class="grid2">
+        <div class="panel"><h2>The bot</h2><dl class="facts">
+          <dt>Last check-in</dt><dd>${d.bot.checkin.ago}</dd>
+          <dt>Last message received</dt><dd>${d.bot.last_message.ago}</dd>
+          <dt>Last instant chat notice</dt><dd>${d.bot.last_push.ago}</dd>
+          <dt>Channels</dt><dd>Email: ${d.bot.email} · Chat: ${d.bot.chat}</dd></dl></div>
+        <div class="panel"><h2>Speed (last ${d.speed.messages} messages)</h2><dl class="facts">
+          <dt>Typical time to the bot's first reply</dt>
+          <dd><b>${d.speed.first_reply == null ? "no data yet" : d.speed.first_reply + " s"}</b></dd>
+          <dt>Typical time to read and check one message</dt>
+          <dd><b>${d.speed.read == null ? "no data yet" : d.speed.read + " s"}</b></dd>
+          <dt>Open alerts by urgency</dt>
+          <dd>${d.open_by_tier.length ? d.open_by_tier.map((t) => html`<${Badge} key=${t.tier} cls=${t.tier}>${t.label}: ${t.n}<//> `)
+              : html`<span class="muted">none</span>`}</dd></dl></div>
+      </div>
+      <div class="panel"><h2>Problems</h2>${d.problems.length
+        ? html`<ul class="problems">${d.problems.map((p, i) => html`<li key=${i}>${p.link
+            ? html`<a href=${p.link} onClick=${p.link.startsWith("/admin") ? linkTo(p.link) : undefined}>${p.text}</a>`
+            : p.text}</li>`)}</ul>`
+        : html`<div class="status"><${Badge} cls="ok" dot>None<//> Nothing is stuck or failed.</div>`}</div>`}<//>`;
+  }
+
+  // ------------------------------------------------------------------ messages
+  function Messages({ options }) {
+    const [q, set] = useQuery({ days: "7", channel: "", study: "", before: "" });
+    const state = useData("/admin/api/messages?" + new URLSearchParams(q));
+    const studies = [{ value: "", label: "All studies" }].concat(options.studies.map((s) => ({ value: s, label: s })));
+    return html`
+      <div class="head"><div><h1>Messages</h1><div class="sub">Every chat and email, newest first. Click one to
+        see the whole conversation.</div></div></div>
+      <div class="filters">
+        <${Select} value=${q.days} onChange=${(v) => set("days", v)} options=${[{ value: "1", label: "Today" },
+          { value: "7", label: "Last 7 days" }, { value: "30", label: "Last 30 days" }, { value: "all", label: "All time" }]} />
+        <${Select} value=${q.channel} onChange=${(v) => set("channel", v)} options=${[{ value: "", label: "Chat and email" },
+          { value: "teams", label: "Chat only" }, { value: "email", label: "Email only" }]} />
+        <${Select} value=${q.study} onChange=${(v) => set("study", v)} options=${studies} />
+      </div>
+      <${Loading} state=${state}>${(d) => html`<div class="panel table">${d.rows.length ? html`<table>
+        <thead><tr><th>#</th><th>Received</th><th>From</th><th>Channel</th><th>Message</th><th>What the bot did</th></tr></thead>
+        <tbody>${d.rows.map((m) => html`<tr key=${m.id} class="click" onClick=${() => go("/admin/messages/" + m.id)}>
+          <td><a href=${"/admin/messages/" + m.id} onClick=${linkTo("/admin/messages/" + m.id)}>${m.id}</a></td>
+          <td class="small"><${When} w=${m.received} /></td>
+          <td>${m.from}<div class="small muted">${m.study || "no study"}</div></td>
+          <td>${m.channel}<div class="small muted">${m.visibility}</div></td>
+          <td><div class="clip">${m.summary}</div></td>
+          <td><${Outcome} items=${m.outcome} /></td></tr>`)}</tbody></table>
+        ${d.more && html`<a class="more" href="#" onClick=${(e) => { e.preventDefault();
+          go(location.pathname + "?" + new URLSearchParams({ ...q, before: d.rows[d.rows.length - 1].id })); }}>Older messages</a>`}`
+        : html`<div class="empty pad">No messages in this period.</div>`}</div>`}<//>`;
+  }
+
+  function Bubble({ e }) {
+    const [open, setOpen] = useState(false);
+    const long = (e.text || "").length > 700;
+    return html`<div class=${"bubble " + e.side + (e.current ? " current" : "")}>
+      <div class="meta"><b>${e.who}</b>
+        ${e.side === "bot" ? html`<span>${e.kind}${e.to ? " → " + e.to : ""}</span>` : html`<span>${e.channel}</span>`}
+        <span><${When} w=${e.when} /></span>
+        ${e.side === "bot" && e.status !== "sent" && html`<${Badge} cls="warn">${e.status}<//>`}
+        ${e.current && html`<${Badge} cls="protocol">This message<//>`}</div>
+      ${e.subject && html`<div class="small"><b>${e.subject}</b></div>`}
+      <div class=${"text" + (long && !open ? " long" : "")}>${e.text}</div>
+      <div class="foot">
+        ${long && html`<button onClick=${() => setOpen(!open)}>${open ? "Show less" : "Show all"}</button>`}
+        ${e.side === "person" && !e.current && html`<a href=${"/admin/messages/" + e.message_id}
+          onClick=${linkTo("/admin/messages/" + e.message_id)}>Open message ${e.message_id}</a>`}
+        ${e.side === "person" && e.outcome && html`<${Outcome} items=${e.outcome} />`}</div></div>`;
+  }
+
+  function Message({ id }) {
+    const state = useData("/admin/api/messages/" + id);
+    return html`<a class="back" href="/admin/messages" onClick=${(e) => { e.preventDefault();
+        history.length > 1 ? history.back() : go("/admin/messages"); }}>← Back to messages</a>
+      <${Loading} state=${state}>${(d) => html`
+      <div class="head"><div><h1>Message ${d.message.id}</h1><div class="sub">${d.message.from} · ${d.message.channel}
+        · ${d.message.study || "no study"} · ${d.message.received.text}</div></div>
+        <${Badge} cls=${d.message.status === "Error" ? "bad" : d.message.status === "Done" ? "ok" : "warn"} dot>${d.message.status}<//></div>
+      <div class="layout">
+        <div class="panel"><h2>The whole conversation</h2>
+          <div class="sub lead">People on the left, the bot on the right. This message is outlined.</div>
+          <div class="chat">${d.conversation.map((e, i) => html`<${Bubble} key=${i} e=${e} />`)}</div></div>
+        <div>
+          <div class="panel"><h2>What the bot did</h2><${Outcome} items=${d.message.outcome} />
+            ${d.answers.length > 0 && html`<div class="gap-top">${d.answers.map((a, i) => html`<div key=${i}>
+              <a href=${a.link} target="_blank" rel="noopener">Answer details</a> <span class="small muted">${a.when.text}</span></div>`)}</div>`}</div>
+          ${d.alerts.length > 0 && html`<div class="panel"><h2>Alerts</h2>${d.alerts.map((a) => html`<div key=${a.id}
+            class="gap-bottom"><${AlertTags} a=${a} /> <span class="small muted">${a.state}</span>
+            <div><a href=${a.link} target="_blank" rel="noopener">#${a.id}</a> ${a.title}</div>
+            <div class="small muted">Sent to ${a.sent_to}${a.destinations.length ? " · " + a.destinations.join(", ") : ""}</div></div>`)}</div>`}
+          <div class="panel"><h2>Details</h2><dl class="facts">
+            <dt>From</dt><dd>${d.message.from} <span class="muted small">${d.message.from_addr}</span></dd>
+            ${d.message.to.length > 0 && html`<dt>To</dt><dd>${d.message.to.join(", ")}</dd>`}
+            ${d.message.cc.length > 0 && html`<dt>Cc</dt><dd>${d.message.cc.join(", ")}</dd>`}
+            <dt>Sent / received</dt><dd>${d.message.sent.text || "unknown"} / ${d.message.received.text}</dd>
+            <dt>Seen as</dt><dd>${d.message.visibility}</dd>
+            ${d.message.attachments.length > 0 && html`<dt>Attachments</dt><dd>${d.message.attachments.map((a) => a.name).join(", ")}</dd>`}
+            <dt>Speed</dt><dd>${d.speed.seconds == null ? "No timing saved" : "Read and checked in " + d.speed.seconds + " s"}
+              ${d.speed.steps.length > 0 && html`<div class="small muted">${d.speed.steps.map((s) => s.name + " " + s.seconds + " s").join(" · ")}</div>`}</dd></dl></div>
+          <div class="panel"><h2>Steps logged</h2><table class="steps"><tbody>${d.log.map((r, i) => html`<tr key=${i}>
+            <td class="muted">${r.when.text}</td><td>${r.what}</td></tr>`)}</tbody></table></div>
+        </div></div>`}<//>`;
+  }
+
+  // ------------------------------------------------------------------ alerts
+  function Alerts({ options }) {
+    const [q, set] = useQuery({ state: "open", type: "", tier: "", before: "" });
+    const state = useData("/admin/api/alerts?" + new URLSearchParams(q));
+    return html`
+      <div class="head"><div><h1>Alerts</h1><div class="sub">Problems the bot raised. Click one to see its message and
+        conversation.</div></div></div>
+      <div class="filters">
+        <${Select} value=${q.state} onChange=${(v) => set("state", v)} options=${[{ value: "open", label: "Open" },
+          { value: "cleared", label: "Cleared" }, { value: "suppressed", label: "Disregarded" }, { value: "all", label: "All" }]} />
+        <${Select} value=${q.type} onChange=${(v) => set("type", v)} options=${options.types} />
+        <${Select} value=${q.tier} onChange=${(v) => set("tier", v)} options=${options.tiers} />
+      </div>
+      <${Loading} state=${state}>${(d) => html`<div class="panel table">${d.rows.length ? html`<table>
+        <thead><tr><th>#</th><th>Opened</th><th>Type</th><th>Urgency</th><th>State</th><th>Site</th><th>Participant</th>
+          <th>Problem</th><th>Sent to</th></tr></thead>
+        <tbody>${d.rows.map((a) => html`<tr key=${a.id} class="click" onClick=${() => go("/admin/messages/" + a.message_id)}>
+          <td><a href=${a.link} target="_blank" rel="noopener" onClick=${(e) => e.stopPropagation()}>#${a.id}</a></td>
+          <td class="small"><${When} w=${a.opened} /><div class="muted">${a.opened.ago}</div></td>
+          <td><${Badge} cls=${a.type.kind}>${a.type.label}<//></td>
+          <td><${Badge} cls=${a.tier}>${a.tier_label}<//></td>
+          <td>${a.state}${!a.counts && html`<div class="small muted">does not count</div>`}</td>
+          <td>${a.site}</td><td>${a.participant || "-"}</td>
+          <td><div class="clip">${a.title}</div></td>
+          <td>${a.sent_to}<div class="small muted">${a.destinations.join(", ") || "not sent"}</div></td></tr>`)}</tbody></table>
+        ${d.more && html`<a class="more" href="#" onClick=${(e) => { e.preventDefault();
+          go(location.pathname + "?" + new URLSearchParams({ ...q, before: d.rows[d.rows.length - 1].id })); }}>Older alerts</a>`}`
+        : html`<div class="empty pad">No alerts here.</div>`}</div>`}<//>`;
+  }
+
+  // ------------------------------------------------------------------ people
+  function People() {
+    const state = useData("/admin/api/people");
+    return html`<div class="head"><div><h1>Sign-ins and use</h1><div class="sub">Who has used the web pages and who has
+      written to the bot.</div></div></div>
+      <${Loading} state=${state}>${(d) => html`
+      <div class="panel table"><table><thead><tr><th>Name</th><th>Email</th><th>Study</th><th>Role</th>
+        <th>Last web visit</th><th>Pages opened</th><th>Messages to the bot</th></tr></thead>
+        <tbody>${d.people.map((p, i) => html`<tr key=${i}><td>${p.name}</td><td class="small">${p.email}</td>
+          <td class="small">${p.study}</td><td class="small">${p.roles}</td><td class="small"><${When} w=${p.last_visit} /></td>
+          <td>${p.pages}</td><td>${p.messages ? html`${p.messages} <span class="small muted">last ${p.last_message.text}</span>`
+            : html`<span class="muted">none</span>`}</td></tr>`)}</tbody></table></div>
+      <div class="grid2">
+        <div class="panel"><h2>Others who visited the web pages</h2>${d.others.length ? html`<table><tbody>
+          ${d.others.map((o, i) => html`<tr key=${i}><td>${o.email}</td><td class="small"><${When} w=${o.last_visit} /></td>
+            <td>${o.pages} pages</td></tr>`)}</tbody></table>` : html`<div class="muted">Nobody else.</div>`}</div>
+        <div class="panel"><h2>Latest sign-in events</h2>${d.events.length ? html`<table class="steps"><tbody>
+          ${d.events.map((e, i) => html`<tr key=${i}><td class="muted">${e.when.text}</td><td>${e.who}</td><td>${e.what}</td></tr>`)}
+          </tbody></table>` : html`<div class="muted">None yet.</div>`}</div>
+      </div>`}<//>`;
+  }
+
+  // ------------------------------------------------------------------ app
+  function App() {
+    const loc = useLocation();
+    const opts = useData("/admin/api/options");
+    const path = loc.split("?")[0].replace(/\/+$/, "") || "/admin";
+    const msg = path.match(/^\/admin\/messages\/(\d+)$/);
+    let page;
+    if (path === "/admin") page = html`<${Home} />`;
+    else if (msg) page = html`<${Message} key=${msg[1]} id=${msg[1]} />`;
+    else if (path === "/admin/messages" || path === "/admin/alerts")
+      page = html`<${Loading} state=${opts}>${(o) => path === "/admin/messages"
+        ? html`<${Messages} key=${loc} options=${o} />` : html`<${Alerts} key=${loc} options=${o} />`}<//>`;
+    else if (path === "/admin/people") page = html`<${People} />`;
+    else page = html`<div class="error">Not found.</div>`;
+    const section = msg ? "/admin/messages" : path;
+    return html`<div class="app">
+      <aside class="side"><div class="logo"><i></i>Study monitor</div>
+        ${NAV.map(([to, name]) => html`<a key=${to} href=${to} class=${section === to ? "on" : ""} onClick=${linkTo(to)}>${name}</a>`)}
+        <div class="who">${EMAIL}<br /><a href="/auth/logout">Sign out</a></div></aside>
+      <main>${page}<div class="foot-note">Read-only. Every page view is logged. This monitor does not review safety
+        information.</div></main></div>`;
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} />`);
+})();

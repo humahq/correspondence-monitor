@@ -1906,7 +1906,7 @@ def test_pages_need_a_google_sign_in_on_the_studys_people_list(monkeypatch):
 
 
 def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monkeypatch):
-    import http.client, threading, time as _t
+    import http.client, json, threading, time as _t
     from http.server import ThreadingHTTPServer
     from cormon import adminview, config, settings, webview, weblogin
     adminview._loaded["at"] = 0.0
@@ -1934,6 +1934,15 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
           " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
           (4, study, "t7", 7, 7, "k4", "out_of_scope", "neutral", "Safety note", "low", "out_of_scope", "{}", "tok4",
            db.now(), db.now()))
+    db.ex("INSERT INTO messages (id, channel, external_id, thread_key, study_id, route, visibility, from_addr,"
+          " from_name, to_addrs, cc_addrs, subject, body_text, headers, received_at, status)"
+          " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (9, "email", "e9", "t7", study, "study", "direct", "cra@x.org", "The CRA", "[]", "[]",
+           "Re: Week 8 visit", "Thanks, looking into it", "{}", db.later(1), "processed"))
+    db.ex("INSERT INTO outbox (item_id, message_id, purpose, channel, destination, to_addrs, subject, body, status,"
+          " created_at, sent_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+          (3, 7, "email_cra", "email", "email", '["cra@x.org"]', "Alert #3", "The Week 8 visit was late.", "sent",
+           db.now(), db.now()))
     server = ThreadingHTTPServer(("127.0.0.1", 0), webview.Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
@@ -1943,24 +1952,41 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
         c.request("GET", path, headers={"Cookie": cookie} if cookie else {})
         r = c.getresponse()
         return r.status, dict(r.getheaders()), r.read().decode()
+
+    def data(path):
+        status, head, body = get(path, "peter@huma.ai")
+        assert status == 200 and head["Content-Type"] == "application/json", (path, status)
+        return json.loads(body)
     try:
         status, head, _ = get("/admin")
         assert status == 302 and head["Location"].startswith(weblogin.AUTH)
-        status, _, body = get("/admin/messages", "someone@huma.ai")
+        assert get("/admin/api/messages")[0] == 302
+        status, _, body = get("/admin/api/messages", "someone@huma.ai")
         assert status == 403 and "not on the admin list" in body
-        assert "Study monitor" in get("/admin", "peter@huma.ai")[2]
-        status, _, page = get("/admin/messages?days=all", "peter@huma.ai")
-        assert status == 200 and "New alert #3" in page and "Not about the trial" in page
-        page = get("/admin/messages/7", "peter@huma.ai")[2]
-        assert "G-1 came in late for Week 8" in page and "/items/tok3" in page
-        page = get("/admin/alerts", "peter@huma.ai")[2]
-        assert "Week 8 visit late" in page and "Protocol problem" in page and "Safety note" not in page
-        page = get("/admin/alerts?type=safety", "peter@huma.ai")[2]
-        assert "Safety note" in page and "Patient safety" in page and "Week 8 visit late" not in page
-        assert "Sign-ins and use" in get("/admin/people", "peter@huma.ai")[2]
-        assert get("/admin/messages/999", "peter@huma.ai")[0] == 404
+        status, head, page = get("/admin/messages/7", "peter@huma.ai")
+        assert status == 200 and 'id="root"' in page and "default-src 'self'" in head["Content-Security-Policy"]
+        assert get("/admin/static/app.js", "peter@huma.ai")[0] == 200
+        assert get("/admin/static/../settings.py", "peter@huma.ai")[0] == 404
+        assert data("/admin/api/home")["bot"]["state"] in ("running", "paused", "down")
+        rows = {m["id"]: m for m in data("/admin/api/messages?days=all")["rows"]}
+        assert [o["text"] for o in rows[8]["outcome"]] == ["Not about the trial"]
+        assert rows[7]["outcome"][0]["alert"]["link"] == "/items/tok3"
+        page = data("/admin/api/messages/7")
+        talk = page["conversation"]
+        assert [(e["side"], e["text"]) for e in talk] == [
+            ("person", "G-1 came in late for Week 8"), ("bot", "The Week 8 visit was late."),
+            ("person", "Thanks, looking into it")]
+        assert talk[0]["current"] and not talk[2]["current"] and talk[1]["to"] == "cra@x.org"
+        open_alerts = data("/admin/api/alerts")["rows"]
+        assert [a["title"] for a in open_alerts] == ["Week 8 visit late"]
+        assert open_alerts[0]["type"]["label"] == "Protocol problem"
+        safety = data("/admin/api/alerts?type=safety")["rows"]
+        assert [(a["title"], a["type"]["label"]) for a in safety] == [("Safety note", "Patient safety")]
+        assert "people" in data("/admin/api/people")
+        assert get("/admin/api/messages/999", "peter@huma.ai")[0] == 404
         actions = [r["action"] for r in db.q("SELECT action FROM audit_log WHERE entity_type='web'")]
         assert {"admin_viewed", "admin_refused"} <= set(actions)
+        assert not db.q("SELECT 1 FROM audit_log WHERE action='admin_viewed' AND entity_id LIKE '/admin/static/%'")
         conf["web.login.enabled"] = False
         assert get("/admin", "peter@huma.ai")[0] == 200
         assert get("/admin")[0] == 302

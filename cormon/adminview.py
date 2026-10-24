@@ -1,32 +1,28 @@
-"""Read-only admin pages for the people who run the bot (web.admin.emails): is it healthy, every message and what
-the bot did with it, every alert, and who has signed in or written. Nothing on these pages changes anything."""
+"""Read-only admin pages for the people who run the bot (web.admin.emails): is it healthy, every message with its whole
+conversation and what the bot did, every alert, and who has signed in or written. A small React app (cormon/web)
+draws the pages from the JSON answers here. Nothing on these pages changes anything."""
 
 from __future__ import annotations
 
+import html
+import re
 import statistics
 import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import parse_qs, urlencode, urlparse
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 from . import capture, config, coverage, db, outbox, settings, timing
 from .drafting import local_time
 from .triage import TIER_LABELS
-from .webview import CSS, _e
-
-ADMIN_CSS = CSS.replace("max-width:860px", "max-width:1100px") + """
-nav{display:flex;gap:16px;align-items:center;border-bottom:1px solid #e3e6ec;padding-bottom:10px;margin-bottom:8px}
-nav a{color:#1d2433;text-decoration:none;font-weight:600}nav a.on{color:#2457c5;border-bottom:2px solid #2457c5}
-nav .who{margin-left:auto;font-weight:400}.ok{background:#e3f4e8;color:#1e6b38}.bad{background:#fde2e1;color:#9b1c1c}
-.warn{background:#fff1d6;color:#8a5300}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{border:1px solid #e3e6ec;
-border-radius:8px;padding:10px 14px;min-width:150px}.card b{display:block;font-size:22px}form.filters{margin:12px 0;
-font-size:13px}form.filters select,form.filters button{margin-right:8px}pre{white-space:pre-wrap;font-family:inherit;
-background:#f7f8fa;padding:10px;border-radius:4px}"""
 
 PAGE = 50
-
-PAGES = [("/admin", "Home"), ("/admin/messages", "Messages"), ("/admin/alerts", "Alerts"),
-         ("/admin/people", "Sign-ins and use")]
+WEB = Path(__file__).parent / "web"
+# In load order: React and htm before the app.
+STATIC = {"admin.css": "text/css", "vendor/react.production.min.js": "text/javascript",
+          "vendor/react-dom.production.min.js": "text/javascript", "vendor/htm.umd.js": "text/javascript",
+          "app.js": "text/javascript"}
 
 # What each "nothing to raise" decision means, in plain words.
 OUTCOMES = {
@@ -49,24 +45,10 @@ OUTCOMES = {
 CHANNEL = {"email": "Email", "teams": "Chat"}
 STATUS = {"new": "Waiting", "processing": "Reading now", "processed": "Done", "error": "Error"}
 STATE = {"open": "Open", "cleared": "Cleared", "suppressed": "Disregarded", "out_of_scope": "Not reviewed (safety)"}
-
-
-def alert_type(item: dict) -> str:
-    """Patient safety, good news, or the study area of a protocol problem (the study's pattern class label)."""
-    if item["kind"] == "out_of_scope":
-        return _tag("Patient safety", "bad")
-    if item["kind"] == "good_news":
-        return _tag("Good news", "ok")
-    study = _studies().get(item["study_id"])
-    area = study.pattern(item["pattern_class"]) if study and item["pattern_class"] else None
-    return _tag(area["label"] if area else "Protocol problem")
-
-
-def _type_options() -> list[tuple[str, str]]:
-    areas = {p["id"]: p["label"] for s in _studies().values() for p in s.pattern_classes}
-    return [("", "Any type"), ("safety", "Patient safety"), ("protocol", "Any protocol problem")] \
-        + [(f"area:{k}", f"  {v}") for k, v in areas.items()] + [("good_news", "Good news")]
-
+PURPOSE = {"chat_received": "Quick receipt", "question_answer": "Answer", "chat_acknowledgement": "Reply in chat",
+           "teams_study_team": "Alert in the study chat", "teams_study_channel": "Alert in the study chat",
+           "email_cra": "Alert email to the CRA", "email_sponsor": "Email to the sponsor", "digest": "Daily digest",
+           "ops_warning": "Warning to the bot's operators", "copy_nudge": "Reminder to copy the bot"}
 
 _loaded: dict = {"at": 0.0, "studies": {}}
 
@@ -101,84 +83,95 @@ def _ago(iso: str | None) -> str:
     return "just now"
 
 
-def _tag(text: str, cls: str = "") -> str:
-    return f'<span class="tag {cls}">{_e(text)}</span>'
+def _when(iso: str | None) -> dict:
+    return {"at": iso, "text": local_time(iso) if iso else "", "ago": _ago(iso)}
 
 
-def _shell(title: str, here: str, email: str, body: str) -> str:
-    links = "".join(f'<a href="{href}" class="{"on" if href == here else ""}">{name}</a>' for href, name in PAGES)
-    return f"""<!doctype html><html><head><meta charset="utf-8"><title>{_e(title)} · Study monitor admin</title>
-<style>{ADMIN_CSS}</style></head><body>
-<nav>{links}<span class="who muted">{_e(email)} · <a href="/auth/logout">Sign out</a></span></nav>
-<h1>{_e(title)}</h1>
-{body}
-<p class="muted">Read-only. Every page view is logged. This monitor does not review safety information.</p>
-</body></html>"""
+def _name(study_id: str | None, pid: str | None) -> str:
+    study = _studies().get(study_id)
+    p = study.person(pid) if study and pid else None
+    return p.name if p else (pid or "nobody")
 
 
-def _table(head: list[str], rows: list[list[str]], empty: str = "Nothing to show.") -> str:
-    if not rows:
-        return f'<p class="muted">{_e(empty)}</p>'
-    th = "".join(f"<th>{_e(h)}</th>" for h in head)
-    return f"<table><tr>{th}</tr>" + "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows) \
-        + "</table>"
+def alert_type(item: dict) -> dict:
+    """Patient safety, good news, or the study area of a protocol problem (the study's pattern class label)."""
+    if item["kind"] == "out_of_scope":
+        return {"label": "Patient safety", "kind": "safety"}
+    if item["kind"] == "good_news":
+        return {"label": "Good news", "kind": "good"}
+    study = _studies().get(item["study_id"])
+    area = study.pattern(item["pattern_class"]) if study and item["pattern_class"] else None
+    return {"label": area["label"] if area else "Protocol problem", "kind": "protocol"}
+
+
+def _alert(a: dict) -> dict:
+    study = _studies().get(a["study_id"])
+    dest = sorted({o["destination"].replace("_", " ") for o in db.q(
+        "SELECT destination FROM outbox WHERE item_id=?", (a["id"],))})
+    return {"id": a["id"], "link": f"/items/{a['link_token']}", "title": a["title"], "type": alert_type(a),
+            "tier": a["tier"], "tier_label": TIER_LABELS.get(a["tier"], a["tier"]),
+            "state": STATE.get(a["state"], a["state"]), "counts": bool(a["counts"]),
+            "site": study.site_name(a["site"]) if study else a["site"], "participant": a["participant_id"],
+            "sent_to": _name(a["study_id"], a["recipient_person"]), "destinations": dest,
+            "opened": _when(a["created_at"]), "message_id": a["first_message_id"]}
 
 
 # ---------------------------------------------------------------- what the bot did with a message
 
-def outcome(msg: dict) -> list[str]:
-    """Short plain lines saying what the bot did with one message (alerts, answers, or why nothing was needed)."""
+def outcome(msg: dict) -> list[dict]:
+    """What the bot did with one message: alerts it made, answers, or why nothing was needed."""
     if msg["status"] == "error":
-        return [_tag("Error", "bad") + _e((msg.get("error") or "")[:120])]
+        return [{"kind": "error", "text": "Error: " + (msg.get("error") or "")[:160]}]
     if msg["status"] in ("new", "processing"):
-        return [_tag(STATUS[msg["status"]], "warn")]
+        return [{"kind": "waiting", "text": STATUS[msg["status"]]}]
     said = []
-    for it in db.q("SELECT id, study_id, kind, pattern_class, tier, link_token, first_message_id FROM items"
-                   " WHERE first_message_id=? OR last_message_id=? ORDER BY id", (msg["id"], msg["id"])):
+    for it in db.q("SELECT * FROM items WHERE first_message_id=? OR last_message_id=? ORDER BY id",
+                   (msg["id"], msg["id"])):
         verb = "New alert" if it["first_message_id"] == msg["id"] else "Added to alert"
-        said.append(alert_type(dict(it)) + _tag(TIER_LABELS.get(it["tier"], it["tier"]), it["tier"])
-                    + f'<a href="/items/{_e(it["link_token"])}">{verb} #{it["id"]}</a>')
+        said.append({"kind": "alert", "text": f"{verb} #{it['id']}", "alert": _alert(dict(it))})
     seen = set()
     for r in db.q("SELECT action FROM audit_log WHERE entity_type='message' AND entity_id=? ORDER BY id",
                   (str(msg["id"]),)):
         words = OUTCOMES.get(r["action"])
         if words and words not in seen:
             seen.add(words)
-            said.append(_e(words))
+            said.append({"kind": "error" if r["action"] == "processing_error" else "note", "text": words})
     replies = db.q1("SELECT COUNT(*) AS n FROM outbox WHERE message_id=? AND status='sent'"
-                    " AND purpose NOT IN ('chat_received')", (msg["id"],))["n"]
+                    " AND purpose!='chat_received'", (msg["id"],))["n"]
     if replies:
-        said.append(_e(f"{replies} repl{'y' if replies == 1 else 'ies'} sent"))
-    return said or [_e("Checked: nothing to raise")]
+        said.append({"kind": "note", "text": f"{replies} repl{'y' if replies == 1 else 'ies'} sent"})
+    return said or [{"kind": "note", "text": "Checked: nothing to raise"}]
 
 
-# ---------------------------------------------------------------- page 1: home
+# ---------------------------------------------------------------- home
 
-def _problems() -> list[str]:
+def _problems() -> list[dict]:
     out = []
-    for r in db.q("SELECT id, status, error FROM messages WHERE status='error' ORDER BY id DESC LIMIT 20"):
-        out.append(f'<a href="/admin/messages/{r["id"]}">Message {r["id"]}</a> could not be read: '
-                   f'{_e((r["error"] or "")[:160])}')
+    for r in db.q("SELECT id, error FROM messages WHERE status='error' ORDER BY id DESC LIMIT 20"):
+        out.append({"text": f"Message {r['id']} could not be read: {(r['error'] or '')[:160]}",
+                    "link": f"/admin/messages/{r['id']}"})
     for r in db.q("SELECT id FROM messages WHERE status IN ('new','processing') AND received_at<?", (db.later(-15),)):
-        out.append(f'<a href="/admin/messages/{r["id"]}">Message {r["id"]}</a> has waited more than 15 minutes.')
+        out.append({"text": f"Message {r['id']} has waited more than 15 minutes.", "link": f"/admin/messages/{r['id']}"})
     for r in db.q("SELECT id, purpose, last_error FROM outbox WHERE status='failed' ORDER BY id DESC LIMIT 20"):
-        out.append(f'Outgoing message {r["id"]} ({_e(r["purpose"])}) was not sent: {_e((r["last_error"] or "")[:160])}')
+        out.append({"text": f"Outgoing message {r['id']} ({PURPOSE.get(r['purpose'], r['purpose'])}) was not sent: "
+                            f"{(r['last_error'] or '')[:160]}", "link": None})
     for r in db.q("SELECT id, link_token FROM items WHERE routed=0 AND state!='suppressed' AND counts=1"
                   " AND created_at<?", (db.later(-15),)):
-        out.append(f'<a href="/items/{_e(r["link_token"])}">Alert #{r["id"]}</a> was made but not sent yet.')
+        out.append({"text": f"Alert #{r['id']} was made but not sent yet.", "link": f"/items/{r['link_token']}"})
     for st in _studies().values():
         g = coverage.last(st.study_id)
         if g and g["warnings"]:
-            out.append(f"Study {_e(st.study_id)}: the document check has warnings: {_e('; '.join(g['warnings']))}")
+            out.append({"text": f"Study {st.study_id}: the document check has warnings: {'; '.join(g['warnings'])}",
+                        "link": None})
     return out
 
 
-def _median(xs) -> str:
+def _median(xs) -> float | None:
     xs = [x for x in xs if x is not None]
-    return f"{statistics.median(xs):.1f} s" if xs else "no data yet"
+    return round(statistics.median(xs), 1) if xs else None
 
 
-def home(email: str) -> str:
+def home() -> dict:
     beat = db.get_state("heartbeat")
     fresh = False
     if beat:
@@ -186,51 +179,52 @@ def home(email: str) -> str:
             fresh = (datetime.now(timezone.utc) - datetime.fromisoformat(beat)).total_seconds() < 300
         except ValueError:
             pass
-    paused = outbox.is_paused()
-    state = _tag("Paused", "warn") if paused else _tag("Running", "ok") if fresh else _tag("Not responding", "bad")
-    push = db.get_state("gchat_event_at")
-    last_msg = db.q1("SELECT MAX(received_at) AS at FROM messages")["at"]
     today = _local_midnight(0)
     n = lambda sql, *p: db.q1(sql, p)["n"]
-    cards = [
-        ("Messages today", n("SELECT COUNT(*) AS n FROM messages WHERE received_at>=?", today)),
-        ("Alerts today", n("SELECT COUNT(*) AS n FROM items WHERE created_at>=? AND counts=1", today)),
-        ("Questions answered today", n("SELECT COUNT(*) AS n FROM audit_log WHERE action='question_answered'"
-                                       " AND ts>=?", today)),
-        ("Open alerts", n("SELECT COUNT(*) AS n FROM items WHERE state='open' AND counts=1")),
-    ]
-    card_html = "".join(f'<div class="card"><b>{v}</b><span class="muted">{_e(k)}</span></div>' for k, v in cards)
-    open_by_tier = ", ".join(f"{_e(TIER_LABELS.get(r['tier'], r['tier']))}: {r['n']}" for r in db.q(
-        "SELECT tier, COUNT(*) n FROM items WHERE state='open' AND counts=1 GROUP BY tier")) or "none"
     rep = timing.report(20)["messages"]
-    problems = _problems()
-    body = f"""<p>{state} <span class="muted">Last check-in {_e(_ago(beat))} · last message {_e(_ago(last_msg))}
- · last instant chat notice {_e(_ago(push))} · email {_e(settings.get('channels.email'))}, chat
- {_e(settings.get('channels.teams'))}</span></p>
-<h2>Today</h2><div class="cards">{card_html}</div>
-<p class="muted">Open alerts by urgency: {open_by_tier}</p>
-<h2>Speed (last {len(rep)} messages)</h2>
-<p>Typical time from a message being sent to the bot's first reply: <b>{_median(m['to_first_reply'] for m in rep)}</b>.
- Typical time to read and check one message: <b>{_median(m['seconds'] for m in rep)}</b>.</p>
-<h2>Problems</h2>
-{"<ul>" + "".join(f"<li>{p}</li>" for p in problems) + "</ul>" if problems
-     else '<p>' + _tag("None", "ok") + ' Nothing is stuck or failed.</p>'}"""
-    return _shell("Study monitor", "/admin", email, body)
+    return {
+        "bot": {"state": "paused" if outbox.is_paused() else "running" if fresh else "down",
+                "checkin": _when(beat), "last_message": _when(db.q1("SELECT MAX(received_at) AS at FROM messages")["at"]),
+                "last_push": _when(db.get_state("gchat_event_at")),
+                "email": settings.get("channels.email"), "chat": settings.get("channels.teams")},
+        "today": [
+            {"label": "Messages today", "n": n("SELECT COUNT(*) AS n FROM messages WHERE received_at>=?", today)},
+            {"label": "Alerts today", "n": n("SELECT COUNT(*) AS n FROM items WHERE created_at>=? AND counts=1", today)},
+            {"label": "Questions answered today",
+             "n": n("SELECT COUNT(*) AS n FROM audit_log WHERE action='question_answered' AND ts>=?", today)},
+            {"label": "Open alerts", "n": n("SELECT COUNT(*) AS n FROM items WHERE state='open' AND counts=1")},
+        ],
+        "open_by_tier": [{"tier": r["tier"], "label": TIER_LABELS.get(r["tier"], r["tier"]), "n": r["n"]} for r in db.q(
+            "SELECT tier, COUNT(*) n FROM items WHERE state='open' AND counts=1 GROUP BY tier")],
+        "speed": {"messages": len(rep), "first_reply": _median(m["to_first_reply"] for m in rep),
+                  "read": _median(m["seconds"] for m in rep)},
+        "problems": _problems(),
+    }
 
 
-# ---------------------------------------------------------------- page 2: messages
+# ---------------------------------------------------------------- messages and conversations
 
-def _select(name: str, current: str, options: list[tuple[str, str]]) -> str:
-    opts = "".join(f'<option value="{_e(v)}"{" selected" if v == current else ""}>{_e(t)}</option>'
-                   for v, t in options)
-    return f'<select name="{name}">{opts}</select>'
+def options() -> dict:
+    areas = {p["id"]: p["label"] for s in _studies().values() for p in s.pattern_classes}
+    return {"studies": list(_studies()),
+            "types": [{"value": "", "label": "Any type"}, {"value": "safety", "label": "Patient safety"},
+                      {"value": "protocol", "label": "Any protocol problem"}]
+            + [{"value": f"area:{k}", "label": v} for k, v in areas.items()]
+            + [{"value": "good_news", "label": "Good news"}],
+            "tiers": [{"value": "", "label": "Any urgency"}] + [{"value": k, "label": v} for k, v in TIER_LABELS.items()]}
 
 
-def messages(email: str, query: dict) -> str:
-    days = query.get("days", "7")
-    channel = query.get("channel", "")
-    study = query.get("study", "")
-    before = query.get("before", "")
+def _row(m: dict) -> dict:
+    return {"id": m["id"], "received": _when(m["received_at"]), "channel": CHANNEL.get(m["channel"], m["channel"]),
+            "visibility": m["visibility"], "from": m["from_name"] or m["from_addr"], "from_addr": m["from_addr"],
+            "study": m["study_id"], "subject": m["subject"],
+            "summary": m["subject"] or (m["body_text"] or "")[:120] or "(no text)",
+            "status": STATUS.get(m["status"], m["status"]), "outcome": outcome(m)}
+
+
+def messages(query: dict) -> dict:
+    days, channel = query.get("days", "7"), query.get("channel", "")
+    study, before = query.get("study", ""), query.get("before", "")
     sql, params = "SELECT * FROM messages WHERE 1=1", []
     if days.isdigit():
         sql += " AND received_at>=?"; params.append(_local_midnight(int(days) - 1))
@@ -241,86 +235,74 @@ def messages(email: str, query: dict) -> str:
     if before.isdigit():
         sql += " AND id<?"; params.append(int(before))
     rows = [dict(r) for r in db.q(sql + " ORDER BY id DESC LIMIT ?", (*params, PAGE + 1))]
-    more = len(rows) > PAGE
-    rows = rows[:PAGE]
-    studies = [("", "All studies")] + [(s, s) for s in _studies()]
-    filters = f"""<form class="filters" method="get">
-{_select("days", days, [("1", "Today"), ("7", "Last 7 days"), ("30", "Last 30 days"), ("all", "All time")])}
-{_select("channel", channel, [("", "Chat and email"), ("teams", "Chat only"), ("email", "Email only")])}
-{_select("study", study, studies)}<button>Show</button></form>"""
-    table = _table(
-        ["#", "Received", "Channel", "From", "Study", "Subject or first words", "What the bot did"],
-        [[f'<a href="/admin/messages/{m["id"]}">{m["id"]}</a>', _e(local_time(m["received_at"])),
-          _e(CHANNEL.get(m["channel"], m["channel"])) + f'<br><span class="muted">{_e(m["visibility"])}</span>',
-          _e(m["from_name"] or m["from_addr"]), _e(m["study_id"] or "none"),
-          _e(m["subject"] or (m["body_text"] or "")[:80] or "(no text)"),
-          "<br>".join(outcome(m))] for m in rows],
-        "No messages in this period.")
-    nxt = ""
-    if more:
-        nxt = f'<p><a href="/admin/messages?{urlencode(dict(query, before=rows[-1]["id"]))}">Older messages</a></p>'
-    return _shell("Messages", "/admin/messages", email, filters + table + nxt)
+    return {"rows": [_row(m) for m in rows[:PAGE]], "more": len(rows) > PAGE}
 
 
-def message(email: str, msg_id: int) -> str | None:
+def conversation(m: dict) -> list[dict]:
+    """The whole thread in time order: every message people wrote in it and everything the bot sent about it."""
+    msgs = [dict(r) for r in db.q("SELECT * FROM messages WHERE thread_key=? ORDER BY id DESC LIMIT 200",
+                                  (m["thread_key"],))]
+    ids = [x["id"] for x in msgs]
+    item_ids = [r["id"] for r in db.q("SELECT id FROM items WHERE thread_key=?", (m["thread_key"],))]
+    out = [{"side": "person", "who": x["from_name"] or x["from_addr"], "when": _when(x["sent_at"] or x["received_at"]),
+            "text": x["body_text"] or "(the text is no longer kept)", "subject": x["subject"],
+            "channel": CHANNEL.get(x["channel"], x["channel"]), "message_id": x["id"], "current": x["id"] == m["id"],
+            "outcome": outcome(x)} for x in msgs]
+    where = [f"message_id IN ({','.join('?' * len(ids))})"] if ids else []
+    if item_ids:
+        where.append(f"item_id IN ({','.join('?' * len(item_ids))})")
+    if where:
+        for o in db.q(f"SELECT * FROM outbox WHERE ({' OR '.join(where)}) AND purpose!='digest' ORDER BY id",
+                      (*ids, *item_ids)):
+            to = ", ".join(db.unjs(o["to_addrs"], []))
+            out.append({"side": "bot", "who": "Study monitor", "when": _when(o["sent_at"] or o["created_at"]),
+                        "text": _plain(o["body"]), "subject": o["subject"],
+                        "kind": PURPOSE.get(o["purpose"], o["purpose"]),
+                        "to": to or o["destination"].replace("_", " "), "status": o["status"],
+                        "item_id": o["item_id"]})
+    return sorted(out, key=lambda e: e["when"]["at"] or "")
+
+
+def _plain(text: str | None) -> str:
+    """A bot post as people saw it: chat posts are stored as HTML and emails mark bold with **."""
+    text = text or ""
+    if re.search(r"</?(p|b|i|br|ul|li|a)\b", text):
+        text = re.sub(r"<br\s*/?>|</p>|</li>", "\n", text)
+        text = re.sub(r"<li[^>]*>", "• ", text)
+        text = html.unescape(re.sub(r"<[^>]+>", "", text))
+    return re.sub(r"\n{3,}", "\n\n", text.replace("**", "")).strip()
+
+
+def message(msg_id: int) -> dict | None:
     try:
         m = capture.message(msg_id)
     except KeyError:
         return None
-    alerts = [dict(r) for r in db.q("SELECT * FROM items WHERE first_message_id=? OR last_message_id=? ORDER BY id",
-                                    (msg_id, msg_id))]
-    study = _studies().get(m["study_id"])
-    name = lambda pid: (study.person(pid).name if study and study.person(pid) else pid) or "nobody"
-    alert_rows = [[f'<a href="/items/{_e(a["link_token"])}">#{a["id"]}</a>', alert_type(a),
-                   _tag(TIER_LABELS.get(a["tier"], a["tier"]), a["tier"]), _e(STATE.get(a["state"], a["state"])),
-                   _e(a["title"]), _e(name(a["recipient_person"]))] for a in alerts]
-    item_ids = [a["id"] for a in alerts]
-    sent = [dict(r) for r in db.q(
-        "SELECT * FROM outbox WHERE message_id=?" + (f" OR item_id IN ({','.join('?' * len(item_ids))})"
-                                                     if item_ids else "") + " ORDER BY id", (msg_id, *item_ids))]
-    sent_rows = [[_e(local_time(o["sent_at"] or o["created_at"])), _e(o["purpose"].replace("_", " ")),
-                  _e(", ".join(db.unjs(o["to_addrs"], [])) or o["destination"].replace("_", " ")), _e(o["status"]),
-                  f'<details><summary>{_e(o["subject"] or "show")}</summary><pre>{_e(o["body"])}</pre></details>']
-                 for o in sent]
-    pages = db.q("SELECT link_token, created_at FROM answer_pages WHERE message_id=? ORDER BY id", (msg_id,))
-    page_links = "".join(f'<li><a href="/answers/{_e(p["link_token"])}">Answer details</a> '
-                         f'({_e(local_time(p["created_at"]))})</li>' for p in pages)
+    alerts = [_alert(dict(a)) for a in db.q("SELECT * FROM items WHERE first_message_id=? OR last_message_id=?"
+                                            " ORDER BY id", (msg_id, msg_id))]
     t = db.q1("SELECT * FROM message_timings WHERE message_id=? ORDER BY id DESC LIMIT 1", (msg_id,))
     steps = db.unjs(t["steps"], {}) if t else {}
-    speed = (f"Read and checked in {t['seconds']:.1f} s ("
-             + ", ".join(f"{k} {v:.1f}" for k, v in steps.items() if v >= 0.5) + ")") \
-        if t and t["seconds"] is not None else "No timing saved for this message."
-    log = db.q("SELECT ts, actor, action FROM audit_log WHERE entity_type='message' AND entity_id=? ORDER BY id",
-               (str(msg_id),))
-    attachments = "".join(f"<li>{_e(a['filename'])} ({_e(a['component'])})</li>" for a in m["attachments"])
-    body = f"""<p>{_tag(CHANNEL.get(m['channel'], m['channel']))}{_tag(STATUS.get(m['status'], m['status']))}
-{_tag(m['study_id'] or 'no study')}{_tag(m['visibility'])}</p>
-<p class="muted">From {_e(m['from_name'])} &lt;{_e(m['from_addr'])}&gt;
-{(' · to ' + _e(', '.join(m['to_addrs']))) if m['to_addrs'] else ''}
-{(' · cc ' + _e(', '.join(m['cc_addrs']))) if m['cc_addrs'] else ''}<br>
-Sent {_e(local_time(m['sent_at']))} · received {_e(local_time(m['received_at']))}
-{(' · subject: ' + _e(m['subject'])) if m['subject'] else ''}</p>
-<h2>The message</h2><pre>{_e(m['body_text'] or '(the text is no longer kept)')}</pre>
-{f'<p class="muted">Attachments:</p><ul>{attachments}</ul>' if attachments else ''}
-<h2>What the bot did</h2><ul>{''.join(f'<li>{x}</li>' for x in outcome(m))}</ul>
-<h2>Alerts</h2>{_table(['#', 'Type', 'Urgency', 'State', 'Title', 'Sent to'], alert_rows,
-                        'No alert from this message.')}
-<h2>Messages the bot sent</h2>{_table(['When', 'Kind', 'To', 'Status', 'Text'], sent_rows, 'None.')}
-{f'<h2>Answers</h2><ul>{page_links}</ul>' if page_links else ''}
-<h2>Speed</h2><p>{_e(speed)}</p>
-<h2>Steps logged</h2>{_table(['When', 'Who', 'What'], [[_e(local_time(r['ts'])), _e(r['actor']),
-                                                      _e(r['action'].replace('_', ' '))]
-                                                     for r in log])}"""
-    return _shell(f"Message {msg_id}", "/admin/messages", email, body)
+    return {
+        "message": dict(_row(m), to=m["to_addrs"], cc=m["cc_addrs"], sent=_when(m["sent_at"]),
+                        text=m["body_text"] or "(the text is no longer kept)",
+                        attachments=[{"name": a["filename"], "part": a["component"]} for a in m["attachments"]]),
+        "alerts": alerts,
+        "conversation": conversation(m),
+        "answers": [{"link": f"/answers/{p['link_token']}", "when": _when(p["created_at"])} for p in db.q(
+            "SELECT link_token, created_at FROM answer_pages WHERE message_id=? ORDER BY id", (msg_id,))],
+        "speed": {"seconds": round(t["seconds"], 1) if t and t["seconds"] is not None else None,
+                  "steps": [{"name": k, "seconds": round(v, 1)} for k, v in steps.items() if v >= 0.5]},
+        "log": [{"when": _when(r["ts"]), "who": r["actor"], "what": r["action"].replace("_", " ")} for r in db.q(
+            "SELECT ts, actor, action FROM audit_log WHERE entity_type='message' AND entity_id=? ORDER BY id",
+            (str(msg_id),))],
+    }
 
 
-# ---------------------------------------------------------------- page 4: alerts
+# ---------------------------------------------------------------- alerts
 
-def alerts(email: str, query: dict) -> str:
-    state = query.get("state", "open")
-    tier = query.get("tier", "")
-    kind = query.get("type", "")
-    before = query.get("before", "")
+def alerts(query: dict) -> dict:
+    state, tier, kind, before = (query.get(k, d) for k, d in (("state", "open"), ("tier", ""), ("type", ""),
+                                                               ("before", "")))
     sql, params = "SELECT * FROM items WHERE 1=1", []
     if state == "open" and kind == "safety":
         sql += " AND state='out_of_scope'"
@@ -341,44 +323,20 @@ def alerts(email: str, query: dict) -> str:
     if before.isdigit():
         sql += " AND id<?"; params.append(int(before))
     rows = [dict(r) for r in db.q(sql + " ORDER BY id DESC LIMIT ?", (*params, PAGE + 1))]
-    more = len(rows) > PAGE
-    rows = rows[:PAGE]
-    filters = f"""<form class="filters" method="get">
-{_select("state", state, [("open", "Open"), ("cleared", "Cleared"), ("suppressed", "Disregarded"), ("all", "All")])}
-{_select("type", kind, _type_options())}
-{_select("tier", tier, [("", "Any urgency")] + [(k, v) for k, v in TIER_LABELS.items()])}<button>Show</button></form>"""
-    out = []
-    for a in rows:
-        dest = ", ".join(sorted({o["destination"] for o in db.q("SELECT destination FROM outbox WHERE item_id=?",
-                                                                (a["id"],))})) or "not sent"
-        study = _studies().get(a["study_id"])
-        person = study.person(a["recipient_person"]) if study else None
-        out.append([f'<a href="/items/{_e(a["link_token"])}">#{a["id"]}</a>', _e(local_time(a["created_at"])),
-                    alert_type(a), _tag(TIER_LABELS.get(a["tier"], a["tier"]), a["tier"]),
-                    _e(STATE.get(a["state"], a["state"])) + ("" if a["counts"] else ' <span class="muted">(does not count)</span>'),
-                    _e(study.site_name(a["site"]) if study else a["site"]), _e(a["participant_id"] or "-"),
-                    _e(a["title"]), _e(person.name if person else a["recipient_person"] or "nobody")
-                    + f'<br><span class="muted">{_e(dest.replace("_", " "))}</span>',
-                    _e(_ago(a["created_at"]).replace(" ago", ""))])
-    nxt = ""
-    if more:
-        nxt = f'<p><a href="/admin/alerts?{urlencode(dict(query, before=rows[-1]["id"]))}">Older alerts</a></p>'
-    table = _table(["#", "Opened", "Type", "Urgency", "State", "Site", "Participant", "Problem", "Sent to", "Age"], out,
-                   "No alerts here.")
-    return _shell("Alerts", "/admin/alerts", email, filters + table + nxt)
+    return {"rows": [_alert(a) for a in rows[:PAGE]], "more": len(rows) > PAGE}
 
 
-# ---------------------------------------------------------------- page 5: sign-ins and use
+# ---------------------------------------------------------------- sign-ins and use
 
 SIGN_IN_WORDS = {"signed_in": "Signed in", "page_viewed": "Opened a page", "page_refused": "Refused a page",
                  "admin_viewed": "Opened an admin page", "admin_refused": "Refused an admin page",
                  "sign_in_failed": "Sign-in failed", "sign_in_refused": "Sign-in refused"}
 
 
-def people(email: str) -> str:
+def people() -> dict:
     acts = tuple(SIGN_IN_WORDS)
     marks = ",".join("?" * len(acts))
-    web = {}
+    web: dict = {}
     for r in db.q(f"SELECT action, details, ts FROM audit_log WHERE action IN ({marks}) ORDER BY id", acts):
         who = (db.unjs(r["details"], {}).get("email") or "unknown").lower()
         w = web.setdefault(who, {"signed_in": 0, "pages": 0, "last": None})
@@ -395,40 +353,54 @@ def people(email: str) -> str:
                 continue
             e = p.email.lower()
             w, m = web.get(e, {}), wrote.get((e, st.study_id), {})
-            rows.append([_e(p.name), _e(e), _e(st.study_id), _e(", ".join(st.role_label(r) for r in p.roles)),
-                         _e(local_time(w["last"])) if w.get("last") else '<span class="muted">never</span>',
-                         _e(w.get("pages", 0)),
-                         (f"{m['n']} · last {_e(local_time(m['last']))}") if m else '<span class="muted">none</span>'])
+            rows.append({"name": p.name, "email": e, "study": st.study_id,
+                         "roles": ", ".join(st.role_label(r) for r in p.roles),
+                         "last_visit": _when(w.get("last")), "pages": w.get("pages", 0),
+                         "messages": m.get("n", 0), "last_message": _when(m.get("last"))})
     listed = {p.email.lower() for st in _studies().values() for p in st.people if p.email}
-    others = [[_e(e), _e(local_time(w["last"])), _e(w["pages"])] for e, w in web.items() if e not in listed]
-    recent = db.q(f"SELECT ts, action, details FROM audit_log WHERE action IN ({marks}) ORDER BY id DESC LIMIT 100",
-                  acts)
-    body = f"""<p class="muted">Everyone on a study's people list: when they last used the web pages, and how many
- messages they have sent the bot (chat or email).</p>
-{_table(["Name", "Email", "Study", "Role", "Last web visit", "Pages opened", "Messages to the bot"], rows)}
-<h2>Others who visited the web pages</h2>
-{_table(["Email", "Last visit", "Pages opened"], others, "Nobody else.")}
-<h2>Latest 100 sign-in events</h2>
-{_table(["When", "Who", "What"], [[_e(local_time(r["ts"])), _e(db.unjs(r["details"], {}).get("email")),
-                                   _e(SIGN_IN_WORDS.get(r["action"], r["action"]))] for r in recent])}"""
-    return _shell("Sign-ins and use", "/admin/people", email, body)
+    return {"people": rows,
+            "others": [{"email": e, "last_visit": _when(w["last"]), "pages": w["pages"]}
+                       for e, w in web.items() if e not in listed],
+            "events": [{"when": _when(r["ts"]), "who": db.unjs(r["details"], {}).get("email"),
+                        "what": SIGN_IN_WORDS.get(r["action"], r["action"])} for r in db.q(
+                f"SELECT ts, action, details FROM audit_log WHERE action IN ({marks}) ORDER BY id DESC LIMIT 100",
+                acts)]}
 
 
 # ---------------------------------------------------------------- routing
 
-def render(path: str, email: str) -> str | None:
-    """The page for an /admin path, or None when there is no such page."""
+def shell(email: str) -> str:
+    """The one HTML page; the React app reads the path and asks /admin/api/... for the data."""
+    v = int(max((WEB / f).stat().st_mtime for f in STATIC))
+    scripts = "".join(f'<script src="/admin/static/{f}?v={v}"></script>' for f in STATIC if f.endswith(".js"))
+    return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width, initial-scale=1">'
+            f'<title>Study monitor admin</title><link rel="stylesheet" href="/admin/static/admin.css?v={v}">'
+            f'</head><body data-email="{email.replace(chr(34), "")}"><div id="root"></div>{scripts}</body></html>')
+
+
+def static(path: str) -> tuple[bytes, str] | None:
+    name = urlparse(path).path.removeprefix("/admin/static/")
+    if name not in STATIC:
+        return None
+    return (WEB / name).read_bytes(), STATIC[name]
+
+
+def api(path: str) -> dict | None:
+    """The data for an /admin/api path, or None when there is no such page."""
     url = urlparse(path)
     query = {k: v[0] for k, v in parse_qs(url.query).items()}
-    p = url.path.rstrip("/") or "/admin"
-    if p == "/admin":
-        return home(email)
-    if p == "/admin/messages":
-        return messages(email, query)
-    if p.startswith("/admin/messages/") and p.rsplit("/", 1)[1].isdigit():
-        return message(email, int(p.rsplit("/", 1)[1]))
-    if p == "/admin/alerts":
-        return alerts(email, query)
-    if p == "/admin/people":
-        return people(email)
+    p = url.path.removeprefix("/admin/api").rstrip("/")
+    if p == "/home":
+        return home()
+    if p == "/options":
+        return options()
+    if p == "/messages":
+        return messages(query)
+    if p.startswith("/messages/") and p.rsplit("/", 1)[1].isdigit():
+        return message(int(p.rsplit("/", 1)[1]))
+    if p == "/alerts":
+        return alerts(query)
+    if p == "/people":
+        return people()
     return None

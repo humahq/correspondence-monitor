@@ -174,12 +174,17 @@ def render_answers(page: dict) -> str:
 </body></html>"""
 
 
+ADMIN_HEADERS = {"Content-Security-Policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none';"
+                                            " base-uri 'none'",
+                 "X-Content-Type-Options": "nosniff"}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def _send(self, code: int, body: str, ctype: str = "text/html; charset=utf-8", headers: dict | None = None):
-        data = body.encode()
+    def _send(self, code: int, body: str | bytes, ctype: str = "text/html; charset=utf-8", headers: dict | None = None):
+        data = body if isinstance(body, bytes) else body.encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
@@ -197,6 +202,23 @@ class Handler(BaseHTTPRequestHandler):
             self._send(stop[0], stop[2], "text/plain; charset=utf-8", stop[1])
         return bool(stop)
 
+    def _admin(self):
+        from . import adminview
+        is_file = self.path.startswith("/admin/static/")
+        stop, email = weblogin.admin_gate(self.path, self.headers.get("Cookie"), log=not is_file)
+        if stop:
+            return self._send(stop[0], stop[2], "text/plain; charset=utf-8", stop[1])
+        if is_file:
+            found = adminview.static(self.path)
+            return self._send(200, found[0], found[1], ADMIN_HEADERS) if found else self._send(404, "not found",
+                                                                                                  "text/plain")
+        if self.path.startswith("/admin/api/"):
+            data = adminview.api(self.path)
+            if data is None:
+                return self._send(404, json.dumps({"error": "not found"}), "application/json", ADMIN_HEADERS)
+            return self._send(200, json.dumps(data), "application/json", ADMIN_HEADERS)
+        return self._send(200, adminview.shell(email), headers=ADMIN_HEADERS)
+
     def do_GET(self):
         if self.path == "/health":
             return self._send(200, "ok", "text/plain")
@@ -207,13 +229,7 @@ class Handler(BaseHTTPRequestHandler):
             code, headers, body = weblogin.logout()
             return self._send(code, body, "text/plain; charset=utf-8", headers)
         if self.path == "/admin" or self.path.startswith(("/admin/", "/admin?")):
-            stop, email = weblogin.admin_gate(self.path, self.headers.get("Cookie"))
-            if stop:
-                return self._send(stop[0], stop[2], "text/plain; charset=utf-8", stop[1])
-            from . import adminview
-            page = adminview.render(self.path, email)
-            if page is not None:
-                return self._send(200, page)
+            return self._admin()
         if self.path.startswith("/items/"):
             token = self.path.split("/items/", 1)[1].split("?")[0]
             row = db.q1("SELECT id, study_id FROM items WHERE link_token=?", (token,))
