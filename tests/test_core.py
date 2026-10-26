@@ -2153,8 +2153,12 @@ def test_old_message_text_is_cleared_only_when_a_retention_period_is_set(monkeyp
     db.ex("UPDATE messages SET body_text='new text' WHERE id=2")
     (tmp_path / "raw" / "email").mkdir(parents=True)
     (tmp_path / "raw" / "email" / "1.eml").write_text("x")
-    assert phi.purge() == {"skipped": "data.retention_days is not set"}
+    assert settings.get("data.retention_days") == 2557  # 7 years: a 400-day-old message is kept
+    assert phi.purge()["messages"] == 0
     assert db.q1("SELECT body_text FROM messages WHERE id=1")["body_text"] == "old text"
+    get = settings.get
+    monkeypatch.setattr(settings, "get", lambda k, d=None: None if k == "data.retention_days" else get(k, d))
+    assert phi.purge() == {"skipped": "data.retention_days is not set"}
     out = phi.purge(365)
     assert out["messages"] == 1 and out["raw_files"] == 1 and not (tmp_path / "raw" / "email" / "1.eml").exists()
     assert [r["body_text"] for r in db.q("SELECT body_text FROM messages ORDER BY id")] == \

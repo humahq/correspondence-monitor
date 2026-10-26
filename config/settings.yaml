@@ -116,3 +116,8 @@ web:
   # and only while web.login is on.
   admin:
     emails: [peter@huma.ai, eliot@huma.ai, john@huma.ai]
+
+data:
+  # Message text, raw copies, model caches and saved participant facts older than this are cleared once a day.
+  # 7 years (7 x 365 + 2 leap days). Alerts keep their short quote; the audit log is kept.
+  retention_days: 2557

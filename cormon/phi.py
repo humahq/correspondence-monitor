@@ -3,7 +3,7 @@
 Participant study ids (e.g. G-501-004) are coded, not personal, so they stay: the monitor needs them. Masked:
 dates of birth, phone numbers, social security numbers and medical record numbers, which a site may type by
 mistake. Names cannot be told apart from staff names by pattern, so they are not masked; message text is cleared
-after data.retention_days instead (off until set: how long to keep it is the sponsor's decision)."""
+after data.retention_days instead (7 years in config/settings.yaml; off when unset)."""
 
 from __future__ import annotations
 
