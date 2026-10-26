@@ -103,22 +103,32 @@ def _with_items(lead: str, text: str, limit: int = 400) -> str | None:
     return out if items and len(out) <= limit else None
 
 
-def fill(study: Study, missing: list[dict], secs: list[dict]) -> list[dict]:
+FILL_LIMIT = 15  # more sentences than this judged missing in one run is more likely a bad audit than real gaps
+
+
+def fill(study: Study, missing: list[dict], secs: list[dict], limit: int = FILL_LIMIT) -> list[dict]:
     """Missing site rules added word for word to the briefs of their section's checkable topics, so the checker reads
     them; the briefs' next build keeps them while their document is unchanged. A list's lead-in is added with its
     items' names. Left as warnings: sentences whose section has no checkable topic (admin only), sentences the
-    document marks as not yet confirmed, and lead-ins of lists too long for one line."""
+    document marks as not yet confirmed, table rows (the checklists and medicine tables carry them), pieces of a
+    sentence, lead-ins of lists too long for one line, and everything when more than `limit` would be added."""
     topics = {s["id"]: s["topics"] for s in secs}
     texts = {s["id"]: s.get("text", "") for s in secs}
     briefs = {r["id"]: r["text"] for r in db.q("SELECT id, text FROM guide WHERE study_id=? AND kind='brief'",
                                                (study.study_id,))}
-    added = []
+    rules = []
     for m in missing:
         sent = re.sub(r"\s+", " ", m["sentence"]).strip()
+        if " | " in sent or not re.match(r"^[A-Z0-9\"“(]", sent):
+            continue
         lead = sent.endswith(":") or re.search(r"\bthe following\b[^.;:]*[.:]?$", sent, re.I)
         rule = _with_items(sent, texts.get(m["section"], "")) if lead else sent
-        if not rule or packs._UNCONFIRMED.search(rule):
-            continue
+        if rule and not packs._UNCONFIRMED.search(rule):
+            rules.append((m, sent, rule))
+    if len(rules) > limit:
+        return []
+    added = []
+    for m, sent, rule in rules:
         line = f"- {rule} [{m['section']}]"
         for t in topics.get(m["section"], []):
             key = f"brief:{t}"
@@ -167,6 +177,9 @@ def gate(study: Study, use_cache: bool = True, ai: bool = True, log=print, add: 
                 + ([f"{len(missing)} site rules in no brief line" if ai else
                     f"{len(cands)} rule-like sentences whose words are in no brief line (not yet judged)"]
                    if (missing if ai else cands) else []))
+    if ai and add and not added and len(found) > FILL_LIMIT:
+        warnings.append(f"{len(found)} sentences judged missing, more than {FILL_LIMIT}: none added to the briefs; "
+                        f"review the audit by hand")
     result["warnings"] = warnings
     db.set_state(f"coverage_gate:{study.study_id}", json.dumps({"warnings": warnings, "at": db.now()}))
     db.audit("coverage_gate", entity_type="study", entity_id=study.study_id, study_id=study.study_id,

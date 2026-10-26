@@ -2652,6 +2652,11 @@ def test_missing_site_rules_are_added_to_their_topics_briefs_word_for_word(tmp_p
                                        "- Ship with the following documents: Air Waybill; Customs Invoice "
                                        "(International Only). [lab:6]"]
     assert coverage.fill(study, missing, secs) == []                       # added once
+    junk = [{"section": "lab:5", "sentence": "- Visit: Week 4 | Kit #: KIT #3 | Tubes: (2) 4.0-mL Lavender"},
+            {"section": "lab:5", "sentence": ">18 months] and Baseline Bulbar function)."}]
+    assert coverage.fill(study, junk, secs) == []                          # table rows and pieces of sentences
+    many = [{"section": "lab:5", "sentence": f"Rule number {n} must be followed."} for n in range(3)]
+    assert coverage.fill(study, many, secs, limit=2) == []                 # too many: likely a bad audit
     lines, _ = packs.stored_lines(study, {"lab": "1"})
     assert {"rule": "Each shipment must carry the signed requisition form.", "section": "lab:5",
             "doc": "lab"} in lines["samples"]                              # kept by the next build
