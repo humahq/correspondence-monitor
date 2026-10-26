@@ -1283,12 +1283,15 @@ def _with_earlier(rules: list[dict], facts: dict, past: list[dict], bad: list[di
 
 def _code_checks(study: Study, rules: list[dict], vocab: list[dict], part: dict, email: str, sent: datetime,
                  notes: list[str], res: dict, context: list[dict], sources: list[dict], use_cache: bool,
-                 past: list[dict] | None = None, disputed: list[dict] | None = None) -> dict:
+                 past: list[dict] | None = None, disputed: list[dict] | None = None, facts: dict | None = None) -> dict:
     """The check list's countable rules, run by code on facts pulled from the email. A departure the AI already
     reported (same email words) only adds its fact for the confirm step; any other becomes a finding of its own.
-    Rules the facts pass are handed to the confirm step too, so a wrong timing finding can be turned down."""
+    Rules the facts pass are handed to the confirm step too, so a wrong timing finding can be turned down.
+    facts: already pulled (they need only the email, so they are pulled while the AI reads)."""
     from . import checks
-    facts = checks.extract(study, rules + (disputed or []), vocab, email, part["participant"] or "", sent, use_cache)
+    if facts is None:
+        facts = checks.extract(study, rules + (disputed or []), vocab, email, part["participant"] or "", sent,
+                               use_cache)
     bad, ok = checks.evaluate(rules, facts)
     if past:
         _with_earlier(rules, facts, past, bad, ok, notes)
@@ -1323,8 +1326,22 @@ def _code_checks(study: Study, rules: list[dict], vocab: list[dict], part: dict,
             "added": added}
 
 
-def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=None) -> tuple[list[Finding], dict]:
-    """Findings for one email, and a trace of what was read and decided (for the audit log and tests)."""
+def keep(study: Study, msg: dict, trace: dict) -> None:
+    """Saves the participant facts a check(save=False) read, once its result is used."""
+    for pid, ds, es in trace.pop("unsaved", []):
+        memory.save(study.study_id, pid, msg, ds, es)
+
+
+def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=None,
+          save: bool = True) -> tuple[list[Finding], dict]:
+    """Findings for one email, and a trace of what was read and decided (for the audit log and tests).
+    save=False: the participant facts read are left in trace["unsaved"] for keep()."""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(4) as pool:
+        return _check(study, msg, email, use_cache, log, save, pool)
+
+
+def _check(study, msg, email, use_cache, log, save, pool) -> tuple[list[Finding], dict]:
     every = guide.load(study.study_id)
     if not every:
         raise RuntimeError(f"{study.study_id}: no guide; run `cormon guide --study {study.study_id}`")
@@ -1353,6 +1370,8 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
             notes.append("Dates marked 'earlier message' come from earlier messages about this participant and were "
                          "checked then: count this message's dates from them, but do not report them again.")
         said = part["summary"] + "\n" + "\n".join(s["text"] for s in part.get("statements", []))
+        pulled = pool.submit(checks.extract, study, code_rules + split_rules, vocab, email, part["participant"] or "",
+                             sent, use_cache) if code_rules else None
         start = len(out)
         med_notes, med_secs = medicine_notes(said, meds)
         over_notes, over_secs = dose_notes(said, sources)
@@ -1376,7 +1395,7 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
         code: dict = {}
         if code_rules:
             code = _code_checks(study, code_rules, vocab, part, email, sent, notes, res, context, sources, use_cache,
-                                past, split_rules)
+                                past, split_rules, pulled.result())
         if part["participant"]:
             k = memory.key(part["participant"])
             _, ds, es = remember.get(k, (part["participant"], [], []))
@@ -1392,6 +1411,10 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
         kept: list[dict] = []
         live = [f for f in res["findings"] if f["status"] != "already_handled"]
         group = {id(live[n]): g for n, g in duplicates(live, use_cache).items()} if ai_merge else {}
+        if use_cache and len(live) > 1:  # the confirm calls below then find their answers saved, or wait for them
+            for f in live:
+                f = dict(f, section_id=_section_id(f["section_id"], context))
+                pool.submit(confirm, f, _proof(f, context, sources), email, notes, use_cache)
         reported: set[int] = set()
         for f in res["findings"]:
             g = group.get(id(f))
@@ -1493,8 +1516,9 @@ def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=No
         if log:
             log(f"reader {part['participant'] or '-'}: {len(context)} sections, {pt['tokens_in']} tokens, "
                 f"{len(res['findings'])} findings")
-    for pid, ds, es in remember.values():
-        memory.save(study.study_id, pid, msg, ds, es)
+    trace["unsaved"] = list(remember.values())
+    if save:
+        keep(study, msg, trace)
     # every part reads the whole email, so two parts can report the same departure
     order = sorted(range(len(out)), key=lambda n: out[n].certainty != "clear")
     group = duplicates([meta[n][0] for n in order], use_cache) if ai_merge else {}

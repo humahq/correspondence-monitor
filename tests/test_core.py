@@ -2934,3 +2934,33 @@ def test_a_question_to_the_bot_gets_a_quick_receipt_but_listening_statements_and
     db.ex("UPDATE outbox SET status='sent', sent_at=?", (db.now(),))
     later = {"id": 999, "channel": "teams", "thread_key": "teams:spaces/dm1/threads/T99", "received_at": db.later(1)}
     assert all("moment" not in t["text"] for t in conversation.recent(later))  # a receipt is not an answer
+
+
+def test_the_same_ai_call_made_twice_at_once_reaches_the_model_once(monkeypatch):
+    import json
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    from cormon import llm
+
+    sent = []
+
+    def create(**kw):
+        sent.append(kw)
+        time.sleep(0.2)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({"a": 1})))],
+                               usage=None)
+
+    monkeypatch.setattr(llm, "client", lambda: SimpleNamespace(chat=SimpleNamespace(
+        completions=SimpleNamespace(create=create))))
+    got = []
+    runs = [threading.Thread(target=lambda: got.append(llm.structured("t", "s", "u", {}, "x", model="gpt-4.1")))
+            for _ in range(3)]
+    for r in runs:
+        r.start()
+    for r in runs:
+        r.join()
+    assert got == [{"a": 1}] * 3 and len(sent) == 1
+    llm.structured("t", "s", "u", {}, "x", model="gpt-4.1", use_cache=False)  # a forced fresh call still goes out
+    assert len(sent) == 2

@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time
 from typing import Any
 
@@ -71,12 +72,34 @@ def structured(
         json.dumps([model, temperature, system, user, schema] + ([effort] if effort else []),
                    sort_keys=True).encode()
     ).hexdigest()
-    if use_cache:
+    mine = None
+    while use_cache:
         row = db.q1("SELECT response FROM llm_cache WHERE key=?", (key,))
         if row:
             timing.llm_call(task, model, 0, cached=True)
             return json.loads(row["response"])
+        with _flying_lock:
+            other = _flying.get(key)
+            if other is None:
+                mine = _flying[key] = threading.Event()
+        if mine:
+            break
+        other.wait(settings.get("llm.timeout_seconds", 90) * 4)
+    try:
+        return _call(task, model, system, user, schema, schema_name, key, temperature, seed, reasoning, effort)
+    finally:
+        if mine:
+            with _flying_lock:
+                _flying.pop(key, None)
+            mine.set()
 
+
+# a call started early (to save time) and the same call made later wait for one answer instead of asking twice
+_flying: dict[str, threading.Event] = {}
+_flying_lock = threading.Lock()
+
+
+def _call(task, model, system, user, schema, schema_name, key, temperature, seed, reasoning, effort) -> dict:
     kwargs: dict[str, Any] = dict(
         model=model,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],

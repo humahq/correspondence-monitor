@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from dateutil import parser as dtparser
 
@@ -373,6 +374,23 @@ def _shown_key(f) -> tuple[str, str]:
             textutil.normalize(f.message_quote or ""))
 
 
+def _ask_early(pool, study: Study, msg: dict, rerun: bool, use_cache: bool) -> None:
+    """Starts the request sort and the question finding with the words the later steps send, so those steps find
+    the answers saved (or wait for them). An early call the later steps turn out not to make only costs a call."""
+    if rerun or not use_cache:
+        return
+    text = f"{msg.get('subject') or ''}\n\n{msg.get('body_text') or ''}"
+    turn = capture.turn(msg)
+    to_bot = turn in ("direct", "addressed") or (turn == "email" and msg.get("visibility") == "to")
+    earlier = conversation.recent(msg)
+    if asks.enabled() and (to_bot or answers.asks_something(text)) and (to_bot or turn == "email"):
+        pool.submit(asks.sort, text, use_cache, earlier)
+    if guide.checker(study).get("answer_questions", True) and (
+            answers.HARM_WORDS.search(text) or answers.asks_something(text)
+            or (to_bot and conversation.bot_answered_lately(earlier))):
+        pool.submit(answers.find, text, use_cache, earlier)
+
+
 def handle_instruction(study: Study, msg: dict, instruction: dict) -> bool:
     kind = instruction.get("type")
     if kind not in ("disregard", "cleared"):
@@ -471,6 +489,7 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
     summary: dict = {"message_id": msg_id, "route": msg["route"], "items_created": [], "items_repeat": [],
                      "historical": 0, "hypothetical": 0, "prevented": 0, "out_of_scope": 0, "findings": 0}
     db.ex("UPDATE messages SET status='processing', processing_at=?, error=NULL WHERE id=?", (db.now(), msg_id))
+    early = None
     try:
         if msg["route"] != "study" or not msg["study_id"]:
             db.audit("general_message", entity_type="message", entity_id=msg_id,
@@ -488,6 +507,12 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
                 db.audit("chat_receipt_failed", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                          error=str(e)[:500])
         history = capture.thread_history(msg["thread_key"], msg_id)
+        reader_route = guide.checker(study).get("route") == "reader"
+        corpus = _corpus(msg)
+        if reader_route:  # neither needs the extract's answer, so they run while it does
+            early = ThreadPoolExecutor(3)
+            reading = early.submit(reader.check, study, msg, corpus, use_cache=use_cache, save=False)
+            _ask_early(early, study, msg, rerun, use_cache)
         timing.step("extract")
         data = events.extract(study, msg, history, use_cache=use_cache)
         event_id = events.store(msg_id, data, source="operator-rerun" if rerun else "system")
@@ -520,7 +545,6 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
                      summary=data["summary"])
 
         site = _site_for(study, msg)
-        corpus = _corpus(msg)
         seen_item_ids: set[int] = set()
         problem_pids: set[str] = set()
         good_news: list[tuple[dict, str | None, dict]] = []
@@ -541,7 +565,6 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
             "SELECT source_date FROM attachments WHERE message_id=? AND source_date IS NOT NULL", (msg_id,))]
         newest_part_date = max(part_dates, key=_instant) if part_dates else None
 
-        reader_route = guide.checker(study).get("route") == "reader"
         safety_waiting: list[tuple[dict, str | None, dict]] = []
 
         def out_of_scope(why: str, pid: str | None, event: dict, base: dict) -> None:
@@ -619,7 +642,8 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
 
         if reader_route:
             timing.step("reader")
-            found, trace = reader.check(study, msg, corpus, use_cache=use_cache)
+            found, trace = reading.result()
+            reader.keep(study, msg, trace)
             db.audit("reader_checked", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                      trace=trace)
             hit = set()
@@ -811,6 +835,9 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
         db.ex("UPDATE messages SET status='error', error=? WHERE id=?", (str(e)[:1000], msg_id))
         db.audit("processing_error", entity_type="message", entity_id=msg_id, error=str(e)[:1000])
         raise
+    finally:
+        if early:  # a read left unused (an instruction-only message) ends here; its facts are not saved
+            early.shutdown(wait=True)
 
 
 STUCK_MINUTES = 15
