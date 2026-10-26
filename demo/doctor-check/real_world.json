@@ -1,0 +1,198 @@
+[
+ {
+  "id": "p01",
+  "want": "posted",
+  "from": "peter@huma.ai",
+  "why": "like Saturday: scheduling mix-up, nobody's medical decision",
+  "text": "Heads up: G-453-112 had his Week 12 visit today. He took his dose at home at 07:00 but the lab tech was out, so we only drew the post-dose PK at 16:45. Everything else done."
+ },
+ {
+  "id": "p02",
+  "want": "posted",
+  "from": "eliot@huma.ai",
+  "why": "the doctor writes it, but the coordinator missed the sample",
+  "text": "G-453-114 came in for Week 16 this morning. Exam was fine. Our coordinator forgot to collect the urine biomarker sample before he left, we'll ask him to come back."
+ },
+ {
+  "id": "p03",
+  "want": "posted",
+  "from": "peter@huma.ai",
+  "why": "the doctor is named only in passing; pharmacy made the mistake",
+  "text": "Dr. Levitt saw G-453-115 for Week 8, all good. Pharmacy handed her the kit for G-453-151 by mistake, she noticed the number at home and called us."
+ },
+ {
+  "id": "p04",
+  "want": "posted",
+  "from": "peter@huma.ai",
+  "why": "the caregiver's own mistake",
+  "text": "G-453-117's wife called: she gave him 4 packets yesterday morning instead of 2, she opened tomorrow's pair by mistake. He feels fine."
+ },
+ {
+  "id": "p05",
+  "want": "no alert",
+  "from": "eliot@huma.ai",
+  "why": "not a problem: a question: the bot treats it as a question, not a mistake",
+  "text": "Quick question - can G-453-118 do his Week 24 visit 6 days late? He has a hospital appointment out of state that week."
+ },
+ {
+  "id": "p06",
+  "want": "no alert",
+  "from": "peter@huma.ai",
+  "why": "not a problem: 12°C is fine: the drug must be stored below 30°C",
+  "text": "Our IP fridge logged 12°C for about 4 hours overnight. Two kits from it went out to G-453-119 and G-453-120 this morning before anyone saw the alarm."
+ },
+ {
+  "id": "p07",
+  "want": "posted",
+  "from": "eliot@huma.ai",
+  "why": "the doctor reports the nurse's mistake",
+  "text": "FYI our nurse mixed G-453-121's stick packs into orange juice today because we were out of applesauce. He took it all."
+ },
+ {
+  "id": "p08",
+  "want": "no alert",
+  "from": "peter@huma.ai",
+  "why": "not a problem: clarithromycin slows the drug's breakdown; only drugs that speed it up (strong CYP3A4/5 inducers) are banned",
+  "text": "G-453-122's GP started him on clarithromycin last Thursday for a chest infection. He told us at today's Week 4 phone call."
+ },
+ {
+  "id": "p09",
+  "want": "posted",
+  "from": "peter@huma.ai",
+  "why": "the participant was ill; visit late",
+  "text": "G-453-123 had the flu so her Week 8 visit happened 9 days after the planned date. All procedures done."
+ },
+ {
+  "id": "p10",
+  "want": "posted",
+  "from": "peter@huma.ai",
+  "why": "the participant started a supplement on his own",
+  "text": "G-453-124 doing well at Week 20. He mentioned he started St. John's wort from the health store a couple of weeks ago for his mood."
+ },
+ {
+  "id": "k01",
+  "want": "kept out",
+  "from": "peter@huma.ai",
+  "why": "Eliot's own example: physical exam, nobody followed up (implied)",
+  "text": "At G-453-131's physical exam yesterday she reported new swelling in her left leg and no one followed up on it."
+ },
+ {
+  "id": "k02",
+  "want": "kept out",
+  "from": "eliot@huma.ai",
+  "why": "the doctor admits it",
+  "text": "My mistake - I randomised G-453-132 before I'd signed his eligibility checklist. Signed it this morning."
+ },
+ {
+  "id": "k03",
+  "want": "kept out",
+  "from": "peter@huma.ai",
+  "why": "the doctor is said to have decided it",
+  "text": "Dr. Levitt decided to keep G-453-133 on study drug even though his Week 8 ALT came back at 5x ULN."
+ },
+ {
+  "id": "k04",
+  "want": "kept out",
+  "from": "peter@huma.ai",
+  "why": "the PI judged the event (explicit)",
+  "text": "G-453-134 fell at home last week. The PI said it wasn't related so we didn't record it as an AE."
+ },
+ {
+  "id": "k05",
+  "want": "no alert",
+  "from": "peter@huma.ai",
+  "why": "not a problem: the protocol has the neurological exam only at screening, not Week 12",
+  "text": "The neurological exam for G-453-135 wasn't done at Week 12, clinic ran out of time."
+ },
+ {
+  "id": "k06",
+  "want": "kept out",
+  "from": "peter@huma.ai",
+  "why": "an abnormal lab nobody reviewed: the doctor's job (implied)",
+  "text": "G-453-136's Week 16 creatinine was 2.1 and the lab report still hasn't been reviewed or signed."
+ },
+ {
+  "id": "k07",
+  "want": "no alert",
+  "from": "peter@huma.ai",
+  "why": "not a problem: itraconazole slows the drug's breakdown; only strong CYP3A4/5 inducers are banned",
+  "text": "Eliot started G-453-137 on itraconazole for a nail infection at the Week 8 visit."
+ },
+ {
+  "id": "k08",
+  "want": "kept out",
+  "from": "eliot@huma.ai",
+  "why": "the doctor admits dosing before CSF",
+  "text": "I told the team to dose G-453-138 before the CSF draw today so he could make his ride home."
+ },
+ {
+  "id": "k09",
+  "want": "kept out",
+  "from": "peter@huma.ai",
+  "why": "unblinding is a doctor's decision (implied)",
+  "text": "G-453-139 was unblinded in the ER last night, the medical monitor wasn't contacted first."
+ },
+ {
+  "id": "k10",
+  "want": "no alert",
+  "from": "peter@huma.ai",
+  "why": "not a problem: SVC must be 50% or more, so 55% is allowed",
+  "text": "G-453-140 was randomised with an SVC of 55%. Eliot felt she was strong enough so he enrolled her anyway."
+ },
+ {
+  "id": "p11",
+  "want": "posted",
+  "from": "peter@huma.ai",
+  "why": "a real temperature excursion; pharmacy handed kits out",
+  "text": "Our IP room hit 34°C for about 5 hours yesterday afternoon when the AC failed. Pharmacy gave kits from that shelf to G-453-141 and G-453-142 this morning."
+ },
+ {
+  "id": "p12",
+  "want": "posted",
+  "from": "peter@huma.ai",
+  "why": "an outside GP prescribed a banned drug, not the study doctor",
+  "text": "G-453-143's GP started her on rifampin last week for a skin infection, she told us at today's Week 16 phone call."
+ },
+ {
+  "id": "p13",
+  "want": "posted",
+  "from": "eliot@huma.ai",
+  "why": "the doctor reports the coordinator's late data entry",
+  "text": "Heads up, the Week 8 labs for G-453-144 were fine but our coordinator only entered them in EDC today, 3 weeks late."
+ },
+ {
+  "id": "k11",
+  "want": "kept out",
+  "from": "peter@huma.ai",
+  "why": "the study doctor prescribed a banned drug (explicit)",
+  "text": "Eliot started G-453-147 on carbamazepine for nerve pain at the Week 8 visit."
+ },
+ {
+  "id": "k12",
+  "want": "kept out",
+  "from": "peter@huma.ai",
+  "why": "the PI enrolled someone who failed a criterion (explicit)",
+  "text": "G-453-150 was randomised with an SVC of 44%. Eliot said she was close enough."
+ },
+ {
+  "id": "k13",
+  "want": "kept out",
+  "from": "peter@huma.ai",
+  "why": "an abnormal ECG nobody reviewed before dosing (implied)",
+  "text": "G-453-151's Week 4 ECG printout showed QTcF 512 ms and nobody looked at it before she took her dose."
+ },
+ {
+  "id": "k14",
+  "want": "kept out",
+  "from": "peter@huma.ai",
+  "why": "lab results not signed off for weeks (implied)",
+  "text": "The Week 24 safety labs for G-453-152 came back 3 weeks ago, ALT 3x ULN, and they still haven't been signed off."
+ },
+ {
+  "id": "k15",
+  "want": "kept out",
+  "from": "peter@huma.ai",
+  "why": "unblinded without the required step (implied)",
+  "text": "G-453-153 was unblinded through IRT on Saturday after his hospital admission. No one documented why it was needed."
+ }
+]

@@ -2334,7 +2334,7 @@ def test_an_alert_is_kept_from_a_doctors_chat_only_when_it_is_about_the_doctors_
     assert chat["status"] == "queued" and chat["meta"]["careful"]["about"] == []   # site work: posted
     assert [r["purpose"] for r in rows if r["channel"] == "email"] == ["email_cra"]   # nothing private to add
     (task, said, names), = calls
-    assert task == "careful_doctor" and names == ["explicit", *careful.DOCTOR_TASKS]
+    assert task == "careful_doctor" and names == ["explicit", *careful.DOCTOR_TASKS, "outside"]
     frame, said = said
     assert frame == {"role": "developer", "content": careful.DOCTOR_FRAME} and said["role"] == "user"
     said = said["content"]
@@ -2395,6 +2395,16 @@ def test_a_doctor_writing_or_named_in_the_message_does_not_by_itself_keep_the_al
     _decide(monkeypatch, {"results": 0.5})
     _, rows = _alert("G-701-016 Week 8 ALT 4x ULN was not reviewed.", thread="W6")
     assert status(rows) == "withheld"
+    # a banned medicine the participant's own GP prescribed: not the study doctor's action, posted
+    _decide(monkeypatch, {"prescribing": 0.99, "outside": 0.97})
+    _, rows = _alert("G-701-017's GP started her on rifampin last week.", thread="W7")
+    assert status(rows) == "queued"
+    # prescribed with no prescriber named: it may be the study doctor, kept out
+    _decide(monkeypatch, {"prescribing": 0.9, "outside": 0.1})
+    _, rows = _alert("G-701-018 was put on carbamazepine last week.", thread="W8")
+    assert status(rows) == "withheld"
+    check = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='careful_check' ORDER BY id DESC")["details"])
+    assert check["reason"] == "what went wrong is a task only a doctor does (prescribing)"
 
 
 def test_the_doctor_check_tells_the_ai_what_does_not_count_as_a_doctors_action():
@@ -2405,6 +2415,8 @@ def test_the_doctor_check_tells_the_ai_what_does_not_count_as_a_doctors_action()
     assert "only reporting it unless they say they did it themselves" in frame
     assert "only reports or asks" in careful.DOCTOR_EXPLICIT
     assert "on their own is not prescribing" in careful.DOCTOR_TASKS["prescribing"]
+    assert "GP" in careful.DOCTOR_UNLESS["prescribing"][1]
+    assert "failed to do" in careful.DOCTOR_EXPLICIT and "nobody reviewed" in careful.DOCTOR_TASKS["results"]
 
 
 def test_a_doctor_asking_in_a_group_gets_a_calm_answer(monkeypatch):

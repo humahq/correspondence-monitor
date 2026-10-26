@@ -38,7 +38,8 @@ CHECK_SCHEMA = llm.obj({"ok": {"type": "boolean"}, "about": {"type": "array", "i
 # (implied). Anything else is posted, even though the PI is responsible for the whole site. One fast Decisions
 # call asks each as its own yes/no question: on 71 test alerts this was right on all, where one combined question
 # missed most implied ones (demo/doctor-check).
-DOCTOR_EXPLICIT = ("A doctor on the study did, decided, ordered or approved what went wrong: the message or the alert "
+DOCTOR_EXPLICIT = ("A doctor on the study did, failed to do, decided, ordered or approved what went wrong: the message "
+                   "or the alert "
                    "says so (by name, as 'the PI', 'the investigator', 'the physician', 'our neurologist', 'Dr.'), or "
                    "a doctor wrote the message and says they did it. A doctor who only reports or asks about a "
                    "problem, or is mentioned beside a problem someone else caused, does not count.")
@@ -53,9 +54,16 @@ DOCTOR_TASKS = {
                    "participant by a doctor? A participant taking a medicine or supplement on their own is not "
                    "prescribing, and nor is dispensing, preparing, storing or taking the study drug.",
     "eligibility": "Is what went wrong confirming that a participant was eligible, or enrolling or randomising them?",
-    "results": "Is what went wrong how an ECG, lab or scan result was medically interpreted or acted on?",
-    "unblinding": "Is what went wrong breaking the blind for a participant?",
+    "results": "Is what went wrong how an ECG, lab or scan result was medically reviewed, signed off, interpreted or "
+               "acted on (including a result nobody reviewed)?",
+    "unblinding": "Is what went wrong a participant's treatment being unblinded (the blind broken), in an emergency "
+                  "or not?",
     "ending": "Is what went wrong a decision to end a participant's treatment or participation?",
+}
+# a task answer does not count when its "unless" question is also yes
+DOCTOR_UNLESS = {
+    "prescribing": ("outside", "Does the message say the medicine was prescribed or started by the participant's own "
+                               "GP, a hospital or emergency room, or another doctor outside the study?"),
 }
 DOCTOR_LINE = 0.5
 DOCTOR_FRAME = ("A clinical-trial monitor bot is about to post the alert below in a chat that the study's doctors "
@@ -193,9 +201,12 @@ def doctor_did(writer: str, message: str, alert: str, doctors: str = "") -> dict
                                                {"role": "user", "content": said}],
                             [{"type": "predicate", "name": "explicit",
                                                       "instructions": DOCTOR_EXPLICIT}]
-                            + [{"type": "predicate", "name": k, "instructions": v} for k, v in DOCTOR_TASKS.items()])
-        top = max(scores, key=scores.get)
-        hit = scores[top] >= DOCTOR_LINE
+                            + [{"type": "predicate", "name": k, "instructions": v} for k, v in DOCTOR_TASKS.items()]
+                            + [{"type": "predicate", "name": n, "instructions": q} for n, q in DOCTOR_UNLESS.values()])
+        counted = {k: v for k, v in scores.items() if k not in {n for n, _ in DOCTOR_UNLESS.values()}
+                   and not (k in DOCTOR_UNLESS and scores[DOCTOR_UNLESS[k][0]] >= DOCTOR_LINE)}
+        top = max(counted, key=counted.get)
+        hit = counted[top] >= DOCTOR_LINE
         why = (("it says a doctor did what went wrong" if top == "explicit" else
                 f"what went wrong is a task only a doctor does ({top.replace('_', ' ')})") if hit else
                "what went wrong is not a doctor's own action")
