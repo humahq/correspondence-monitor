@@ -38,9 +38,10 @@ CHECK_SCHEMA = llm.obj({"ok": {"type": "boolean"}, "about": {"type": "array", "i
 # (implied). Anything else is posted, even though the PI is responsible for the whole site. One fast Decisions
 # call asks each as its own yes/no question: on 71 test alerts this was right on all, where one combined question
 # missed most implied ones (demo/doctor-check).
-DOCTOR_EXPLICIT = ("A doctor (by name, as 'the PI', 'the investigator', 'the physician', 'our neurologist', 'Dr.', "
-                   "or by writing the message themselves) is said to have done, decided, ordered or approved what "
-                   "went wrong.")
+DOCTOR_EXPLICIT = ("A doctor on the study did, decided, ordered or approved what went wrong: the message or the alert "
+                   "says so (by name, as 'the PI', 'the investigator', 'the physician', 'our neurologist', 'Dr.'), or "
+                   "a doctor wrote the message and says they did it. A doctor who only reports or asks about a "
+                   "problem, or is mentioned beside a problem someone else caused, does not count.")
 DOCTOR_TASKS = {
     "exam": "Is what went wrong about a physical or neurological examination (missed, incomplete, not documented, "
             "or something found in it not followed up)?",
@@ -49,13 +50,21 @@ DOCTOR_TASKS = {
                    "to the study drug, serious, how severe, or whether it needed recording or reporting)?",
     "dose_decision": "Is what went wrong a decision to change, reduce, hold, stop or continue the study drug dose?",
     "prescribing": "Is what went wrong a medicine other than the study drug being prescribed or ordered for the "
-                   "participant? Dispensing, preparing, storing or taking the study drug is not prescribing.",
+                   "participant by a doctor? A participant taking a medicine or supplement on their own is not "
+                   "prescribing, and nor is dispensing, preparing, storing or taking the study drug.",
     "eligibility": "Is what went wrong confirming that a participant was eligible, or enrolling or randomising them?",
     "results": "Is what went wrong how an ECG, lab or scan result was medically interpreted or acted on?",
     "unblinding": "Is what went wrong breaking the blind for a participant?",
     "ending": "Is what went wrong a decision to end a participant's treatment or participation?",
 }
 DOCTOR_LINE = 0.5
+DOCTOR_FRAME = ("A clinical-trial monitor bot is about to post the alert below in a chat that the study's doctors "
+                "read. 'What went wrong' is something a person at the site already did or failed to do. A question "
+                "the site asks, a plan, or an answer telling the site what the rules say is not something that went "
+                "wrong: then every question is no. What the participant or caregiver did on their own (missed or "
+                "extra doses, a supplement, travel), and equipment, courier or pharmacy failures, are nobody's "
+                "medical decision. A doctor who writes the message is only reporting it unless they say they did "
+                "it themselves.")
 
 # the same two questions for the chat model, used when the Decisions call fails
 DOCTOR_SYSTEM = f"""A clinical-trial monitor bot is about to post an alert in a chat that the study doctor (the
@@ -173,12 +182,16 @@ def _ask(study: Study, here: list[tuple[Person, dict]], about_msg: str, text: st
                           f"{about_msg}MESSAGE TO POST:\n{text}", CHECK_SCHEMA, "careful_check")
 
 
-def doctor_did(writer: str, message: str, alert: str) -> dict:
-    """Whether an alert is about a doctor's own actions: {critical, why, scores, by}. The Decisions API first; the
-    chat model when it fails. Raises when both fail."""
-    said = f"SITE MESSAGE (written by {writer or 'someone at the site'}):\n{message}\n\nALERT TO POST:\n{alert}"
+def doctor_did(writer: str, message: str, alert: str, doctors: str = "") -> dict:
+    """Whether an alert is about a doctor's own actions: {critical, why, scores, by}. writer: who wrote the message,
+    with their role; doctors: the doctors in the chat. The Decisions API first; the chat model when it fails.
+    Raises when both fail."""
+    said = ((f"DOCTORS ON THE STUDY IN THIS CHAT: {doctors}\n\n" if doctors else "")
+            + f"SITE MESSAGE (written by {writer or 'someone at the site'}):\n{message}\n\nALERT TO POST:\n{alert}")
     try:
-        scores = llm.decide("careful_doctor", said, [{"type": "predicate", "name": "explicit",
+        scores = llm.decide("careful_doctor", [{"role": "developer", "content": DOCTOR_FRAME},
+                                               {"role": "user", "content": said}],
+                            [{"type": "predicate", "name": "explicit",
                                                       "instructions": DOCTOR_EXPLICIT}]
                             + [{"type": "predicate", "name": k, "instructions": v} for k, v in DOCTOR_TASKS.items()])
         top = max(scores, key=scores.get)
@@ -189,7 +202,7 @@ def doctor_did(writer: str, message: str, alert: str) -> dict:
         return {"critical": hit, "why": why, "scores": {k: round(v, 2) for k, v in scores.items()}, "by": "decisions"}
     except Exception as e:
         first = str(e)[:200]
-    r = llm.structured("careful_doctor", DOCTOR_SYSTEM, said, DOCTOR_SCHEMA, "doctor")
+    r = llm.structured("careful_doctor", f"{DOCTOR_SYSTEM}\n{DOCTOR_FRAME}", said, DOCTOR_SCHEMA, "doctor")
     why = ("it says a doctor did what went wrong" if r["explicit"] else
            "what went wrong is a task only a doctor does" if r["implied"] else "what went wrong is not a doctor's own action")
     return {"critical": r["explicit"] or r["implied"], "why": why, "scores": r, "by": f"chat model ({first})"}
@@ -256,14 +269,14 @@ def _check(study: Study, here: list[tuple[Person, dict]], room: dict, target: di
     ai = error = None
     if not alert and SAFETY in text:
         critical, about, reason = False, [], "it is about reporting serious harm, which is always sent"
-    elif alert and (wrote or names):
-        critical, about = True, list(dict.fromkeys(wrote + names))
-        reason = f"the message it is about was written by {', '.join(wrote)}" if wrote else f"it names {', '.join(names)}"
-    elif alert:
+    elif alert:   # a doctor writing or being named is not enough: it must be the doctor's own action
         sender = study.person_by_email(writer) if writer else None
         by = sender.name if sender else (source or {}).get("from_name") or writer
+        if sender and sender.roles:
+            by += f" ({', '.join(study.role_label(r) for r in sender.roles)}"
+            by += ", a doctor on the study)" if wrote else ")"
         try:
-            ai = doctor_did(by, (source or {}).get("body_text") or "", text)
+            ai = doctor_did(by, (source or {}).get("body_text") or "", text, _who(study, here))
             critical, reason = ai["critical"], ai["why"]
             about = [p.name for p, _ in here] if critical else []
         except Exception as e:

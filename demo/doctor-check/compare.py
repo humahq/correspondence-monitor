@@ -89,7 +89,7 @@ def two(c):
 
 def many(c):
     """What the bot runs (careful.doctor_did): explicit plus one yes/no question per doctor-only task."""
-    r = careful.doctor_did(WRITER, c["message"], c["alert"])
+    r = careful.doctor_did(c.get("writer", f"{WRITER} (Study coordinator)"), c["message"], c["alert"], WHO)
     top = max(r["scores"], key=r["scores"].get)
     return r["critical"], f"{top}={r['scores'][top]}"
 
@@ -129,7 +129,7 @@ def main():
         print(f"\n== {name}: kept out when it should be {tp}/{pos} ({tp / pos:.0%}), posted when it should be "
               f"{neg - fp}/{neg} ({(neg - fp) / neg:.0%}); answer changed between runs on {changed} of {len(CASES)}; "
               f"median {statistics.median(secs):.2f}s, slowest {max(secs):.2f}s")
-        print("   by kind: " + ", ".join(f"{k} {statistics.mean(v):.0%}" for k, v in per.items()))
+        print("   by kind: " + ", ".join(f"{k} {statistics.mean(v):.0%}" for k, v in per.items() if v))
         for cid, label, said, verdict in rows:
             if verdict != "ok":
                 print(f"   {verdict} {cid} ({label}): {said}")

@@ -2288,10 +2288,11 @@ def test_an_alert_about_a_doctor_in_the_chat_is_not_posted_there_but_sent_privat
     from cormon import outbox, webview
     _rooms(monkeypatch, {"spaces/G": [DOC, CRC]})
     calls = _ai(monkeypatch)
+    asked = _decide(monkeypatch, {"explicit": 0.95})
     item_id, rows = _alert("G-701-001: Dr. Levitt asked us to give the first dose before the CSF draw, so we did.")
     chat = [r for r in rows if r["channel"] == "teams"]
     assert len(chat) == 1 and chat[0]["status"] == "withheld" and chat[0]["meta"]["careful"]["about"] == ["Eliot Levitt"]
-    assert not calls   # code saw the doctor named: no AI needed
+    assert not calls and len(asked) == 1   # one Decisions call, no chat model
     mail = {(r["purpose"], r["to_addrs"][0], r["status"]) for r in rows if r["channel"] == "email"}
     assert mail == {("email_cra", CRA, "queued"), ("careful_report_clinops_lead", LEAD, "queued")}  # CRA not twice
     report = next(r for r in rows if r["purpose"] == "careful_report_clinops_lead")
@@ -2334,8 +2335,12 @@ def test_an_alert_is_kept_from_a_doctors_chat_only_when_it_is_about_the_doctors_
     assert [r["purpose"] for r in rows if r["channel"] == "email"] == ["email_cra"]   # nothing private to add
     (task, said, names), = calls
     assert task == "careful_doctor" and names == ["explicit", *careful.DOCTOR_TASKS]
-    assert said.startswith("SITE MESSAGE (written by John Rohit):\nG-701-002") and "ALERT TO POST:" in said
-    assert "<p>" not in said
+    frame, said = said
+    assert frame == {"role": "developer", "content": careful.DOCTOR_FRAME} and said["role"] == "user"
+    said = said["content"]
+    assert said.startswith("DOCTORS ON THE STUDY IN THIS CHAT: Eliot Levitt (Principal investigator)")
+    assert "SITE MESSAGE (written by John Rohit (Study coordinator)):\nG-701-002" in said
+    assert "ALERT TO POST:" in said and "<p>" not in said
     # a task only a doctor does, with no doctor named: kept out
     _decide(monkeypatch, {"exam": 0.97})
     _, rows = _alert("G-701-004: at the physical exam the new weakness was not followed up.", thread="T3")
@@ -2352,6 +2357,54 @@ def test_an_alert_is_kept_from_a_doctors_chat_only_when_it_is_about_the_doctors_
     _, rows = _alert("G-701-003 baseline CSF drawn at 11:00, first dose was 9:00.", thread="T2")
     assert next(r for r in rows if r["channel"] == "teams")["status"] == "withheld"
     assert {r["purpose"] for r in rows if r["channel"] == "email"} == {"email_cra", "careful_report_clinops_lead"}
+
+
+def test_a_doctor_writing_or_named_in_the_message_does_not_by_itself_keep_the_alert_out(monkeypatch):
+    _rooms(monkeypatch, {"spaces/G": [DOC, CRC]})
+    def status(rows):
+        return next(r for r in rows if r["channel"] == "teams")["status"]
+    # the doctor wrote it, about the courier's mistake: the AI is asked, and it is posted
+    calls = _decide(monkeypatch, {"explicit": 0.04})
+    _, rows = _alert("Heads up, the courier lost G-701-011's frozen PK box on the way to the lab.", frm=DOC, thread="W1")
+    assert status(rows) == "queued"
+    said = calls[0][1][1]["content"]
+    assert "(written by Eliot Levitt (Study team member, Principal investigator, a doctor on the study))" in said
+    check = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='careful_check' ORDER BY id DESC")["details"])
+    assert check["decision"] == "send" and check["ai"]["by"] == "decisions"
+    assert check["reason"] == "what went wrong is not a doctor's own action"
+    # the real Oct 24 message, withheld before only because the doctor wrote it: now posted
+    _decide(monkeypatch, {})
+    _, rows = _alert("G-501-205 PK blood sample at 17:00, the dose was at 08:00.", frm=DOC, thread="W2")
+    assert status(rows) == "queued"
+    # the doctor named in passing, beside someone else's mistake: posted
+    _decide(monkeypatch, {"explicit": 0.08})
+    _, rows = _alert("Dr. Levitt reviewed G-701-013's labs, all fine, but the CSF went in a polystyrene tube.",
+                     thread="W3")
+    assert status(rows) == "queued"
+    # the doctor says he did it himself: kept out, and the reason says so
+    _decide(monkeypatch, {"explicit": 0.93})
+    _, rows = _alert("I told the team to dose G-701-014 before the CSF draw so he could catch his ride.",
+                     frm=DOC, thread="W4")
+    assert status(rows) == "withheld"
+    check = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='careful_check' ORDER BY id DESC")["details"])
+    assert check["reason"] == "it says a doctor did what went wrong" and check["about"] == ["Eliot Levitt"]
+    # the line is 0.5: just under is posted, at it is kept out
+    _decide(monkeypatch, {"results": 0.49})
+    _, rows = _alert("G-701-015 Week 8 labs were entered a day late.", thread="W5")
+    assert status(rows) == "queued"
+    _decide(monkeypatch, {"results": 0.5})
+    _, rows = _alert("G-701-016 Week 8 ALT 4x ULN was not reviewed.", thread="W6")
+    assert status(rows) == "withheld"
+
+
+def test_the_doctor_check_tells_the_ai_what_does_not_count_as_a_doctors_action():
+    from cormon import careful
+    frame = careful.DOCTOR_FRAME
+    assert "A question" in frame and "every question is no" in frame
+    assert "participant or caregiver did on their own" in frame and "courier" in frame
+    assert "only reporting it unless they say they did it themselves" in frame
+    assert "only reports or asks" in careful.DOCTOR_EXPLICIT
+    assert "on their own is not prescribing" in careful.DOCTOR_TASKS["prescribing"]
 
 
 def test_a_doctor_asking_in_a_group_gets_a_calm_answer(monkeypatch):

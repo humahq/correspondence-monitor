@@ -138,7 +138,7 @@ def _call(task, model, system, user, schema, schema_name, key, temperature, seed
     return data
 
 
-def decide(task: str, input: str, questions: list[dict], *, use_cache: bool = True) -> dict:
+def decide(task: str, input: str | list[dict], questions: list[dict], *, use_cache: bool = True) -> dict:
     """The Decisions API (fast, bounded answers): {question name: probability for a predicate, value for a choice}.
     Cached by input hash like structured(). Raises after 3 failed attempts."""
     model = settings.get("llm.models.decisions", "gpt-6-luna")
