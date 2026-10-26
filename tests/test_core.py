@@ -2627,6 +2627,36 @@ def test_a_manual_is_briefed_beside_the_protocol_with_no_document_ranked_and_the
     assert db.q1("SELECT action FROM audit_log WHERE action='coverage_gate'")
 
 
+def test_missing_site_rules_are_added_to_their_topics_briefs_word_for_word(tmp_path):
+    from cormon import coverage, guide, packs
+    study = _two_doc_study(tmp_path)
+    for t in ("samples", "records_reporting"):
+        db.ex("INSERT INTO guide(study_id, doc_id, id, kind, number, title, path, text, about, topics, ord, version) "
+              "VALUES ('S', 'packs', ?, 'brief', '', '', '', '- Ship frozen. [lab:2]', '', '[]', 1, 'lab=1')",
+              (f"brief:{t}",))
+    docs = ("Ship with the following documents:\n\n- Air Waybill: affix outside.\n- Customs Invoice (International "
+            "Only): sign it.\nKeep copies.")
+    secs = [{"id": "lab:5", "topics": ["samples", "records_reporting"]}, {"id": "lab:9", "topics": ["admin"]},
+            {"id": "p:4", "topics": ["eligibility"], "text": "Excluded if any of the following:\n- " + "x" * 500},
+            {"id": "lab:6", "topics": ["samples"], "text": docs}]
+    missing = [{"section": "lab:5", "sentence": "Each shipment must carry\n the signed requisition form."},
+               {"section": "lab:9", "sentence": "Use the breadcrumb trail to go back."},
+               {"section": "p:4", "sentence": "Excluded if any of the following:"},
+               {"section": "lab:5", "sentence": "[Default - Sponsor to confirm] Grade it by CTCAE v5.0."},
+               {"section": "lab:6", "sentence": "Ship with the following documents:"}]
+    added = coverage.fill(study, missing, secs)
+    assert [(a["section"], a["topic"]) for a in added] == [("lab:5", "samples"), ("lab:5", "records_reporting"),
+                                                           ("lab:6", "samples")]
+    brief = next(r for r in guide.load("S") if r["id"] == "brief:samples")["text"]
+    assert brief.splitlines()[-2:] == ["- Each shipment must carry the signed requisition form. [lab:5]",
+                                       "- Ship with the following documents: Air Waybill; Customs Invoice "
+                                       "(International Only). [lab:6]"]
+    assert coverage.fill(study, missing, secs) == []                       # added once
+    lines, _ = packs.stored_lines(study, {"lab": "1"})
+    assert {"rule": "Each shipment must carry the signed requisition form.", "section": "lab:5",
+            "doc": "lab"} in lines["samples"]                              # kept by the next build
+
+
 def test_each_ai_call_and_each_step_of_a_read_is_timed_with_its_tokens(monkeypatch):
     from types import SimpleNamespace as NS
 
