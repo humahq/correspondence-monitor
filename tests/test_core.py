@@ -3040,6 +3040,7 @@ def test_the_same_ai_call_made_twice_at_once_reaches_the_model_once(monkeypatch)
 
     from cormon import llm
 
+    db.conn()   # a brand-new database switched to WAL by three threads at once can report "database is locked"
     sent = []
 
     def create(**kw):
