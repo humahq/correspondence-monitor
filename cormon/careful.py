@@ -53,11 +53,13 @@ DOCTOR_TASKS = {
     "prescribing": "Is what went wrong a medicine other than the study drug being prescribed or ordered for the "
                    "participant by a doctor? A participant taking a medicine or supplement on their own is not "
                    "prescribing, and nor is dispensing, preparing, storing or taking the study drug.",
-    "eligibility": "Is what went wrong confirming that a participant was eligible, or enrolling or randomising them?",
+    "eligibility": "Is what went wrong a participant's eligibility: enrolled or randomised although they did not meet "
+                   "a criterion, or eligibility confirmed without a required check? Not the steps themselves: doing "
+                   "the randomisation in IRT, scheduling, or the order of consent and the other steps.",
     "results": "Is what went wrong how an ECG, lab or scan result was medically reviewed, signed off, interpreted or "
                "acted on (including a result nobody reviewed)?",
-    "unblinding": "Is what went wrong a participant's treatment being unblinded (the blind broken), in an emergency "
-                  "or not?",
+    "unblinding": "Is what went wrong about a participant being unblinded (the blind broken), in an emergency or "
+                  "not? Unblinding is the site investigator's decision, so any problem with an unblinding counts.",
     "ending": "Is what went wrong a decision to end a participant's treatment or participation?",
 }
 # a task answer does not count when its "unless" question is also yes
@@ -65,11 +67,11 @@ DOCTOR_UNLESS = {
     "prescribing": ("outside", "Does the message say the medicine was prescribed or started by the participant's own "
                                "GP, a hospital or emergency room, or another doctor outside the study?"),
 }
+DOCTOR_NOT_YET = ("Does the site message only ask a question, or say the step is planned or about to be done, so "
+                  "nothing has been done wrong yet?")
 DOCTOR_LINE = 0.5
 DOCTOR_FRAME = ("A clinical-trial monitor bot is about to post the alert below in a chat that the study's doctors "
-                "read. 'What went wrong' is something a person at the site already did or failed to do. A question "
-                "the site asks, a plan, or an answer telling the site what the rules say is not something that went "
-                "wrong: then every question is no. What the participant or caregiver did on their own (missed or "
+                "read. What the participant or caregiver did on their own (missed or "
                 "extra doses, a supplement, travel), and equipment, courier or pharmacy failures, are nobody's "
                 "medical decision. A doctor who writes the message is only reporting it unless they say they did "
                 "it themselves.")
@@ -202,13 +204,16 @@ def doctor_did(writer: str, message: str, alert: str, doctors: str = "") -> dict
                             [{"type": "predicate", "name": "explicit",
                                                       "instructions": DOCTOR_EXPLICIT}]
                             + [{"type": "predicate", "name": k, "instructions": v} for k, v in DOCTOR_TASKS.items()]
-                            + [{"type": "predicate", "name": n, "instructions": q} for n, q in DOCTOR_UNLESS.values()])
-        counted = {k: v for k, v in scores.items() if k not in {n for n, _ in DOCTOR_UNLESS.values()}
+                            + [{"type": "predicate", "name": n, "instructions": q} for n, q in DOCTOR_UNLESS.values()]
+                            + [{"type": "predicate", "name": "not_yet", "instructions": DOCTOR_NOT_YET}])
+        counted = {k: v for k, v in scores.items() if k not in {n for n, _ in DOCTOR_UNLESS.values()} | {"not_yet"}
                    and not (k in DOCTOR_UNLESS and scores[DOCTOR_UNLESS[k][0]] >= DOCTOR_LINE)}
         top = max(counted, key=counted.get)
-        hit = counted[top] >= DOCTOR_LINE
+        done = scores["not_yet"] < DOCTOR_LINE
+        hit = done and counted[top] >= DOCTOR_LINE
         why = (("it says a doctor did what went wrong" if top == "explicit" else
                 f"what went wrong is a task only a doctor does ({top.replace('_', ' ')})") if hit else
+               "nothing has gone wrong yet: it is a question or a plan" if not done else
                "what went wrong is not a doctor's own action")
         return {"critical": hit, "why": why, "scores": {k: round(v, 2) for k, v in scores.items()}, "by": "decisions"}
     except Exception as e:

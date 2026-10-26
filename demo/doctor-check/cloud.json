@@ -1,0 +1,303 @@
+[
+ {
+  "id": "c2",
+  "label": "implied",
+  "writer": "John Rohit (Study coordinator)",
+  "message": "Hi, MAP-0901 was randomized this morning. Screening eGFR was 38. Thanks\r\n",
+  "alert": "*[Medium] MAP · Site 01 (Columbia) · MAP-0901*\n\nParticipant randomized with eGFR 38; protocol excludes eGFR below 45\n\n*Correspondence* (John Rohit, 09 Oct 2026 14:34):\n_\"Screening eGFR was 38. Thanks\"_\n\n*Study requirement* (MAP Protocol v2.0 (21 May 2024), p. 30):\n_\"Thus, participants with eGFR < 45 mL/min will not be eligible to participate.\"_\n\nRouted to: John Ernest (Clinical research associate) · Item #1 · <https://35-196-201-11.sslip.io/items/7YR5mAaGZCTxITzu|details>"
+ },
+ {
+  "id": "c4",
+  "label": "explicit",
+  "writer": "John Rohit (Study coordinator)",
+  "message": "Hi John,\r\n\r\nQuick update on MAP-0902. Baseline visit done this morning, BP was 172/104.\r\n\r\nPI was okay with it so we randomized her. Next visit is in 6 months.\r\n\r\nThanks\r\n",
+  "alert": "*[Medium] MAP · Site 01 (Columbia) · MAP-0902*\n\nParticipant randomized with BP 172/104; protocol excludes uncontrolled hypertension (≥160/95)\n\n*Correspondence* (John Rohit, 09 Oct 2026 14:39):\n_\"Baseline visit done this morning, BP was 172/104.\"_\n\n*Study requirement* (MAP Protocol v2.0 (21 May 2024), p. 31):\n_\"Participants with uncontrolled hypertension (systolic blood pressure ≥ 160 mmHg or diastolic blood pressure ≥ 95 mmHg).\"_\n\nRouted to: John Ernest (Clinical research associate) · Item #2 · <https://35-196-201-11.sslip.io/items/TwcNPenmQJucDgmB|details>"
+ },
+ {
+  "id": "c9",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "MAP-0161 at Site 03: BP 168/92 this morning, randomizing at 3pm",
+  "alert": "*[Immediate] MAP · Site 01 (Columbia) · MAP-0161*\n\nRandomization planned with systolic BP 168; protocol excludes systolic BP ≥ 160\n\n*Correspondence* (John Huma, 12 Oct 2026 11:28):\n_\"MAP-0161 at Site 03: BP 168/92 this morning, randomizing at 3pm\"_\n\n*Study requirement* (MAP Protocol v2.0 (21 May 2024), p. 31):\n_\"Participants with uncontrolled hypertension (systolic blood pressure ≥ 160 mmHg or diastolic blood pressure ≥ 95 mmHg).\"_\n\nRouted to: alert channel, John Ernest (Clinical research associate), John Huma (Sponsor ClinOps lead) · Item #3 · <https://35-196-201-11.sslip.io/items/rvRe5nkAwWghPQC1|details>"
+ },
+ {
+  "id": "c10",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "MAP-0161 at Site 03: BP 168/92 this morning, randomizing at 3pm",
+  "alert": "*IMMEDIATE · MAP · Site 01 (Columbia) · MAP-0161*\n\nRandomization planned with systolic BP 168; protocol excludes systolic BP ≥ 160\n\n*Requirement:* \"Participants with uncontrolled hypertension (systolic blood pressure ≥ 160 mmHg or diastolic blood pressure ≥ 95 mmHg).\" (MAP Protocol v2.0 (21 May 2024), p. 31)\n\n*Asked of John Ernest:* call the site today.\n\nItem #3 · <https://35-196-201-11.sslip.io/items/rvRe5nkAwWghPQC1|details>"
+ },
+ {
+  "id": "c13",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "MAP-0161 at Site 03: BP 168/92 this morning, randomizing at 3pm",
+  "alert": "*[Immediate] MAP · Site 01 (Columbia) · MAP-0161*\n\nRandomization planned with systolic BP 168; protocol excludes systolic BP ≥ 160\n\n*Correspondence* (John Huma, 12 Oct 2026 11:40):\n_\"MAP-0161 at Site 03: BP 168/92 this morning, randomizing at 3pm\"_\n\n*Study requirement* (MAP Protocol v2.0 (21 May 2024), p. 31):\n_\"Participants with uncontrolled hypertension (systolic blood pressure ≥ 160 mmHg or diastolic blood pressure ≥ 95 mmHg).\"_\n\nRouted to: alert channel, John Ernest (Clinical research associate), John Huma (Sponsor ClinOps lead) · Item #4 · <https://35-196-201-11.sslip.io/items/0bAqbPsSN4DTfdl8|details>"
+ },
+ {
+  "id": "c14",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "MAP-0161 at Site 03: BP 168/92 this morning, randomizing at 3pm",
+  "alert": "*IMMEDIATE · MAP · Site 01 (Columbia) · MAP-0161*\n\nRandomization planned with systolic BP 168; protocol excludes systolic BP ≥ 160\n\n*Requirement:* \"Participants with uncontrolled hypertension (systolic blood pressure ≥ 160 mmHg or diastolic blood pressure ≥ 95 mmHg).\" (MAP Protocol v2.0 (21 May 2024), p. 31)\n\n*Asked of John Ernest:* call the site today.\n\nItem #4 · <https://35-196-201-11.sslip.io/items/0bAqbPsSN4DTfdl8|details>"
+ },
+ {
+  "id": "c17",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "MAP-0184 completed the month 3 visit today. All tests were done on schedule.",
+  "alert": "*Good news · MAP · MAP-0184 · Site 01 (Columbia)*\n\nMonth 3 visit completed for MAP-0184 with all tests done on schedule.\n\n*What the site wrote* (John Huma, 12 Oct 2026 12:00):\n_\"MAP-0184 completed the month 3 visit today. All tests were done on schedule.\"_\n\nItem #5 · added to the CRA's to-do list"
+ },
+ {
+  "id": "c19",
+  "label": "neither",
+  "writer": "John Rohit (Study coordinator)",
+  "message": "Screening G-110-012 for Regimen G. Current meds: tacrolimus (kidney transplant 2019, stable), quetiapine 25 mg at night. I don't see a problem - planning to proceed to Baseline.\n\nJohn",
+  "alert": "*Medium · DNL343 · G-110-012 · Site 01 (MGH)*\n\n*Problem:* The participant is on a prohibited sensitive CYP3A4/5 substrate with a narrow therapeutic index at screening.\n\n*What the site wrote* (John Rohit, 14 Oct 2026 00:51):\n_\"Current meds: tacrolimus (kidney transplant 2019, stable)\"_\n\n*What the study rule says* (Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 4.2.2 Regimen-Specific Appendix Exclusion Criteria):\n_\"at are sensitive CYP3A4/5 substrates with a narrow therapeutic index within 7 days or 5 half-lives (whichever is longer) of the first dose\"_\n\n*Next step:* Do not proceed to Baseline until the medication is reviewed under the protocol's narrow-therapeutic-index rule and the participant is confirmed eligible or screen-failed.\n\n*It also goes against this rule* (Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section Sensitive CYP3A4/5 Substrates):\n_\"The medical monitor may be consulted to assess whether any of the medications listed in Table 5 would be considered to have narrow therapeutic index for the individual participant taking the medication.\"_\nThe site wrote: _\"I don't see a problem - planning to proceed to Baseline.\"_\n\n*Who was told:* John Ernest (Clinical research associate)\nItem #6 · <https://35-196-201-11.sslip.io/items/QBCOryZXHFqyu4ye|details>"
+ },
+ {
+  "id": "c21",
+  "label": "neither",
+  "writer": "John Rohit (Study coordinator)",
+  "message": "G-440-006 baseline yesterday: randomized in IRT at 11:45, Regimen G consent signed at 12:30, first dose 16:10.",
+  "alert": "*Immediate · DNL343 · G-440-006 · Site 01 (MGH)*\n\n*Problem:* The participant was randomized before signing the regimen-specific consent.\n\n*What the site wrote* (John Rohit, 14 Oct 2026 00:51):\n_\"randomized in IRT at 11:45, Regimen G consent signed at 12:30\"_\n\n*What the study rule says* (HEALEY ALS Platform Trial Master Protocol V6.0 (14 Oct 2024), section 1.3 Participant Information and Consent):\n_\"Participants will then be informed about the intervention specific to their assigned regimen and any participation/termination conditions or risks and benefits specific to that regimen.\nParticipants will give their written consent to participate in their assigned regimen and will be provided with a copy of the fully executed regimen-specific consent form for their records.\nParticipants meeting additional eligibility criteria required by their assigned regimen, if any, will be randomized in a 3:1 ratio to receive either active treatment or matching placebo in that regimen.\"_\n\n*Next step:* Document the deviation and ensure regimen-specific consent is obtained before any future regimen assignment procedures.\n\n*Who was told:* the DNL343 URGENT room, John Ernest (Clinical research associate), John Huma (Sponsor ClinOps lead), John Rohit (Study coordinator)\nItem #7 · <https://35-196-201-11.sslip.io/items/XXSrAUy1QrMr3ahm|details>"
+ },
+ {
+  "id": "c22",
+  "label": "neither",
+  "writer": "John Rohit (Study coordinator)",
+  "message": "G-440-006 baseline yesterday: randomized in IRT at 11:45, Regimen G consent signed at 12:30, first dose 16:10.",
+  "alert": "*Immediate · DNL343 · G-440-006 · Site 01 (MGH)*\n\n*Problem:* The participant was randomized before signing the regimen-specific consent.\n\n*What the study rule says* (HEALEY ALS Platform Trial Master Protocol V6.0 (14 Oct 2024), section 1.3 Participant Information and Consent):\n_\"Participants will then be informed about the intervention specific to their assigned regimen and any participation/termination conditions or risks and benefits specific to that regimen.\nParticipants will give their written consent to participate in their assigned regimen and will be provided with a copy of the fully executed regimen-specific consent form for their records.\nParticipants meeting additional eligibility criteria required by their assigned regimen, if any, will be randomized in a 3:1 ratio to receive either active treatment or matching placebo in that regimen.\"_\n\n*Next step:* Document the deviation and ensure regimen-specific consent is obtained before any future regimen assignment procedures.\n\n*Next step:* John Ernest (CRA) has been asked to call the site today.\n\nItem #7 · <https://35-196-201-11.sslip.io/items/XXSrAUy1QrMr3ahm|details>"
+ },
+ {
+  "id": "c28",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-501-004 wk4 today, bl 9/16. predose pk 7:00, dosed 9:30, postdose 10:00",
+  "alert": "*Medium · DNL343 · G-501-004 · Site 01 (MGH)*\n\n*Problem:* The predose PK blood draw was taken too close to dosing.\n\n*What the site wrote* (John Huma, 15 Oct 2026 09:23):\n_\"predose pk 7:00, dosed 9:30\"_\n\n*What the study rule says* (Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD):\n_\"For visits with a predose PK sample (Week 4 and Week 24), these visits should be scheduled for the morning and participants should take their dose in the clinic at approximately the same time in the morning as usual. The predose sample should be collected prior to dosing (ie, any time 0 to 2 hours before the dose) and approximately 24 hours after the most recent dose.\"_\n\n*Next step:* Do not use this sample as a valid predose PK sample; recollect within the allowed predose window at a future eligible visit or per sponsor guidance.\n\n*It also goes against this rule* (Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD):\n_\"The postdose sample can be collected anytime between 1 to 8 hours postdose.\"_\nThe site wrote: _\"postdose 10:00\"_\n\n*Who was told:* John Ernest (Clinical research associate)\nItem #8 · <https://35-196-201-11.sslip.io/items/KZTmCMAsf-yQjLp4|details>"
+ },
+ {
+  "id": "c30",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-601-002 wk4 today, bl 9/17. predose pk 8:00, dosed 9:00, postdose 9:20",
+  "alert": "*Medium · DNL343 · G-601-002 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The site collected the postdose PK sample too early.*\n\n*What to do:*\n1. Record the deviation; do not count this as a valid postdose PK timepoint.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 15 Oct 2026 09:35):\n`postdose 9:20`\nStudy rule:\n`The postdose sample can be collected anytime between 1 to 8 hours postdose.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\nTold: John Ernest (Clinical research associate) · Item #9 · <https://35-196-201-11.sslip.io/items/7HiqlBBjNTy9zI09|details>"
+ },
+ {
+  "id": "c32",
+  "label": "neither",
+  "writer": "John Rohit (Study coordinator)",
+  "message": "Hi, G-502-008 had baseline 7/1. Week 12 phone call done 9/30. Also she\r\nstopped her phenytoin on 6/25 per her neurologist. Thanks\r\n",
+  "alert": "*Low · DNL343 · G-502-008 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The Week 12 phone call was done late.*\n\n*What to do:*\n1. Document the visit as out of window and record the protocol deviation.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Rohit, 15 Oct 2026 09:48):\n`Week 12 phone call done 9/30.`\nStudy rule:\n`This visit will take place 84 ± 3 days after the Baseline visit via telephone. The following procedures will be performed for the regimen schedule: 1. Perform drug compliance check-in (remind of the importance of compliance)`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 6.4 Week 12 Telephone Visit_\n\nTold: the CRA's to-do list · Item #10 · <https://35-196-201-11.sslip.io/items/WvTdxxwYD-GtO-1R|details>"
+ },
+ {
+  "id": "c33",
+  "label": "neither",
+  "writer": "John Rohit (Study coordinator)",
+  "message": "Hi, G-502-008 had baseline 7/1. Week 12 phone call done 9/30. Also she\r\nstopped her phenytoin on 6/25 per her neurologist. Thanks\r\n",
+  "alert": "*Medium · DNL343 · G-502-008 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. Phenytoin was stopped too close to first dose/Baseline.* _(please check: not sure)_\n\n*What to do:*\n1. Do not enroll/randomize or dose until the washout requirement is met; confirm with the sponsor/medical monitor and record the screen failure or protocol deviation as applicable.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Rohit, 15 Oct 2026 09:48):\n`Also she stopped her phenytoin on 6/25 per her neurologist.`\nStudy rule:\n`Exclude strong CYP3A4/5 inducer use within 2 weeks or 5 half-lives (whichever is longer) of first dose, or anticipated use during study treatment. [regimen_g:4.2.2]`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 4.2.2 Regimen-Specific Appendix Exclusion Criteria_\n_Why not sure: the protocol quote was not found verbatim_\n\nTold: John Ernest (Clinical research associate) · Item #11 · <https://35-196-201-11.sslip.io/items/D1Oen7VhH8-qGZu6|details>"
+ },
+ {
+  "id": "c35",
+  "label": "neither",
+  "writer": "John Rohit (Study coordinator)",
+  "message": "Hi, G-603-001 came in 10/13 for screening, we did the bloods and the ECG.\r\nShe signed the master consent on 10/14 when she came back.\r\n",
+  "alert": "*Medium · DNL343 · G-603-001 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. Screening procedures were performed before the participant had signed master consent.* _(please check: not sure)_\n\n*What to do:*\n1. Record the deviation and do not repeat any study-only procedures before consent at future visits.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Rohit, 15 Oct 2026 09:53):\n`G-603-001 came in 10/13 for screening, we did the bloods and the ECG. She signed the master consent on 10/14 when she came back.`\nStudy rule:\n`Obtain written informed consent before study procedures or assessments, except clinic visit standard of care, after explaining objectives, endpoints, methods, anticipated benefits, and potential hazards.`\n_From: HEALEY ALS Platform Trial Master Protocol V6.0 (14 Oct 2024), section 6.2 Consenting Participants_\n_Why not sure: the protocol quote was not found verbatim_\n\nTold: John Ernest (Clinical research associate) · Item #12 · <https://35-196-201-11.sslip.io/items/ZcmC4HHFFyi4owdR|details>"
+ },
+ {
+  "id": "c37",
+  "label": "neither",
+  "writer": "John Rohit (Study coordinator)",
+  "message": "Hi, G-604-001 came in 10/13 for screening, we did the bloods and the ECG.\r\nShe signed the master consent on 10/14 when she came back.\r\n",
+  "alert": "*Immediate · DNL343 · G-604-001 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The participant had screening procedures done before signing master consent.*\n\n*What to do:*\n1. Record the deviation and do not perform further non-standard screening procedures until consent is in place.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Rohit, 15 Oct 2026 10:59):\n`G-604-001 came in 10/13 for screening, we did the bloods and the ECG. She signed the master consent on 10/14 when she came back.`\nStudy rule:\n`Written informed consent will be obtained from participants before any study procedures or assessments, not performed as clinic visit standard of care (e.g., vital signs, weight), are done and after the study objectives and endpoints, methods, anticipated benefits, and potential hazards are explained. ... The willingness of the participant to participate in the study will be documented in writing on a consent form approved by the sIRB, which will be signed and dated by the participant.`\n_From: HEALEY ALS Platform Trial Master Protocol V6.0 (14 Oct 2024), section 6.2 Consenting Participants_\n\nTold: the DNL343 URGENT room, John Ernest (Clinical research associate), John Huma (Sponsor ClinOps lead), John Rohit (Study coordinator) · Item #13 · <https://35-196-201-11.sslip.io/items/lwCqu4zc4eF3IWwh|details>"
+ },
+ {
+  "id": "c38",
+  "label": "neither",
+  "writer": "John Rohit (Study coordinator)",
+  "message": "Hi, G-604-001 came in 10/13 for screening, we did the bloods and the ECG.\r\nShe signed the master consent on 10/14 when she came back.\r\n",
+  "alert": "*Immediate · DNL343 · G-604-001 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The participant had screening procedures done before signing master consent.*\n\n*What to do:*\nJohn Ernest (CRA) has been asked to call the site today.\n1. Record the deviation and do not perform further non-standard screening procedures until consent is in place.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote:\n`G-604-001 came in 10/13 for screening, we did the bloods and the ECG. She signed the master consent on 10/14 when she came back.`\nStudy rule:\n`Written informed consent will be obtained from participants before any study procedures or assessments, not performed as clinic visit standard of care (e.g., vital signs, weight), are done and after the study objectives and endpoints, methods, anticipated benefits, and potential hazards are explained. ... The willingness of the participant to participate in the study will be documented in writing on a consent form approved by the sIRB, which will be signed and dated by the participant.`\n_From: HEALEY ALS Platform Trial Master Protocol V6.0 (14 Oct 2024), section 6.2 Consenting Participants_\n\nItem #13 · <https://35-196-201-11.sslip.io/items/lwCqu4zc4eF3IWwh|details>"
+ },
+ {
+  "id": "c42",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-701-003 wk20 phone call done yesterday, bl 5/20. also the kit fridge read 32C this morning",
+  "alert": "*Low · DNL343 · G-701-003 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The Week 20 phone visit was completed outside the allowed visit window.* _(please check: not sure)_\n\n*What to do:*\n1. Record the deviation and follow the visit schedule for the next required assessments.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 15 Oct 2026 13:02):\n`wk20 phone call done yesterday`\nStudy rule:\n`Conduct Week 20 by phone on Day 140 +3. [master:protocol-summary]`\n_From: HEALEY ALS Platform Trial Master Protocol V6.0 (14 Oct 2024), section PROTOCOL SUMMARY_\n_Why not sure: the protocol quote was not found verbatim_\n\nTold: the CRA's to-do list, John Ernest (Clinical research associate) · Item #14 · <https://35-196-201-11.sslip.io/items/M4EE2ZN2R2lvePv6|details>"
+ },
+ {
+  "id": "c44",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-701-003 wk20 phone call done yesterday, bl 5/20. also the kit fridge read 32C this morning",
+  "alert": "*Medium · DNL343 · G-701-003 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. Drug storage temp is 32 °C; a problem when 30 or above °C.*\n\n*What to do:*\n1. Confirm the dates and values; if they are right, record this as a protocol deviation and follow the protocol's steps for it.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 15 Oct 2026 13:02):\n`the kit fridge read 32C this morning`\nStudy rule:\n`DNL343 drug product and placebo should be stored at room temperature (store below 30°C).`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 5.3 Acquisition, Storage, and Preparation_\n\nTold: John Ernest (Clinical research associate) · Item #15 · <https://35-196-201-11.sslip.io/items/uJMmvaE8hE7gMG51|details>"
+ },
+ {
+  "id": "c46",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-705-001 update: baseline + first dose were 9/10, baseline csf was 9/1. wk2 phone call done 10/1. wk4 visit planned for 10/20",
+  "alert": "*Medium · DNL343 · G-705-001 · Site 01 (MGH)*\n\n*3 problems found:*\n*1. Baseline CSF was collected too early.* (Medium, Item #16)\n*2. The planned Week 4 visit is outside the allowed window.* (Medium, Item #18)\n*3. The Week 2 phone visit was done outside the allowed window.* (Low, Item #17)\n\n*What to do:*\n1. Record a protocol deviation and do not treat this as an on-window baseline CSF collection.\n2. Reschedule inside the visit window.\n3. Record a protocol deviation.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 15 Oct 2026 13:23):\n`baseline csf was 9/1 ... baseline + first dose were 9/10`\nStudy rule:\n`For the Baseline visit, CSF may be collected at any time within one week prior to administration of the first dose of study medication after Regimen G eligibility is confirmed.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 6.1 Baseline Visit_\n\n*Evidence for problem 2*\nSite wrote (John Huma, 15 Oct 2026 13:23):\n`wk4 visit planned for 10/20 ... baseline + first dose were 9/10`\nStudy rule:\n`Visit checklist: Baseline (Clinic), window Day 0.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section Visit checklist: Baseline (SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD)_\n\n*Evidence for problem 3*\nSite wrote (John Huma, 15 Oct 2026 13:23):\n`wk2 phone call done 10/1 ... baseline + first dose were 9/10`\nStudy rule:\n`– PLACEBO-CONTROLLED TREATMENT PERIOD)`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\nTold: John Ernest (Clinical research associate), the CRA's to-do list · Items #16, #18, #17 · <https://35-196-201-11.sslip.io/items/i6k2LjVEyTYA-syR|details>"
+ },
+ {
+  "id": "c48",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-706-001 update: baseline + first dose were 9/10, baseline csf was 9/1. wk2 phone call done 10/1. wk4 visit planned for 10/20",
+  "alert": "*Medium · DNL343 · G-706-001 · Site 01 (MGH)*\n\n*3 problems found:*\n*1. Baseline CSF was collected too early relative to first dose.* (Medium, Item #19)\n*2. The planned Week 4 visit is scheduled outside its allowed window.* (Medium, Item #21)\n*3. The Week 2 telephone visit happened outside its allowed window.* (Low, Item #20)\n\n*What to do:*\n1. Document the deviation and do not repeat baseline CSF outside the allowed window.\n2. Reschedule the visit inside the protocol window.\n3. Record the visit as out of window and document the protocol deviation.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 15 Oct 2026 13:37):\n`baseline csf was 9/1 ... baseline + first dose were 9/10`\nStudy rule:\n`For the Baseline visit, CSF may be collected at any time within one week prior to administration of the first dose of study medication after Regimen G eligibility is confirmed.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 6.1 Baseline Visit_\n\n*Evidence for problem 2*\nSite wrote (John Huma, 15 Oct 2026 13:37):\n`wk4 visit planned for 10/20 ... baseline + first dose were 9/10`\nStudy rule:\n`Week 4 [12] / Clinic / Day 28 ± 7`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\n*Evidence for problem 3*\nSite wrote (John Huma, 15 Oct 2026 13:37):\n`wk2 phone call done 10/1`\nStudy rule:\n`This visit will take place 14 ± 3 days after the Baseline Visit via telephone.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 6.2 Week 2 Telephone Visit_\n\nTold: John Ernest (Clinical research associate), the CRA's to-do list · Items #19, #21, #20 · <https://35-196-201-11.sslip.io/items/Mbs46DEJkbr5qf5B|details>"
+ },
+ {
+  "id": "c50",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-707-004 update: baseline + first dose were 9/15. wk2 phone call done 10/6. also the kit fridge read 31C yesterday",
+  "alert": "*Medium · DNL343 · G-707-004 · Site 01 (MGH)*\n\n*2 problems found:*\n*1. Drug storage temp is 31 °C; a problem when 30 or above °C.* (Medium, Item #23)\n*2. The Week 2 phone visit was performed late.* (Low, Item #22)\n\n*What to do:*\n1. Confirm the dates and values; if they are right, record this as a protocol deviation and follow the protocol's steps for it.\n2. Reschedule within the protocol window and document the deviation.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 15 Oct 2026 13:52):\n`the kit fridge read 31C yesterday`\nStudy rule:\n`DNL343 drug product and placebo should be stored at room temperature (store below 30°C).`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 5.3 Acquisition, Storage, and Preparation_\n\n*Evidence for problem 2*\nSite wrote (John Huma, 15 Oct 2026 13:52):\n`wk2 phone call done 10/6 ... baseline + first dose were 9/15`\nStudy rule:\n`Week 2 / Phone / Day 14 ± 3`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\nTold: John Ernest (Clinical research associate), the CRA's to-do list · Items #23, #22 · <https://35-196-201-11.sslip.io/items/oJE5mFfx52GJPZ4P|details>"
+ },
+ {
+  "id": "c54",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "Hi team, update on G-708-002: baseline + first dose were 9/15. Baseline CSF was drawn 9/5. Wk2 phone call done 10/6. Wk4 visit done 10/13, all fine. Also our kit fridge read 32C this morning.",
+  "alert": "*Medium · DNL343 · G-708-002 · Site 01 (MGH)*\n\n*3 problems found:*\n*1. Baseline CSF was collected too early before first dose.* (Medium, Item #24)\n*2. Drug storage temp is 32 °C; a problem when 30 or above °C.* (Medium, Item #26)\n*3. The Week 2 phone visit was late.* (Low, Item #25)\n\n*What to do:*\n1. Do not use this as protocol-compliant baseline CSF; document the deviation and, if baseline CSF is still needed, recollect within the allowed window only if permitted by the site and sponsor guidance.\n2. Confirm the dates and values; if they are right, record this as a protocol deviation and follow the protocol's steps for it.\n3. Record a visit deviation and use the protocol’s allowed window for future visits.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 15 Oct 2026 14:00):\n`Baseline CSF was drawn 9/5. ... baseline + first dose were 9/15`\nStudy rule:\n`For the Baseline visit, CSF may be collected at any time within one week prior to administration of the first dose of study medication after Regimen G eligibility is confirmed.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\n*Evidence for problem 2*\nSite wrote (John Huma, 15 Oct 2026 14:00):\n`our kit fridge read 32C this morning`\nStudy rule:\n`DNL343 drug product and placebo should be stored at room temperature (store below 30°C).`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 5.3 Acquisition, Storage, and Preparation_\n\n*Evidence for problem 3*\nSite wrote (John Huma, 15 Oct 2026 14:00):\n`Wk2 phone call done 10/6. ... baseline + first dose were 9/15`\nStudy rule:\n`Week 2 / Phone / Day 14 ± 3`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\nTold: John Ernest (Clinical research associate), the CRA's to-do list · Items #24, #26, #25 · <https://35-196-201-11.sslip.io/items/PZfdOt3Frend4p2c|details>"
+ },
+ {
+  "id": "c56",
+  "label": "neither",
+  "writer": "Eliot Levitt (Study team member, Principal investigator, a doctor on the study)",
+  "message": "Question about G-708-002: Patient 005 has had 12 phone visits, one every 19 days.",
+  "alert": "*Low · DNL343 · 005 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The participant appears to have a standing pattern of phone visits that is not the protocol's scheduled visit pattern.*\n\n*What to do:*\n1. Align phone visits to the protocol windows and document any deviation already incurred.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (Eliot Levitt, 15 Oct 2026 14:12):\n`Patient 005 has had 12 phone visits, one every 19 days.`\nStudy rule:\n`As per the Schedule of Activities (SOA) below, visits must occur every 4 weeks and will be clinic-, phone-, or telemedicine based, as applicable. ... There is a maximum 24-week duration of placebo-controlled treatment for a regimen.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\nTold: the CRA's to-do list, John Ernest (Clinical research associate) · Item #27 · <https://35-196-201-11.sslip.io/items/R6wYozh1-92r9-F6|details>"
+ },
+ {
+  "id": "c60",
+  "label": "neither",
+  "writer": "Eliot Levitt (Study team member, Principal investigator, a doctor on the study)",
+  "message": "On patient G-708-002, patient passed away on 10/1. Following their passing on 10/2, we scheduled a follow-up visit on 10/4.",
+  "alert": "*Low · DNL343 · G-708-002 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The site scheduled a follow-up visit for a participant who had already died.* _(please check: not sure)_\n\n*What to do:*\n1. Cancel the follow-up visit, record the death and vital status, and follow the protocol and local requirements for death documentation and any required notifications.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (Eliot Levitt, 15 Oct 2026 14:15):\n`Following their passing on 10/2, we scheduled a follow-up visit on 10/4.`\nStudy rule:\n`Participants will have a Follow-Up Safety Call 28 ± 3 days after their last dose of study drug.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 6.10.12 Follow-Up Safety Call_\n_Why not sure: the exact words were not found in the protocol_\n\nTold: the CRA's to-do list, John Ernest (Clinical research associate) · Item #30 · <https://35-196-201-11.sslip.io/items/wJNMSEz4ayCr2Q3C|details>"
+ },
+ {
+  "id": "c66",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "Hi team, update on G-930-001: baseline + first dose were 9/15. Baseline CSF was drawn 9/5. Wk2 phone call done 10/6. Also our kit fridge read 32C this morning.",
+  "alert": "*Medium · DNL343 · G-930-001 · Site 01 (MGH)*\n\n*3 problems found:*\n*1. The baseline CSF sample was collected too early.* (Medium, Item #32)\n*2. Drug storage temp is 32 °C; a problem when 30 or above °C.* (Medium, Item #34)\n*3. The week 2 phone visit was done too late.* (Low, Item #33) _(please check: not sure)_\n\n*What to do:*\n1. Document the deviation and confirm whether the sample can be used under sponsor guidance; do not repeat baseline CSF outside the allowed window.\n2. Confirm the dates and values; if they are right, record this as a protocol deviation and follow the protocol's steps for it.\n3. Record a visit deviation and continue the schedule with the next visit in its allowed window.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 16 Oct 2026 16:36):\n`Baseline CSF was drawn 9/5. ... baseline + first dose were 9/15`\nStudy rule:\n`For the Baseline visit, CSF may be collected at any time within one week prior to administration of the first dose of study medication after Regimen G eligibility is confirmed.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\n*Evidence for problem 2*\nSite wrote (John Huma, 16 Oct 2026 16:36):\n`our kit fridge read 32C this morning.`\nStudy rule:\n`DNL343 drug product and placebo should be stored at room temperature (store below 30°C).`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 5.3 Acquisition, Storage, and Preparation_\n\n*Evidence for problem 3*\nSite wrote (John Huma, 16 Oct 2026 16:36):\n`Wk2 phone call done 10/6.`\nStudy rule:\n_exact words not found, please read this section: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n_Why not sure: the exact words were not found in the protocol_\n\nTold: John Ernest (Clinical research associate), the CRA's to-do list · Items #32, #34, #33 · <https://35-196-201-11.sslip.io/items/6HUrkMkna-EUZrqM|details>"
+ },
+ {
+  "id": "c68",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-931-001 week 4 visit done today.",
+  "alert": "*Low · DNL343 · G-931-001 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The Week 4 visit was completed outside the allowed visit window.*\n\n*What to do:*\n1. Record a protocol deviation and assess whether the visit and its assessments need rescheduling or repeat within the allowed window, if still possible.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 16 Oct 2026 16:41):\n`G-931-001 week 4 visit done today. ... (earlier message, 16 Oct 2026 16:38) baseline visit and first dose done 9/1, all fine.`\nStudy rule:\n`Week 4 [12] / Clinic / Day 28 ± 7`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\nTold: the CRA's to-do list, John Ernest (Clinical research associate) · Item #35 · <https://35-196-201-11.sslip.io/items/6kif18gH7BflOX5R|details>"
+ },
+ {
+  "id": "c70",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-940-001 week 4 visit done today.",
+  "alert": "*Low · DNL343 · G-940-001 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. Week 4 visit was 10 days late.*\nDone 16 Oct 2026 (Day 45 after Baseline on 1 Sep 2026). Allowed: 22 Sep 2026 to 6 Oct 2026 (Day 21 to 35).\n\n*What to do:*\n1. Record a protocol deviation.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 16 Oct 2026 17:04):\n`G-940-001 week 4 visit done today.`\nEarlier message (16 Oct 2026 17:03):\n`baseline visit and first dose done 9/1, all fine.`\nStudy rule:\n`Week 4 / Clinic / Day 28 ± 7`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\nTold: the CRA's to-do list, John Ernest (Clinical research associate) · Item #36 · <https://35-196-201-11.sslip.io/items/lf6gKM8sIAby0I6D|details>"
+ },
+ {
+  "id": "c73",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-933-001 came in today for screening. We did the blood draws and ECG first, then he signed the master consent form after.",
+  "alert": "*Immediate · DNL343 · G-933-001 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The site did blood draws before the participant had signed consent.*\n\n*What to do:*\n1. Do not do study procedures until consent is signed; document the deviation and review the consent process.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 16 Oct 2026 18:21):\n`We did the blood draws and ECG first, then he signed the master consent form after.`\nStudy rule:\n`Written informed consent will be obtained from participants before any study procedures or assessments, not performed as clinic visit standard of care (e.g., vital signs, weight), are done and after the study objectives and endpoints, methods, anticipated benefits, and potential hazards are explained.`\n_From: HEALEY ALS Platform Trial Master Protocol V6.0 (14 Oct 2024), section 6.2 Consenting Participants_\n\nTold: the DNL343 URGENT room, John Ernest (Clinical research associate), John Huma (Sponsor ClinOps lead) · Item #38 · <https://35-196-201-11.sslip.io/items/2eGnEsn7SUM4tkKD|details>"
+ },
+ {
+  "id": "c74",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-933-001 came in today for screening. We did the blood draws and ECG first, then he signed the master consent form after.",
+  "alert": "*Immediate · DNL343 · G-933-001 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The site did blood draws before the participant had signed consent.*\n\n*What to do:*\nJohn Ernest (CRA) has been asked to call the site today.\n1. Do not do study procedures until consent is signed; document the deviation and review the consent process.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote:\n`We did the blood draws and ECG first, then he signed the master consent form after.`\nStudy rule:\n`Written informed consent will be obtained from participants before any study procedures or assessments, not performed as clinic visit standard of care (e.g., vital signs, weight), are done and after the study objectives and endpoints, methods, anticipated benefits, and potential hazards are explained.`\n_From: HEALEY ALS Platform Trial Master Protocol V6.0 (14 Oct 2024), section 6.2 Consenting Participants_\n\nItem #38 · <https://35-196-201-11.sslip.io/items/2eGnEsn7SUM4tkKD|details>"
+ },
+ {
+  "id": "c78",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-960-001 week 4 visit done today.",
+  "alert": "*Low · DNL343 · G-960-001 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. Week 4 visit was 10 days late.*\nDone 16 Oct 2026 (Day 45 after Baseline on 1 Sep 2026). Allowed: 22 Sep 2026 to 6 Oct 2026 (Day 21 to 35).\n\n*What to do:*\n1. Record a protocol deviation.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 16 Oct 2026 18:49):\n`G-960-001 week 4 visit done today. ... done 9/1`\nEarlier message (16 Oct 2026 18:48):\n`baseline visit`\nStudy rule:\n`Week 4 / Clinic / Day 28 ± 7`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\nTold: the CRA's to-do list, John Ernest (Clinical research associate) · Item #39 · <https://35-196-201-11.sslip.io/items/Yy8jjm2Nn4OOejtn|details>"
+ },
+ {
+  "id": "c89",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-964-001: baseline CSF drawn 10/6, first dose today.",
+  "alert": "*Medium · DNL343 · G-964-001 · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The baseline CSF sample was collected too early before first dose.*\nFirst study dose: 16 Oct 2026, 10 days after baseline CSF (6 Oct 2026). Allowed: 0 days to 7 days.\n\n*What to do:*\n1. Record the deviation and do not treat this sample as compliant baseline CSF for the allowed window.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 16 Oct 2026 19:17):\n`baseline CSF drawn 10/6 ... first dose today`\nStudy rule:\n`For the Baseline visit, CSF may be collected at any time within one week prior to administration of the first dose of study medication after Regimen G eligibility is confirmed.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 6.1 Baseline Visit_\n\nTold: John Ernest (Clinical research associate) · Item #42 · <https://35-196-201-11.sslip.io/items/_ksyAKbxUcfXY4OA|details>"
+ },
+ {
+  "id": "c100",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "bot, can CSF be collected after the first dose?",
+  "alert": "*Medium · DNL343 · participant not named · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The site is asking to collect CSF after study drug has already started, which the protocol does not allow.*\n\n*What to do:*\n1. Collect CSF before the first dose, or confirm with the sponsor/medical monitor if a different timing is being considered.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 19 Oct 2026 11:43):\n`can CSF be collected after the first dose?`\nStudy rule:\n`For the Baseline visit, CSF may be collected at any time within one week prior to administration of the first dose of study medication after Regimen G eligibility is confirmed.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\nTold: John Ernest (Clinical research associate) · Item #44 · <https://35-196-201-11.sslip.io/items/EGz8J1JV9Fcey8GO|details>"
+ },
+ {
+  "id": "c104",
+  "label": "neither",
+  "writer": "Eliot Levitt (Study team member, Principal investigator, a doctor on the study)",
+  "message": "What happens if they take St. John's wort during the trial?",
+  "alert": "*Medium · DNL343 · participant not named · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The participant would be using a prohibited concomitant medicine during the trial.* _(please check: not sure)_\n\n*What to do:*\n1. Do not take St. John’s wort during the study; if exposure already occurred, document the deviation and assess whether a washout or rescreening is required.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (Eliot Levitt, 19 Oct 2026 11:49):\n`What happens if they take St. John's wort during the trial?`\nStudy rule:\n`The medications in Table 4 are examples of strong CYP3A4/5 inducers and are excluded during the study.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section Strong CYP3A4/5 Inducers_\n_Why not sure: the exact words were not found in the protocol_\n\nTold: John Ernest (Clinical research associate) · Item #45 · <https://35-196-201-11.sslip.io/items/j89kq3gW0jN2KA5G|details>"
+ },
+ {
+  "id": "c117",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "@Huma bot What happens if they take St. John's wort during the trial?",
+  "alert": "*Medium · DNL343 · participant not named · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The site is asking about allowing a prohibited concomitant medicine during the trial.* _(please check: not sure)_\n\n*What to do:*\n1. Do not take St. John’s wort during the study; if it was taken, document the deviation and contact the medical monitor if needed.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (John Huma, 19 Oct 2026 12:08):\n`What happens if they take St. John's wort during the trial?`\nStudy rule:\n`The medications in Table 4 are examples of strong CYP3A4/5 inducers and are excluded during the study.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section Strong CYP3A4/5 Inducers_\n_Why not sure: the exact words were not found in the protocol_\n\nTold: John Ernest (Clinical research associate) · Item #50 · <https://35-196-201-11.sslip.io/items/ksp2TuWDi7oyhL_-|details>"
+ },
+ {
+  "id": "c147",
+  "label": "neither",
+  "writer": "Peter Brown (Study team member)",
+  "message": "@Huma bot I am uncertain on how to proceed when the subject had a pre-dose PK collected after the dose was administered",
+  "alert": "*Medium · DNL343 · participant not named · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The site collected a predose PK sample after dosing instead of before dosing.*\n\n*What to do:*\n1. Do not treat the sample as a valid predose collection; record the deviation and follow the protocol/manual of procedures for handling the missed predose sample.\n\n──────────\n\n*Evidence for problem 1*\nStudy team member wrote (Peter Brown, 20 Oct 2026 08:14):\n`the subject had a pre-dose PK collected after the dose was administered`\nStudy rule:\n`The predose sample should be collected prior to dosing (ie, any time 0 to 2 hours before the dose) and approximately 24 hours after the most recent dose.`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\nTold: John Ernest (Clinical research associate) · Item #56 · <https://35-196-201-11.sslip.io/items/8jYgpvv5WmsRkHAB|details>"
+ },
+ {
+  "id": "c152",
+  "label": "neither",
+  "writer": null,
+  "message": "Our 54-year-old female participant had her last period 14 months ago. Her local lab FSH came back at 34 IU/L. Can she be categorized as postmenopausal for contraception purposes?",
+  "alert": "*Medium · DNL343 · participant not named · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The participant does not meet the protocol definition of postmenopausal eligibility because the FSH value is below the required threshold.*\n\n*What to do:*\n1. Do not categorize her as postmenopausal for protocol purposes; use the appropriate non-postmenopausal contraception requirements instead, or confirm with the sponsor/medical monitor if there is an alternate protocol-specific explanation.\n\n──────────\n\n*Evidence for problem 1*\nSite wrote (Peter Brown, 20 Oct 2026 14:24):\n`Her local lab FSH came back at 34 IU/L.`\nStudy rule:\n`Postmenopausal (defined as no menses for ≥ 12 consecutive months before screening without an alternative medical cause, with a follicle-stimulating hormone level of > 40 ... IU/L or mIU/mL at screening)`\n_From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section 5.10.2 Contraceptive Requirements for Participants in Regimen G_\n\nTold: John Ernest (Clinical research associate) · Item #58 · <https://35-196-201-11.sslip.io/items/yUiIOwWtsh0c2ZK2|details>"
+ },
+ {
+  "id": "c154",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "@Huma bot The temperature monitor alarmed when the drug arrived, and we haven't heard back yet. Can we use the kits?",
+  "alert": "*Medium · DNL343 · participant not named · Site 01 (MGH)*\n\n*1 problem found:*\n*1. The site is asking to use a shipment that triggered the temperature alarm.*\n\n*What to do:*\n1. Quarantine the shipment, send the TempTale/PDF for disposition, and do not dispense until authorized.\n\n──────────\n\n*Evidence for problem 1*\nSponsor ClinOps lead wrote (John Huma, 20 Oct 2026 21:41):\n`The temperature monitor alarmed when the drug arrived... Can we use the kits?`\nStudy rule:\n`- Alarm Triggered: Immediately isolate the affected kits in the pharmacy under appropriate storage conditions.`\n_From: Investigational Product & Pharmacy Handling Manual V2.0, section 3 Shipping, Receipt, and IRT Registration_\n\nTold: John Ernest (Clinical research associate) · Item #59 · <https://35-196-201-11.sslip.io/items/qPQ_bmZQq9Xld2xN|details>"
+ },
+ {
+  "id": "c166",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "Heads up: G-501-205 did his Week 8 visit today. He took his dose at home at 06:30, and because of a scheduling mix-up we drew the PK blood sample at 17:00. All other Week 8 items done.",
+  "alert": "*Medium · DNL343 · G-501-205 · Site 01 (MGH)*\n\n*1. The postdose PK sample was drawn too late.*\nPostdose PK: 17:00 on 24 Oct 2026, 10 hours 30 minutes after study drug dose (06:30 on 24 Oct 2026). Allowed: 1 hour to 8 hours.\nNext: Record the deviation and do not count this as a protocol-compliant postdose PK sample.\n\nSponsor ClinOps lead wrote (John Huma, 24 Oct 2026 14:14):\n`because of a scheduling mix-up we drew the PK blood sample at 17:00 ... He took his dose at home at 06:30`\nStudy rule: `The postdose sample can be collected anytime between 1 to 8 hours postdose.` _From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\nNotified: John Ernest (Clinical research associate) · Item #60 · <https://35-196-201-11.sslip.io/items/_6zd1fi6ywLM04_M|details>"
+ },
+ {
+  "id": "c181",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "Quick update on G-453-071 at Week 8. The coordinator mixed the granules with applesauce while the patient was finishing vitals and ECG, and he took it about 25 minutes later once he was settled. No issues, he tolerated it well",
+  "alert": "*Medium · DNL343 · G-453-071 · Site 01 (MGH)*\n\n*1. The study drug was prepared before the participant was ready to receive it.* (Medium, Item #65) _(not sure, please check)_\nNext: Wait until all visit procedures are complete and the participant is ready before opening or mixing the stick packs.\n\nSponsor ClinOps lead wrote (John Huma, 26 Oct 2026 11:34):\n`The coordinator mixed the granules with applesauce while the patient was finishing vitals and ECG`\nStudy rule: `For visits requiring in-clinic dosing (e.g., Baseline, Week 4, Week 24 PK sampling): - Ensure the subject is ready to receive the dose before opening the stick packs` _From: Investigational Product & Pharmacy Handling Manual V2.0, section 6 Administration Instructions (In-Clinic)_\n_Why not sure: the exact words were not found in the protocol_\n\n*2. The dose was given too long after mixing.* (Medium, Item #66)\nNext: Do not give mixed study drug after 15 minutes; prepare a fresh dose and administer it within the required window.\n\nSponsor ClinOps lead wrote (John Huma, 26 Oct 2026 11:34):\n`he took it about 25 minutes later once he was settled`\nStudy rule: `Once the stick pack is opened and the granules are mixed with water or soft food, the dose MUST be administered within 15 minutes.` _From: Investigational Product & Pharmacy Handling Manual V2.0, section 5 Preparation, Compounding, and Dispensing_\n\nNotified: John Ernest (Clinical research associate) · Items #65, #66 · <https://35-196-201-11.sslip.io/items/ezL9Jooey1FaCmWc|details>"
+ },
+ {
+  "id": "c183",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-453-058 doing well at Week 16, ALSFRS-R stable. Her daughter mentioned she's been taking St. John's wort for her mood for the past few weeks, otherwise no changes to meds.",
+  "alert": "*Medium · DNL343 · G-453-058 · Site 01 (MGH)*\n\n*1. The participant took a prohibited concomitant medication during the study.*\nNext: Stop St. John's wort, document the protocol deviation, and assess any needed washout or follow-up.\n\nSponsor ClinOps lead wrote (John Huma, 26 Oct 2026 11:35):\n`she's been taking St. John's wort for her mood for the past few weeks`\nStudy rule: `The medications in Table 4 are examples of strong CYP3A4/5 inducers and are excluded during the study.` _From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section Strong CYP3A4/5 Inducers_\n\nNotified: John Ernest (Clinical research associate) · Item #67 · <https://35-196-201-11.sslip.io/items/E4zelJViOxDpWFf4|details>"
+ },
+ {
+  "id": "c185",
+  "label": "neither",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "G-453-112 took his dose at 07:00, we drew the PK at 16:45",
+  "alert": "*Medium · DNL343 · G-453-112 · Site 01 (MGH)*\n\n*1. The PK sample was drawn too late after the dose.*\nPostdose PK: 16:45 on 26 Oct 2026, 9 hours 45 minutes after study drug dose (07:00 on 26 Oct 2026). Allowed: 1 hour to 8 hours.\nNext: Document the protocol deviation and do not count this as an on-window postdose PK sample.\n\nSponsor ClinOps lead wrote (John Huma, 26 Oct 2026 12:46):\n`we drew the PK at 16:45 ... G-453-112 took his dose at 07:00`\nStudy rule: `The postdose sample can be collected anytime between 1 to 8 hours postdose.` _From: Regimen-Specific Appendix G, DNL343, V2.0 (18 Dec 2023), section SCHEDULE OF ACTIVITIES – PLACEBO-CONTROLLED TREATMENT PERIOD_\n\nNotified: John Ernest (Clinical research associate) · Item #68 · <https://35-196-201-11.sslip.io/items/Ez71_UiPXOO5iX2I|details>"
+ },
+ {
+  "id": "c187",
+  "label": "implied",
+  "writer": "John Huma (Sponsor ClinOps lead)",
+  "message": "At G-453-131's physical exam yesterday she reported new leg swelling and no one followed up.",
+  "alert": "*Medium · DNL343 · G-453-131 · Site 01 (MGH)*\n\n*1. The site did not follow up on a reported new symptom that should have been treated as an adverse event.*\nNext: Assess and document the event as an AE, including onset and resolution, severity, seriousness, causality, action taken, and outcome; record it in source and EDC.\n\nSponsor ClinOps lead wrote (John Huma, 26 Oct 2026 12:51):\n`At G-453-131's physical exam yesterday she reported new leg swelling and no one followed up.`\nStudy rule: `At each visit (including telephone interviews), the participant will be asked if they have had any problems or symptoms since their last visit in order to determine the occurrence of adverse events. If the participant reports an adverse event, site staff will probe further to determine: 1. Type of event 2. Date of onset and resolution (duration) 3. Severity (mild, moderate, severe) 4. Seriousness (does the event meet the above definition for an SAE) 5. Causality, relation to investigational product and disease 6. Action taken regarding investigational product 7. Outcom` _From: HEALEY ALS Platform Trial Master Protocol V6.0 (14 Oct 2024), section 10.2.1 Assessment of Adverse Events_\n\nNotified: John Ernest (Clinical research associate) · Item #70 · <https://35-196-201-11.sslip.io/items/VI1Dc7e1p97-jiX2|details>"
+ }
+]

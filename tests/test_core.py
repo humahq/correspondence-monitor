@@ -2334,7 +2334,7 @@ def test_an_alert_is_kept_from_a_doctors_chat_only_when_it_is_about_the_doctors_
     assert chat["status"] == "queued" and chat["meta"]["careful"]["about"] == []   # site work: posted
     assert [r["purpose"] for r in rows if r["channel"] == "email"] == ["email_cra"]   # nothing private to add
     (task, said, names), = calls
-    assert task == "careful_doctor" and names == ["explicit", *careful.DOCTOR_TASKS, "outside"]
+    assert task == "careful_doctor" and names == ["explicit", *careful.DOCTOR_TASKS, "outside", "not_yet"]
     frame, said = said
     assert frame == {"role": "developer", "content": careful.DOCTOR_FRAME} and said["role"] == "user"
     said = said["content"]
@@ -2405,17 +2405,24 @@ def test_a_doctor_writing_or_named_in_the_message_does_not_by_itself_keep_the_al
     assert status(rows) == "withheld"
     check = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='careful_check' ORDER BY id DESC")["details"])
     assert check["reason"] == "what went wrong is a task only a doctor does (prescribing)"
+    # only planned so far ("randomizing at 3pm"): nothing has gone wrong yet, so the warning is posted in time
+    _decide(monkeypatch, {"eligibility": 0.95, "not_yet": 0.9})
+    _, rows = _alert("G-701-019 BP 168/92 this morning, randomizing at 3pm.", thread="W9")
+    assert status(rows) == "queued"
+    check = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='careful_check' ORDER BY id DESC")["details"])
+    assert check["reason"] == "nothing has gone wrong yet: it is a question or a plan"
 
 
 def test_the_doctor_check_tells_the_ai_what_does_not_count_as_a_doctors_action():
     from cormon import careful
     frame = careful.DOCTOR_FRAME
-    assert "A question" in frame and "every question is no" in frame
+    assert "every question is no" not in frame   # it made the AI answer no to everything (an ER unblinding)
     assert "participant or caregiver did on their own" in frame and "courier" in frame
     assert "only reporting it unless they say they did it themselves" in frame
     assert "only reports or asks" in careful.DOCTOR_EXPLICIT
     assert "on their own is not prescribing" in careful.DOCTOR_TASKS["prescribing"]
     assert "GP" in careful.DOCTOR_UNLESS["prescribing"][1]
+    assert "randomisation in IRT" in careful.DOCTOR_TASKS["eligibility"] and "planned" in careful.DOCTOR_NOT_YET
     assert "failed to do" in careful.DOCTOR_EXPLICIT and "nobody reviewed" in careful.DOCTOR_TASKS["results"]
 
 
