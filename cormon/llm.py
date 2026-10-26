@@ -138,6 +138,38 @@ def _call(task, model, system, user, schema, schema_name, key, temperature, seed
     return data
 
 
+def decide(task: str, input: str, questions: list[dict], *, use_cache: bool = True) -> dict:
+    """The Decisions API (fast, bounded answers): {question name: probability for a predicate, value for a choice}.
+    Cached by input hash like structured(). Raises after 3 failed attempts."""
+    model = settings.get("llm.models.decisions", "gpt-6-luna")
+    key = hashlib.sha256(json.dumps(["decisions", model, input, questions], sort_keys=True).encode()).hexdigest()
+    if use_cache:
+        row = db.q1("SELECT response FROM llm_cache WHERE key=?", (key,))
+        if row:
+            timing.llm_call(task, model, 0, cached=True)
+            return json.loads(row["response"])
+    began, last_err = time.perf_counter(), None
+    for attempt in range(3):
+        try:
+            d = client().decisions.create(model=model, input=input, questions=questions)
+            out = {}
+            for a in d.answers:
+                if a.type == "refusal":
+                    raise RuntimeError(f"refused: {a.name}")
+                out[a.name] = a.probability if a.type == "predicate" else getattr(a, "choice", None)
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(attempt + 1)
+    else:
+        timing.llm_call(task, model, time.perf_counter() - began, cached=False, attempts=3, ok=False)
+        raise RuntimeError(f"Decisions call failed for {task}: {last_err}")
+    timing.llm_call(task, model, time.perf_counter() - began, cached=False, attempts=attempt + 1)
+    db.ex("INSERT OR REPLACE INTO llm_cache(key, model, response, created_at) VALUES (?,?,?,?)",
+          (key, model, json.dumps(out), db.now()))
+    return out
+
+
 def obj(properties: dict, required: list[str] | None = None) -> dict:
     """Strict-mode object schema helper: every property required, no extras."""
     return {

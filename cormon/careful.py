@@ -4,8 +4,8 @@ own `careful:` list). A doctor criticised in front of others may stop working wi
 Every chat post is checked here before it is queued (routing.enqueue). In a chat where a careful person is present,
 an alert that could read as criticism of them is not posted: it goes by email to the rule's report_to roles. A reply
 that could read that way is reworded calmly. Whether a post is critical of someone is decided by code first (the
-message it is about was written by them, or it names them or their role), then by an AI check; code decides what
-happens with the answer. A chat with no careful person in it is not touched: no extra check and no AI call."""
+message it is about was written by them, or it names them or their role), then by an AI check (for an alert: is
+it a doctor's own action, see doctor_did); code decides what happens with the answer. A chat with no careful person in it is not touched: no extra check and no AI call."""
 
 from __future__ import annotations
 
@@ -32,6 +32,44 @@ read as criticising, blaming or embarrassing them.
 - why: one short sentence."""
 CHECK_SCHEMA = llm.obj({"ok": {"type": "boolean"}, "about": {"type": "array", "items": {"type": "string"}},
                         "why": {"type": "string"}})
+
+# An alert is kept out of a chat a doctor is in only when it is about the doctor's own actions (Eliot, Oct 26): a
+# doctor is said to have done what went wrong (explicit), or what went wrong is a task only a physician does
+# (implied). Anything else is posted, even though the PI is responsible for the whole site. One fast Decisions
+# call asks each as its own yes/no question: on 71 test alerts this was right on all, where one combined question
+# missed most implied ones (demo/doctor-check).
+DOCTOR_EXPLICIT = ("A doctor (by name, as 'the PI', 'the investigator', 'the physician', 'our neurologist', 'Dr.', "
+                   "or by writing the message themselves) is said to have done, decided, ordered or approved what "
+                   "went wrong.")
+DOCTOR_TASKS = {
+    "exam": "Is what went wrong about a physical or neurological examination (missed, incomplete, not documented, "
+            "or something found in it not followed up)?",
+    "history": "Is what went wrong about reviewing or recording the participant's medical history?",
+    "ae_judgment": "Is what went wrong a medical judgment about an adverse event or illness (whether it is related "
+                   "to the study drug, serious, how severe, or whether it needed recording or reporting)?",
+    "dose_decision": "Is what went wrong a decision to change, reduce, hold, stop or continue the study drug dose?",
+    "prescribing": "Is what went wrong a medicine other than the study drug being prescribed or ordered for the "
+                   "participant? Dispensing, preparing, storing or taking the study drug is not prescribing.",
+    "eligibility": "Is what went wrong confirming that a participant was eligible, or enrolling or randomising them?",
+    "results": "Is what went wrong how an ECG, lab or scan result was medically interpreted or acted on?",
+    "unblinding": "Is what went wrong breaking the blind for a participant?",
+    "ending": "Is what went wrong a decision to end a participant's treatment or participation?",
+}
+DOCTOR_LINE = 0.5
+
+# the same two questions for the chat model, used when the Decisions call fails
+DOCTOR_SYSTEM = f"""A clinical-trial monitor bot is about to post an alert in a chat that the study doctor (the
+principal investigator) reads. Answer two questions about what went wrong:
+- explicit: true when {DOCTOR_EXPLICIT[0].lower()}{DOCTOR_EXPLICIT[1:]}
+- implied: true when no doctor is named but what went wrong is a task only a physician performs: a physical or
+  neurological examination, reviewing medical history, judging whether an adverse event is related to the drug,
+  serious, or how severe it is, deciding to change, hold or stop a dose, prescribing or approving a medicine,
+  confirming eligibility, reading an ECG or lab result as clinically significant, deciding to unblind or to end
+  a participant's treatment.
+Both false when what went wrong is work anyone on the site team can do (samples, shipping, scheduling, visit
+timing, data entry, drug storage, dose preparation, questionnaires, vital signs, paperwork), even though the PI is
+generally responsible for the site."""
+DOCTOR_SCHEMA = llm.obj({"explicit": {"type": "boolean"}, "implied": {"type": "boolean"}})
 
 REWORD_SYSTEM = """You reword a post a clinical-trial study monitor bot is about to make in a chat that doctors on
 the study can read, so that nobody in the chat could read it as criticism, blame or embarrassment. Keep every fact,
@@ -135,6 +173,28 @@ def _ask(study: Study, here: list[tuple[Person, dict]], about_msg: str, text: st
                           f"{about_msg}MESSAGE TO POST:\n{text}", CHECK_SCHEMA, "careful_check")
 
 
+def doctor_did(writer: str, message: str, alert: str) -> dict:
+    """Whether an alert is about a doctor's own actions: {critical, why, scores, by}. The Decisions API first; the
+    chat model when it fails. Raises when both fail."""
+    said = f"SITE MESSAGE (written by {writer or 'someone at the site'}):\n{message}\n\nALERT TO POST:\n{alert}"
+    try:
+        scores = llm.decide("careful_doctor", said, [{"type": "predicate", "name": "explicit",
+                                                      "instructions": DOCTOR_EXPLICIT}]
+                            + [{"type": "predicate", "name": k, "instructions": v} for k, v in DOCTOR_TASKS.items()])
+        top = max(scores, key=scores.get)
+        hit = scores[top] >= DOCTOR_LINE
+        why = (("it says a doctor did what went wrong" if top == "explicit" else
+                f"what went wrong is a task only a doctor does ({top.replace('_', ' ')})") if hit else
+               "what went wrong is not a doctor's own action")
+        return {"critical": hit, "why": why, "scores": {k: round(v, 2) for k, v in scores.items()}, "by": "decisions"}
+    except Exception as e:
+        first = str(e)[:200]
+    r = llm.structured("careful_doctor", DOCTOR_SYSTEM, said, DOCTOR_SCHEMA, "doctor")
+    why = ("it says a doctor did what went wrong" if r["explicit"] else
+           "what went wrong is a task only a doctor does" if r["implied"] else "what went wrong is not a doctor's own action")
+    return {"critical": r["explicit"] or r["implied"], "why": why, "scores": r, "by": f"chat model ({first})"}
+
+
 def _reword(study: Study, text: str, about: list[tuple[Person, dict]], why: str) -> str | None:
     """The post reworded calmly; None when the AI fails or its wording adds a number or drops a link."""
     try:
@@ -199,6 +259,17 @@ def _check(study: Study, here: list[tuple[Person, dict]], room: dict, target: di
     elif alert and (wrote or names):
         critical, about = True, list(dict.fromkeys(wrote + names))
         reason = f"the message it is about was written by {', '.join(wrote)}" if wrote else f"it names {', '.join(names)}"
+    elif alert:
+        sender = study.person_by_email(writer) if writer else None
+        by = sender.name if sender else (source or {}).get("from_name") or writer
+        try:
+            ai = doctor_did(by, (source or {}).get("body_text") or "", text)
+            critical, reason = ai["critical"], ai["why"]
+            about = [p.name for p, _ in here] if critical else []
+        except Exception as e:
+            error = str(e)[:300]
+            critical, about = True, [p.name for p, _ in here]
+            reason = f"the AI check failed ({error}), so the alert is kept out to be safe"
     else:
         sender = study.person_by_email(writer) if writer else None
         about_msg = (f"IT IS ABOUT THIS MESSAGE, WRITTEN BY {sender.name if sender else source.get('from_name') or writer}:"

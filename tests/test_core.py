@@ -2311,20 +2311,44 @@ def test_an_alert_about_a_doctor_in_the_chat_is_not_posted_there_but_sent_privat
     assert chat[0]["id"] not in sent and len(sent) == 2   # a withheld post is never sent
 
 
-def test_an_alert_not_about_the_doctor_is_posted_after_the_ai_check(monkeypatch):
+def _decide(monkeypatch, scores):
+    """llm.decide answering every question from `scores` (0 when not given), or raising it."""
+    from cormon import llm
+    calls = []
+    def fake(task, said, questions, **kw):
+        calls.append((task, said, [q["name"] for q in questions]))
+        if isinstance(scores, Exception):
+            raise scores
+        return {q["name"]: scores.get(q["name"], 0.0) for q in questions}
+    monkeypatch.setattr(llm, "decide", fake)
+    return calls
+
+
+def test_an_alert_is_kept_from_a_doctors_chat_only_when_it_is_about_the_doctors_own_actions(monkeypatch):
+    from cormon import careful
     _rooms(monkeypatch, {"spaces/G": [DOC, CRC]})
-    calls = _ai(monkeypatch, careful_check={"ok": True, "about": [], "why": "About the coordinator's own work."})
+    calls = _decide(monkeypatch, {"explicit": 0.01, "exam": 0.03})
     _, rows = _alert("G-701-002 baseline CSF drawn at 10:40, first dose was 9:15.")
     chat = next(r for r in rows if r["channel"] == "teams")
-    assert chat["status"] == "queued" and chat["meta"]["careful"]["about"] == []
+    assert chat["status"] == "queued" and chat["meta"]["careful"]["about"] == []   # site work: posted
     assert [r["purpose"] for r in rows if r["channel"] == "email"] == ["email_cra"]   # nothing private to add
-    (task, system, user), = calls
-    assert task == "careful_check" and user.startswith(
-        "These people are in this chat: Eliot Levitt (Principal investigator). Is this message OK to post here, "
-        "or could it be read as criticising, blaming or embarrassing any of them?")
-    assert "WRITTEN BY John Rohit" in user and "MESSAGE TO POST:" in user and "<p>" not in user
-    # the AI check failing keeps the alert out, to be safe
-    _ai(monkeypatch, careful_check=RuntimeError("LLM call failed"))
+    (task, said, names), = calls
+    assert task == "careful_doctor" and names == ["explicit", *careful.DOCTOR_TASKS]
+    assert said.startswith("SITE MESSAGE (written by John Rohit):\nG-701-002") and "ALERT TO POST:" in said
+    assert "<p>" not in said
+    # a task only a doctor does, with no doctor named: kept out
+    _decide(monkeypatch, {"exam": 0.97})
+    _, rows = _alert("G-701-004: at the physical exam the new weakness was not followed up.", thread="T3")
+    assert next(r for r in rows if r["channel"] == "teams")["status"] == "withheld"
+    check = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='careful_check' ORDER BY id DESC")["details"])
+    assert check["reason"] == "what went wrong is a task only a doctor does (exam)" and check["ai"]["by"] == "decisions"
+    # the Decisions call failing: the chat model answers the same two questions
+    _decide(monkeypatch, RuntimeError("Decisions down"))
+    calls = _ai(monkeypatch, careful_doctor={"explicit": False, "implied": False})
+    _, rows = _alert("G-701-005 baseline CSF drawn at 11:30, first dose was 9:00.", thread="T4")
+    assert next(r for r in rows if r["channel"] == "teams")["status"] == "queued" and calls[0][0] == "careful_doctor"
+    # both failing keeps the alert out, to be safe
+    _ai(monkeypatch, careful_doctor=RuntimeError("LLM call failed"))
     _, rows = _alert("G-701-003 baseline CSF drawn at 11:00, first dose was 9:00.", thread="T2")
     assert next(r for r in rows if r["channel"] == "teams")["status"] == "withheld"
     assert {r["purpose"] for r in rows if r["channel"] == "email"} == {"email_cra", "careful_report_clinops_lead"}
