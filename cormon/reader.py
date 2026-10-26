@@ -1317,7 +1317,8 @@ def _code_checks(study: Study, rules: list[dict], vocab: list[dict], part: dict,
         added.append(cf["problem"])
         if cf["section_id"] not in {i["id"] for i in context}:
             context += [s for s in sources if s["id"] == cf["section_id"]]
-    notes += [f"code check, within the limit: {d['fact']}" for d in ok if d["rule"]["kind"] == "interval"][:10]
+    notes += [f"code check, within the limit: {d['fact']}" for d in ok
+              if d["rule"]["kind"] == "interval" or d["rule"].get("about")][:10]
     return {"facts": facts, "problems": [d["fact"] for d in bad], "passed": [d["fact"] for d in ok],
             "added": added}
 

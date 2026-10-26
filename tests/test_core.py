@@ -830,6 +830,52 @@ def test_code_checks_interval_order_count_value():
     assert "b" not in {d["rule"]["id"] for d in checks.evaluate(rules, facts)[0]}
 
 
+def test_approximate_time_is_measured_from_the_latest_earlier_event():
+    from cormon import checks
+    rule = {"id": "p", "kind": "judgment", "code": False, "about": 24, "unit": "hours", "applies_when": "",
+            "from_event_id": "study_drug_dose", "to_event_id": "predose_pk", "section_id": "g:6", "quote": "q",
+            "text": "Predose PK approximately 24 hours after the most recent dose.", "exception": ""}
+    ev = lambda e, d, t, s="done": {"event": e, "date": d, "time": t, "status": s, "quote": f"{e} {t}"}
+    home, clinic = ev("study_drug_dose", "2026-06-28", "19:00"), ev("study_drug_dose", "2026-06-29", "09:30")
+    bad, ok = checks.evaluate([rule], {"events": [home, ev("predose_pk", "2026-06-29", "09:10"), clinic],
+                                       "values": []})
+    assert len(bad) == 1 and "14.2 hours" in bad[0]["fact"] and "approximately 24 hours" in bad[0]["fact"]
+    f = checks.finding(bad[0])
+    assert f["certainty"] == "cannot_tell" and f["pattern_class"] == "sample_handling"
+    assert "no exact limit" in checks.explain(f["code_numbers"])["detail"]
+    on_time = ev("study_drug_dose", "2026-06-28", "09:00")
+    bad, ok = checks.evaluate([rule], {"events": [on_time, ev("predose_pk", "2026-06-29", "08:30"), clinic],
+                                       "values": []})
+    assert not bad and "23.5 hours" in ok[0]["fact"]
+    # a dose days before, with daily doses in between the message does not name, is not measured
+    old = ev("study_drug_dose", "2026-06-20", "09:00")
+    assert checks.evaluate([rule], {"events": [old, ev("predose_pk", "2026-06-29", "08:30")], "values": []}) == ([], [])
+    assert rule in checks.live([rule]) and not checks.live([dict(rule, about=None)])
+
+
+def test_approximate_rules_get_events_only_with_the_protocols_own_number(monkeypatch):
+    from cormon import checks, llm
+    vocab = [{"id": i, "kind": "event", "description": i} for i in ("study_drug_dose", "predose_pk")]
+    rule = lambda i, q: {"id": i, "kind": "judgment", "code": False, "text": q, "quote": q, "unit": "",
+                         "from_event_id": "", "to_event_id": "", "applies_when": ""}
+    rules = [rule("a", "Collect it approximately 24 hours after the most recent dose."),
+             rule("b", "Collect it about 12 hours after the dose."),
+             rule("c", "Treat for approximately 24 weeks."),
+             rule("d", "Collect it if clinically indicated.")]
+    asked = []
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: asked.append(a[2]) or {"rules": [
+        {"id": "a", "from_event": "study_drug_dose", "to_event": "predose_pk", "target": 24, "unit": "hours"},
+        {"id": "b", "from_event": "study_drug_dose", "to_event": "predose_pk", "target": 24, "unit": "hours"},
+        {"id": "c", "from_event": "", "to_event": "", "target": None, "unit": ""}]})
+    checks.mark_about(rules, vocab)
+    assert [r.get("about") for r in rules] == [24, None, None, None]
+    assert rules[0]["from_event_id"] == "study_drug_dose" and "d |" not in asked[0]
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: pytest.fail("asked the model again"))
+    again = [rule("a", rules[0]["quote"])]
+    checks.mark_about(again, vocab, old=rules)
+    assert again[0]["about"] == 24 and again[0]["to_event_id"] == "predose_pk"
+
+
 def test_code_finding_overlaps_ai_finding_by_email_words():
     from cormon import checks
     code = {"email_quote": "Week 16 visit done on 30 Sept ... baseline was 1 June"}

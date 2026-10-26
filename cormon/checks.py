@@ -361,7 +361,8 @@ def build(study: Study, log=print, use_cache: bool = True, reuse: bool = True) -
     washouts = longer_of(new, secs)
     rules = old_rules + new
     conflicts = resolve(study, rules)
-    mark_implied(new, use_cache, old_rules)
+    mark_about(rules, vocab, use_cache, old_rules)
+    mark_implied(rules, use_cache, old_rules)
 
     version = "; ".join(f"{r['doc_id']}={r['version']}" for r in db.q(
         "SELECT DISTINCT doc_id, version FROM guide WHERE study_id=? AND kind='section'", (study.study_id,)))
@@ -443,7 +444,7 @@ def mark_implied(rules: list[dict], use_cache: bool = True, old: list[dict] = ()
     decided = {_implied_key(r): r["implied"] for r in old if "implied" in r}
     todo = []
     for r in rules:
-        if r["code"] and r["applies_when"].strip():
+        if (r["code"] or r.get("about")) and r["applies_when"].strip():
             if _implied_key(r) in decided:
                 r["implied"] = decided[_implied_key(r)]
             else:
@@ -462,10 +463,61 @@ def mark_implied(rules: list[dict], use_cache: bool = True, old: list[dict] = ()
         r["implied"] = got.get(r["id"], False)
 
 
+ABOUT_TOLERANCE = 0.25  # share of the stated time a gap may differ by before code raises it for a person to check
+
+_ABOUT = re.compile(r"\b(?:approximately|approx\.?|about|around|roughly|~)\s*(\d+(?:\.\d+)?)\s*(?:-\s*)?"
+                    r"(?:minutes?|min|hours?|hrs?|h|days?|weeks?|months?)\b", re.I)
+
+ABOUT_SYSTEM = """Each line is a protocol rule that gives an approximate time between two events, with no exact limit
+("collect the predose sample approximately 24 hours after the most recent dose"). For each rule pick, from the EVENT
+NAMES, the event the time is counted from (from_event) and the event that should come that long after it
+(to_event), and give the stated number (target) and its unit. Use only listed names, as written. Give from_event ""
+when no listed name fits either event, or when the rule is not a time between two events a site records (a study
+lasting approximately 24 weeks, a background fact such as a 90-day cycle)."""
+
+ABOUT_SCHEMA = llm.obj({"rules": {"type": "array", "items": llm.obj({
+    "id": {"type": "string"}, "from_event": {"type": "string"}, "to_event": {"type": "string"},
+    "target": {"type": ["number", "null"]}, "unit": {"type": "string", "enum": UNITS}})}})
+
+_ABOUT_FIELDS = ("about", "from_event_id", "to_event_id", "unit")
+
+
+def mark_about(rules: list[dict], vocab: list[dict], use_cache: bool = True, old: list[dict] = ()) -> None:
+    """Judgment rules that state an approximate time between two events ("approximately 24 hours after the most
+    recent dose") get "about" (the stated number) and the two events, so code measures the gap and raises one far
+    from it; the rule stays judgment, as the protocol gives no exact limit. The number must be in the rule's own
+    protocol sentence. A rule already decided in the stored check list (same words) keeps its answer."""
+    decided = {(r["text"], r["quote"]): {k: r[k] for k in _ABOUT_FIELDS} for r in old if "about" in r}
+    todo = []
+    for r in rules:
+        if r["kind"] != "judgment" or not _ABOUT.search(r["quote"]):
+            continue
+        if (r["text"], r["quote"]) in decided:
+            r.update(decided[r["text"], r["quote"]])
+        else:
+            todo.append(r)
+    if not todo:
+        return
+    events = {e["id"]: e for e in vocab if e["kind"] == "event"}
+    listing = "\n".join(f"{i}: {e['description']}" for i, e in events.items())
+    lines = "\n".join(f"{r['id']} | {r['text']} | protocol: {r['quote']}" for r in todo)
+    res = llm.structured("checks_build", ABOUT_SYSTEM, f"EVENT NAMES:\n{listing}\n\nRULES:\n{lines}", ABOUT_SCHEMA,
+                         "about", use_cache=use_cache, model=llm.model_for("ingest"))
+    got = {x["id"]: x for x in res["rules"]}
+    for r in todo:
+        x = got.get(r["id"]) or {}
+        stated = {float(n) for n in _ABOUT.findall(r["quote"])}
+        if (x.get("from_event") in events and x.get("to_event") in events and x["from_event"] != x["to_event"]
+                and x.get("target") in stated and x["target"] > 0 and x["unit"] in _UNIT_HOURS):
+            r.update(about=x["target"], from_event_id=x["from_event"], to_event_id=x["to_event"], unit=x["unit"])
+        else:
+            r["about"] = None
+
+
 def live(rules: list[dict]) -> list[dict]:
     """The rules code checks, appendix rules first: those with no condition, or a condition true whenever their
     events happen (see mark_implied)."""
-    return sorted((r for r in rules if r["code"] and not r.get("superseded")
+    return sorted((r for r in rules if (r["code"] or r.get("about")) and not r.get("superseded")
                    and (not r["applies_when"].strip() or r.get("implied"))),
                   key=lambda r: not r["section_id"].startswith("regimen"))
 
@@ -541,6 +593,29 @@ def evaluate(rules: list[dict], facts: dict) -> tuple[list[dict], list[dict]]:
 
     for r in rules:
         k = r["kind"]
+        if r.get("about"):
+            # each later event against the latest earlier one; a gap over twice the time from an event that repeats
+            # (a daily dose) likely has occurrences in between that the message does not name
+            t, unit = r["about"], r["unit"]
+            repeats = not re.match(r"(?:first|last)_", r["from_event_id"])
+            for b in real(r["to_event_id"]):
+                gaps = [(a, g) for a in real(r["from_event_id"]) if a is not b
+                        and (g := _gap(a, b, unit)) is not None and g >= 0]
+                if not gaps:
+                    continue
+                a, g = min(gaps, key=lambda p: p[1])
+                if repeats and g > 2 * t:
+                    continue
+                fact = (f"{_label(r['to_event_id'])} ({b['date']} {b.get('time') or ''}) is {round(g, 1):g} {unit} "
+                        f"after the latest {_label(r['from_event_id'])} before it ({a['date']} {a.get('time') or ''}); "
+                        f"the protocol says approximately {t:g} {unit}, with no exact limit")
+                status = "planned" if "planned" in (a["status"], b["status"]) else "done"
+                add(r, re.sub(r" +", " ", fact).replace(" )", ")"), [a["quote"], b["quote"]],
+                    abs(g - t) > ABOUT_TOLERANCE * t, status,
+                    {"from": r["from_event_id"], "to": r["to_event_id"], "from_date": a["date"],
+                     "from_time": a.get("time") or "", "to_date": b["date"], "to_time": b.get("time") or "",
+                     "gap": g, "unit": unit, "min": None, "max": None, "about": t, "status": status})
+            continue
         if k == "interval":
             # nearest pairs first, each occurrence used once: a predose sample goes with the next dose, not every dose
             pairs = sorted(((a, b, _gap(a, b, r["unit"])) for a in real(r["from_event_id"])
@@ -630,6 +705,11 @@ def finding(d: dict) -> dict:
                         "follow the protocol's steps for it.",
            "severity": "moderate", "certainty": "conflict", "pattern_class": pattern_class(r),
            "status": d["status"], "from_fact": d["fact"], "from_code": r["id"], "code_numbers": d.get("numbers")}
+    if r.get("about"):
+        out.update(certainty="cannot_tell",
+                   next_step=f"Confirm the times; if they are right, this is far from the approximately "
+                             f"{r['about']:g} {r['unit']} the protocol asks for: ask the sponsor whether to record a "
+                             f"protocol deviation.")
     if d.get("disputed"):
         out.update(certainty="cannot_tell", disputed=d["disputed"],
                    why=f"Checked by code: {d['fact']}. The documents disagree: "
@@ -679,7 +759,8 @@ def explain(n: dict | None) -> dict:
         return {}
     g, lo, hi, unit = n["gap"], n["min"], n["max"], n["unit"]
     num = lambda x: f"{x:g}" if float(x).is_integer() else f"{x:.1f}"
-    allowed = (f"{_span(lo, unit)} to {_span(hi, unit)}" if lo is not None and hi is not None else
+    allowed = (f"approximately {_span(n['about'], unit)}, no exact limit" if n.get("about") else
+               f"{_span(lo, unit)} to {_span(hi, unit)}" if lo is not None and hi is not None else
                f"at least {_span(lo, unit)}" if lo is not None else f"at most {_span(hi, unit)}")
     a, b = pretty(n["from"]), pretty(n["to"])
     when = lambda d, t: f"{t} on {_day(d)}" if t else _day(d)
@@ -729,6 +810,7 @@ def coverage(rules: list[dict], secs: list[dict], dropped: list[dict], conflicts
     return {"rules": len(rules), "by_kind": dict(kinds), "code_ready": dict(code),
             "site_rules": checkable, "code_checked": sum(code.values()),
             "judgment": kinds.get("judgment", 0), "follow_up": kinds.get("follow_up", 0),
+            "approximate_measured": sum(1 for r in rules if r.get("about")),
             "countable_not_ready": sum(1 for r in rules if r["kind"] in _CODE_KINDS and not r["code"]
                                        and not r.get("superseded")),
             "superseded": sum(1 for r in rules if r.get("superseded")), "conflicts": conflicts,
@@ -741,7 +823,8 @@ def render_coverage(c: dict) -> str:
              + ", ".join(f"{k} {n}" for k, n in sorted(c["code_ready"].items())),
              f"  countable but not ready for code (a name or limit missing): {c['countable_not_ready']}",
              f"  follow-up (duties table): {c['follow_up']}",
-             f"  judgment (AI reads the briefs): {c['judgment']}",
+             f"  judgment (AI reads the briefs): {c['judgment']}, of which an approximate time code also measures: "
+             f"{c.get('approximate_measured', 0)}",
              f"  by kind: " + ", ".join(f"{k} {n}" for k, n in sorted(c["by_kind"].items())),
              f"  limits given more than once with different values: {len(c['conflicts'])} pairs, "
              f"{sum(1 for x in c['conflicts'] if x.get('disputed'))} real disagreements (shown as not sure, ask the "
