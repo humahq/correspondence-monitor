@@ -42,6 +42,26 @@ def check(msg: Message) -> dict:
             "dkim": ",".join(dkim) or None}
 
 
+def flags(msg: dict | None, study) -> list[str]:
+    """What a reader should know about who sent a message: its sender check failed, or the sender is not on the
+    study's people list. Shown on the item page and in the digest."""
+    if not msg:
+        return []
+    out = []
+    if failed(msg):
+        out.append(f"the email's sender check failed, so it may not really be from {msg.get('from_addr')}")
+    addr = msg.get("from_addr")
+    if addr and study is not None and study.person_by_email(addr) is None:
+        out.append(f"the sender ({addr}) is not on the study's people list")
+    return out
+
+
+def item_flags(item: dict, study) -> list[str]:
+    from . import db
+    m = db.q1("SELECT channel, from_addr, headers FROM messages WHERE id=?", (item.get("first_message_id"),))
+    return flags(dict(m, headers=db.unjs(m["headers"], {})) if m else None, study)
+
+
 def failed(msg: dict) -> bool:
     return msg.get("channel") == "email" and ((msg.get("headers") or {}).get("_cormon_sender_check") or {}) \
         .get("result") == FAILED

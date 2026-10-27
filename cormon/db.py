@@ -376,6 +376,21 @@ CREATE TABLE IF NOT EXISTS ai_log (
 );
 CREATE INDEX IF NOT EXISTS ix_ai_log_message ON ai_log(message_id);
 
+-- every in-place change to a tracked row, old and new value per column (compliance/trail.py writes the triggers;
+-- patient text is recorded as its length only, so the retention purge still removes it)
+CREATE TABLE IF NOT EXISTS row_changes (
+    id INTEGER PRIMARY KEY,
+    ts TEXT NOT NULL,
+    tbl TEXT NOT NULL,
+    row_id TEXT NOT NULL,
+    changes TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_row_changes_row ON row_changes(tbl, row_id);
+CREATE TRIGGER IF NOT EXISTS row_changes_no_update BEFORE UPDATE ON row_changes
+BEGIN SELECT RAISE(ABORT, 'row_changes is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS row_changes_no_delete BEFORE DELETE ON row_changes
+BEGIN SELECT RAISE(ABORT, 'row_changes is append-only'); END;
+
 CREATE TRIGGER IF NOT EXISTS audit_log_no_update BEFORE UPDATE ON audit_log
 BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS audit_log_no_delete BEFORE DELETE ON audit_log
@@ -403,6 +418,8 @@ def conn() -> sqlite3.Connection:
         c.execute("PRAGMA busy_timeout=30000")
         c.executescript(SCHEMA)
         _migrate(c)
+        from .compliance import trail
+        trail.track_changes(c)
         _local.conn = c
     return c
 

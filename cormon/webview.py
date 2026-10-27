@@ -108,6 +108,11 @@ def render_item(item: dict) -> str:
         f"<tr><td>{_e(local_time(h['ts']))}</td><td>{_e(h['actor'])}</td><td>{_e(h['action'])}</td></tr>"
         for h in hist)
     event = ev.get("event") or {}
+    warn = "".join(f"<p><b>Check the sender:</b> {_e(f)}.</p>" for f in senders.item_flags(item, s))
+    first = db.q1("SELECT sent_at, received_at FROM messages WHERE id=?", (item.get("first_message_id"),))
+    times = (f"sent {_e(local_time(first['sent_at'] or ev.get('message_date')))} (the sender's own clock, not checked)"
+             f" · received by the bot {_e(local_time(first['received_at']))}") if first else \
+        _e(local_time(ev.get("message_date")))
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Item #{item['id']}</title>
 <style>{CSS}</style></head><body>
 <p class="muted">{_e(s.title)} ({_e(s.study_id)})</p>
@@ -115,8 +120,9 @@ def render_item(item: dict) -> str:
 <p><span class="tag {item['tier']}">{_e(TIER_LABELS.get(item['tier'], item['tier']))}</span>
 <span class="tag">{_e(item['state'])}</span><span class="tag">{_e(s.site_name(item['site']))}</span>
 <span class="tag">{_e(item['participant_id'] or 'participant not named')}</span></p>
+{warn}
 <h2>What the site wrote</h2>
-<p class="muted">{_e(ev.get('sender_name'))}, {_e(local_time(ev.get('message_date')))}, via {_e(ev.get('channel'))}
+<p class="muted">{_e(ev.get('sender_name'))}, {times}, via {_e(ev.get('channel'))}
  ({_e(ev.get('visibility'))}) · subject: {_e(ev.get('message_subject'))}</p>
 <blockquote>{_e(ev.get('message_quote'))}</blockquote>
 <p class="muted">Timing: {_e(event.get('temporality'))}. "{_e(event.get('temporality_evidence'))}"</p>

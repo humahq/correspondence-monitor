@@ -421,6 +421,15 @@ def handle_instruction(study: Study, msg: dict, instruction: dict) -> bool:
                                     f"{'it is' if len(elsewhere) == 1 else 'they are'} not part of this study.")
         return False
     sid = study.study_id
+    target = "suppressed" if kind == "disregard" else "cleared"
+    refused = {i: why for i in item_ids if (why := items.order_problem(items.get(i), target, actor_type))}
+    for i, why in refused.items():
+        db.audit("item_change_refused_order", entity_type="item", entity_id=i, study_id=sid, actor=who,
+                 actor_type=actor_type, state=target, why=why, message_id=msg["id"])
+    item_ids = [i for i in item_ids if i not in refused]
+    if not item_ids:
+        _answer_in_chat(study, msg, "I did not change anything: " + "; ".join(refused.values()) + ".")
+        return False
     for item_id in item_ids:
         if kind == "disregard":
             items.override(item_id, "counts", 0, who, actor_type, reason=instruction.get("text"), force=True,
@@ -431,7 +440,8 @@ def handle_instruction(study: Study, msg: dict, instruction: dict) -> bool:
             items.set_state(item_id, "cleared", who, actor_type, reason=f"reply: {instruction.get('text')}",
                             study_id=sid)
     done = "cleared" if kind == "cleared" else "disregarded (it will not count)"
-    _answer_in_chat(study, msg, f"Done: {', '.join(f'#{i}' for i in item_ids)} {done}, by {person.name}.")
+    _answer_in_chat(study, msg, f"Done: {', '.join(f'#{i}' for i in item_ids)} {done}, by {person.name}."
+                    + (" Not changed: " + "; ".join(refused.values()) + "." if refused else ""))
     return True
 
 

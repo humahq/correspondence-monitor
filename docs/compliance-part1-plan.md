@@ -7,7 +7,8 @@ tested and deployed to the live bot on 27 Oct; the rest is not built yet.
 ## 1. Summary
 
 - Part I has 71 requirement IDs. Before this work: 7 done, 41 partly done, 21 not done, 2 are V2 (later).
-  After the 27 Oct deploy: 12 done, 40 partly done, 17 not done, 2 V2.
+  After the 27 Oct deploy: 12 done, 40 partly done, 17 not done, 2 V2. With the second 27 Oct build (not yet
+  deployed): 24 done, 32 partly done, 13 not done, 2 V2.
 - Nothing we found needs a rewrite. Most gaps are missing records (hashes, versions, full AI logs) or missing
   workflow (safety routing, clearing grammar, bounces, recall).
 - Approach, as Eliot asked: a thin wrapper (facade) in front of each compliance function. Each wrapper has a
@@ -87,9 +88,30 @@ The existing code already has natural chokepoints to put these in front of, so t
 Status from reading the code on 2026-10-27, updated after the 27 Oct deploy. "Partly" means part of the
 requirement is in place; the gap is the note.
 
-### Done (12)
+### Done (24)
 
-Done on 27 Oct:
+Built and tested on 27 Oct, not yet on the live server:
+
+- AUD-01 Every change to messages, attachments, items, outbox and rules is kept as old and new values in an
+  append-only change log (patient text as lengths only); each hour's changes are sealed into the hash chain.
+- CAP-01 Chat attachments downloaded, read and fingerprinted like email attachments; ones that cannot be
+  downloaded (Drive links, too large) are kept as a reference with a note.
+- CAP-04 The sender's time is marked as the sender's own clock (not checked); pages show both times.
+- CAP-05 A failed sender check is shown as a flag on the item page and in the digest.
+- CAP-07 Every hour the mailbox is compared with the store; a message missing twice in a row is read in
+  and the admins are told.
+- CAP-08 The digest lists the times the bot was down and messages that arrived or were read late.
+- OUT-06 Bounces are matched to the sent message, kept as a record, audited, and the admins are told.
+- ARC-03 Step-order checks: an item can only move along allowed steps, and a reply can only clear an item
+  that was sent to someone; refusals are audited and told to the sender.
+- QAA-01 Each answer's audit entry carries a hash of the question.
+- QAA-02 Each question the bot could not answer gets its own audit record.
+- SEC-02 `cormon scan` and a weekly check list every package (saved as an SBOM) and look them up in the OSV
+  database of known security problems; problems go to the admins.
+- SUP-02 A backup model (`llm.fallback`, off until set) is tried once when a model fails, and the admins are
+  told; a weekly check warns when a model in the settings is no longer offered.
+
+Done on 27 Oct (deployed):
 
 - CAP-02 SHA-256 at capture; events carry the source hash; nightly re-check; a changed original is not read.
 - CAP-03 Chat edits and deletes kept as new versions.
@@ -107,46 +129,36 @@ Done before:
 - ARC-02 HTTPS through Caddy; mail and AI calls over TLS.
 - OUT-08 No approval queue, which matches the PRD's default (unattended send).
 
-### Not done (17)
+### Not done (13)
 
 | ID | What is missing |
 |---|---|
-| CAP-10 | No check that the mailbox and our store agree; no mailbox retention procedure |
-| OUT-06 | Bounces and non-delivery are not detected |
 | OUT-07 | No recall/correction of a sent alert |
 | SAF-03 | No severity taxonomy, no 1-hour / 24-hour acknowledgment clock |
 | SAF-04 | No safety acknowledgment by the medical monitor |
 | SAF-05 | No escalation chain (PV backup, ClinOps lead, then a human by phone) |
 | DSP-02 | No "reply CONFIRM" step before a clear takes effect |
 | CFG-02 | Changing rules or prompts does not run the test sets |
-| ARC-03 | No formal step-order checks (clear needs an alert, acknowledgment needs a routing) |
 | EXP-01 | `export.py` exports the rules, not a study's records package |
 | SDL-02 | Commits are not linked to tickets |
 | SDL-05 | No CI; nothing blocks a deploy when tests fail |
-| SEC-02 | No dependency or SBOM scan |
 | SEC-04 | Destructive commands need `--yes` from one person, not two |
 | VAL-04 | No protocol version by site and date |
 | VAL-05 | Model, prompt or rule changes do not trigger test runs |
 | GOV-02 | No production drift monitoring (sampling for misses, grounding failure rate) |
 
-### Partly done (40)
+### Partly done (32)
 
 | ID | In place | Gap |
 |---|---|---|
-| CAP-01 | Email raw `.eml`, attachments, headers, arrival time, all hashed (27 Oct) | Chat attachments not fetched as bytes |
-| CAP-04 | Arrival time is ours; sender's time kept | Sender time not marked "untrusted"; pages don't show both |
-| CAP-05 | Sender checks run and are stored; a failed sender cannot clear | Not shown as a flag on the record or in the digest |
-| CAP-06 | Plus-address picks the study; untagged mail never matched | Senders not on the roster are not flagged or kept from sponsor-facing posts |
-| CAP-07 | Chat by push, catch-up every minute | Email is polled; no hourly reconciliation by Gmail history ID |
-| CAP-08 | Digest states its window | No gaps or late items in the digest |
-| CAP-09 | Recipients come from config, not the AI | No adversarial injection test set |
+| CAP-06 | Plus-address picks the study; untagged mail never matched; senders not on the people list are flagged on the page and in the digest (built 27 Oct) | Not kept from sponsor-facing posts |
+| CAP-09 | Recipients come from config, not the AI; a 20-message trick test set (built 27 Oct) | On an old practice copy, one trick worked (an invented "standing exception" hid an old consent form); needs a run on the live rules |
+| CAP-10 | Hourly check that the mailbox and our store agree (built 27 Oct) | No mailbox retention procedure |
 | OUT-01 | Rendered text stored per sent message, hashed and re-checked nightly (27 Oct) | Not write-once (Phase 3) |
 | OUT-02 | Gmail sends with its own SPF/DKIM | DMARC `p=reject` on the sending domain is a DNS task |
 | OUT-03 | Who and where come from config | AI decides some "whether": the doctor check (withhold from chat), the careful check, and clearing from a reply (see section 7) |
 | OUT-04 | Templates are fixed; AI edit is optional and checked | No schema check for new facts or instructions |
 | OUT-05 | Pause switch stops sending, ingestion keeps going | No per-study hourly send cap |
-| QAA-01 | Answers saved with an audit entry; full AI context in the AI log (27 Oct) | No question hash |
-| QAA-02 | Answers must quote the documents; "not found" sends to the CRA | Refusal is not logged as its own record |
 | QAA-04 | Q&A test bench with scores | No pass/fail threshold that blocks a release |
 | QAA-05 | Physician rules and calm-reply templates | Templates not under versioned config with approver |
 | QAA-06 | Prompts forbid clinical judgment | No output check |
@@ -161,7 +173,6 @@ Done before:
 | DSP-06 | Notes can be added and retired | No version history, approver or effective date |
 | IAM-01 | Admin pages need Google sign-in and an allow-list | MFA relies on Google settings; command-line operator name is the computer login |
 | IAM-04 | Two secrets already in Secret Manager | No separate key-admin role or rotation |
-| AUD-01 | Audit log cannot be edited (database trigger); overrides log old and new values | Many tables are updated in place without old/new in the audit |
 | AUD-02 | Append-only by trigger; never pruned; hash chain, daily anchor and verifier built and deployed 27 Oct | No separate write-once store (Phase 3) |
 | CFG-01 | Config files snapshotted with hash and actor; rules carry their document's hash | No approver or effective date; a rebuild replaces the rules |
 | ARC-04 | Heartbeat every tick; `/health` and a separate watchdog email the admins after 15 minutes (27 Oct) | Email, not a pager with escalation (Phase 3) |
@@ -172,8 +183,6 @@ Done before:
 | PRV-01 | Patient details masked in the audit log; retention purge | No ICF coverage check at study activation |
 | PRV-04 | Same as SDL-03 | Same |
 | BCK-01 | Daily backup, checked, 7 kept, restore command | Not hourly; not off the server; restore time not tested |
-| SUP-02 | Model names pinned in settings | No fallback model; no deprecation watch |
-
 ### Later (V2): IAM-05 (sponsor SSO), EXP-02 (sponsor self-service export).
 
 ## 4. Build order

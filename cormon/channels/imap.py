@@ -39,6 +39,45 @@ def _uid(meta: bytes) -> str | None:
     return found.group(1).decode() if found else None
 
 
+def is_bounce(head: Inbound) -> bool:
+    """A delivery failure report from a mail server (Gmail: "Mail Delivery Subsystem")."""
+    local = (head.from_addr or "").lower().split("@")[0]
+    return local in ("mailer-daemon", "postmaster")
+
+
+_DIAG = re.compile(r"(?im)^(?:Final-Recipient|Original-Recipient|Status|Diagnostic-Code|Action):.*$")
+_ID = re.compile(r"(?im)^Message-ID:\s*(<[^>]+>)")
+
+
+def outbox_bounced(raw: bytes, sent_ids: set[str]) -> int | None:
+    """A bounce for one of our sent emails: kept with its fingerprint, noted on the sent message, and the admins
+    are told. Returns the outbox row it belongs to, or None when it is not ours."""
+    from ..compliance import alerts, records
+
+    head = parse_email(raw)
+    db.set_state(f"bounce_seen:{head.rfc_message_id}", db.now())
+    text = raw.decode("utf-8", errors="replace")
+    ids = [head.in_reply_to, *head.references, *_ID.findall(text)]
+    rfc = next((i for i in ids if i and i in sent_ids), None)
+    row = db.q1("SELECT id, item_id, purpose, to_addrs FROM outbox WHERE rfc_message_id=?", (rfc,)) if rfc else None
+    if not row:
+        db.audit("bounce_not_matched", entity_type="channel", entity_id="email", bounce=head.rfc_message_id)
+        return None
+    why = "; ".join(dict.fromkeys(" ".join(line.split()) for line in _DIAG.findall(text)))[:500] or "no reason given"
+    n = db.q1("SELECT COUNT(*) n FROM records WHERE owner_type='outbox' AND owner_id=? AND kind='bounce'",
+              (row["id"],))["n"]
+    digest = records.put("bounce", "outbox", row["id"], raw, f"raw/bounces/{row['id']}-{n + 1}.eml")
+    db.audit("send_bounced", entity_type="outbox", entity_id=row["id"], item_id=row["item_id"],
+             purpose=row["purpose"], to=db.unjs(row["to_addrs"], []), why=why, sha256=digest)
+    alerts.notify(f"bounce:{row['id']}", f"Study monitor: an email the bot sent did not arrive (outbox {row['id']})",
+                  f"Email {row['id']} ({row['purpose']}"
+                  + (f", alert #{row['item_id']}" if row["item_id"] else "")
+                  + f") to {', '.join(db.unjs(row['to_addrs'], []))} bounced.\n\nWhat the mail server said: {why}\n\n"
+                  "Check the address, then send it again with `cormon outbox --send "
+                  f"{row['id']}`.", every_minutes=24 * 60)
+    return row["id"]
+
+
 def _fetch(conn, uids: list[str], part: str) -> dict[str, bytes]:
     if not uids:
         return {}
@@ -95,10 +134,14 @@ class ImapChannel:
                 if status != "OK":
                     raise RuntimeError(f"the mailbox refused the search in {folder} ({status})")
                 uids = [u.decode() for u in (data[0].split() if data and data[0] else [])][-500:]
-                wanted = []
+                wanted, bounces = [], []
                 for uid, raw in _fetch(conn, uids, HEADERS).items():
                     head = parse_email(raw)
                     if not head.rfc_message_id or head.rfc_message_id in known:
+                        continue
+                    if is_bounce(head):
+                        if not db.get_state(f"bounce_seen:{head.rfc_message_id}"):
+                            bounces.append(uid)
                         continue
                     if self._own(head.from_addr or "") or datetime.fromisoformat(head.sent_at) < start:
                         continue
@@ -108,7 +151,65 @@ class ImapChannel:
                     known.add(head.rfc_message_id)
                 out += [parse_email(raw) for _, raw in sorted(_fetch(conn, wanted, "BODY.PEEK[]").items(),
                                                               key=lambda kv: int(kv[0]))]
+                for _, raw in _fetch(conn, bounces, "BODY.PEEK[]").items():
+                    outbox_bounced(raw, sent_ids)
             return sorted(out, key=lambda m: datetime.fromisoformat(m.sent_at))
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
+
+    def reconcile(self, days: int = 7) -> dict:
+        """Compare the mailbox with what was stored: every study email of the last `days` days (the same filter as
+        fetch) should be in the database. Returns {"checked", "missing": [{rfc, from, sent}], "no_id"}."""
+        start = datetime.fromisoformat(db.get_state("imap_start") or datetime.now(timezone.utc).isoformat())
+        since = (date.today() - timedelta(days=days)).strftime("%d-%b-%Y")
+        known = known_rfc_ids()
+        sent_ids = {r["rfc_message_id"] for r in db.q(
+            "SELECT rfc_message_id FROM outbox WHERE rfc_message_id IS NOT NULL")}
+        out = {"checked": 0, "missing": [], "no_id": 0}
+        conn = self._connect()
+        try:
+            for folder in _cfg("folders", ["INBOX"]):
+                status, _ = conn.select(f'"{folder}"', readonly=True)
+                if status != "OK":
+                    continue
+                status, data = conn.uid("SEARCH", None, "SINCE", since)
+                if status != "OK":
+                    raise RuntimeError(f"the mailbox refused the search in {folder} ({status})")
+                uids = [u.decode() for u in (data[0].split() if data and data[0] else [])]
+                for i in range(0, len(uids), 500):
+                    for uid, raw in _fetch(conn, uids[i:i + 500], HEADERS).items():
+                        head = parse_email(raw)
+                        if self._own(head.from_addr or "") or datetime.fromisoformat(head.sent_at) < start:
+                            continue
+                        if is_bounce(head) or (_cfg("only_study_aliases", True) and not self._ours(head, sent_ids)):
+                            continue
+                        out["checked"] += 1
+                        if not head.rfc_message_id:
+                            out["no_id"] += 1
+                        elif head.rfc_message_id not in known:
+                            out["missing"].append({"rfc": head.rfc_message_id, "from": head.from_addr,
+                                                   "sent": head.sent_at, "folder": folder, "uid": uid})
+            return out
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
+
+    def take(self, missing: list[dict]) -> list[Inbound]:
+        """The full emails reconcile() found missing, to be captured now."""
+        conn = self._connect()
+        try:
+            out = []
+            for folder in dict.fromkeys(m["folder"] for m in missing):
+                status, _ = conn.select(f'"{folder}"', readonly=True)
+                if status == "OK":
+                    uids = [m["uid"] for m in missing if m["folder"] == folder]
+                    out += [parse_email(raw) for _, raw in _fetch(conn, uids, "BODY.PEEK[]").items()]
+            return out
         finally:
             try:
                 conn.logout()

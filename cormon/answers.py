@@ -21,6 +21,7 @@ from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 
 from . import capture, careful, conversation, db, guide, llm, memory, reader, routing, settings
+from .compliance import sha256
 from .config import Study
 
 ASKED = re.compile(r"\?|^\s*(?:what|when|how|which|where|why|who|is|are|can|could|should|do|does|did|may|must|"
@@ -653,6 +654,12 @@ def reply(study: Study, msg: dict, email: str, use_cache: bool = True, harm_only
     text = render(answers, save_page(study, msg, email, answers), chat=msg.get("channel") == "teams",
                   cra=cra_names(study))
     oid = _post(study, msg, text)
+    hashes = [sha256(" ".join((a.get("question") or "").lower().split())) for a in answers]
     db.audit("question_answered", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
-             outbox_id=oid, answers=answers)
+             outbox_id=oid, answers=answers, question_sha256=hashes)
+    for a, h in zip(answers, hashes):   # a question the documents did not answer is its own record (QAA-02)
+        if not a.get("found"):
+            db.audit("question_not_answered", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
+                     outbox_id=oid, question=a.get("question"), question_sha256=h,
+                     reply=a.get("plain") or a.get("text"))
     return {"answers": answers, "outbox_id": oid, "text": text}

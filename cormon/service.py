@@ -6,9 +6,9 @@ import threading
 import time
 import traceback
 
-from . import backup, capture, config, db, digest, outbox, phi, pipeline, settings, stuck, webview
+from . import backup, capture, config, db, digest, llm, outbox, phi, pipeline, settings, stuck, webview
 from .channels import chat_events, email_channel, teams_channel
-from .compliance import records, trail
+from .compliance import deps, records, trail
 
 
 _last_poll: dict[str, float] = {}
@@ -81,8 +81,11 @@ def tick(log=print, named: list[str] | None = None, force: bool = True) -> None:
     db.set_state("heartbeat", db.now())
     _safely(backup.daily, log)
     _safely(phi.daily, log)
+    _safely(trail.hourly, log)
     _safely(trail.daily, log)
     _safely(records.daily, log)
+    _safely(deps.weekly, log)
+    _safely(llm.check_models, log)
     if outbox.is_paused():
         return
     _safely(pipeline.recover_messages, log)
@@ -99,6 +102,7 @@ def tick(log=print, named: list[str] | None = None, force: bool = True) -> None:
         log("daily digest queued")
     _safely(outbox.recover, log)
     _safely(stuck.warn, log)
+    _safely(stuck.reconcile_mailbox, log)
     _safely(chat_push, log)
     t4 = time.perf_counter()
     res = outbox.dispatch()

@@ -17,13 +17,14 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 from .. import config, db, settings
-from ..capture import Inbound
+from ..capture import InAttachment, Inbound, attachment_text
 from . import study_for_person
 
 CHAT = "https://chat.googleapis.com/v1"
 UPLOAD = "https://chat.googleapis.com/upload/v1"
 PEOPLE = "https://people.googleapis.com/v1"
 LOOKUP_RETRY = 120
+MAX_ATTACHMENT = 25 * 2**20
 SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -186,7 +187,8 @@ class GoogleChatChannel:
         if sender.get("type") != "HUMAN" or sender.get("name") == self.me:
             return None
         text = (m.get("text") or m.get("argumentText") or "").strip()
-        if not text:
+        files = self._attachments(m)
+        if not text and not files:
             return None
         edited = m.get("lastUpdateTime")
         thread = (m.get("thread") or {}).get("name") or m["name"]
@@ -203,7 +205,42 @@ class GoogleChatChannel:
             study_id=study_id, visibility=visibility,
             reply_to_external=thread if m.get("threadReply") else None,
             raw=db.js(m).encode(), edited_at=edited if edited and edited != m.get("createTime") else None,
+            attachments=files,
         )
+
+    def _attachments(self, m: dict) -> list[InAttachment]:
+        """The files posted with a message, as bytes (kept and fingerprinted like email attachments). A file
+        that can't be downloaded, or a Google Drive link, is kept as its reference, saying so. Downloaded once:
+        a message already captured is seen again by the overlapping polls."""
+        out = []
+        if m.get("attachment") and db.q1("SELECT 1 FROM messages WHERE channel='teams' AND external_id=?",
+                                         (m["name"],)):
+            return out
+        for a in m.get("attachment") or []:
+            name, mime = a.get("contentName") or "attachment", a.get("contentType") or "application/octet-stream"
+            ref = (a.get("attachmentDataRef") or {}).get("resourceName")
+            note = None
+            if ref:
+                try:
+                    r = self.http.get(f"{CHAT}/media/{ref}", params={"alt": "media"}, timeout=60)
+                    r.raise_for_status()
+                    data = r.content
+                    if len(data) > MAX_ATTACHMENT:
+                        data, note = b"", f"[not downloaded: larger than {MAX_ATTACHMENT // 2**20} MB]"
+                except Exception as e:
+                    data, note = b"", f"[could not download: {str(e)[:200]}]"
+            else:
+                data = b""
+                note = "[a Google Drive file: not downloaded, the bot has no Drive access]" \
+                    if a.get("driveDataRef") else "[no file to download]"
+            if note:
+                out.append(InAttachment(filename=name, mime="application/json", component="attachment-reference",
+                                        data=db.js(a).encode(), source_date=m.get("createTime"), text=note))
+            else:
+                out.append(InAttachment(filename=name, mime=mime, data=data, component="attachment",
+                                        source_date=m.get("createTime"),
+                                        text=attachment_text(name, mime, data)))
+        return out
 
     def fetch(self) -> list[Inbound]:
         since = self._since()

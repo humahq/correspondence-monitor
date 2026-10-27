@@ -302,7 +302,9 @@
             <dt>Where</dt><dd>${d.message.where}</dd>
             ${d.message.to.length > 0 && html`<dt>To</dt><dd>${d.message.to.join(", ")}</dd>`}
             ${d.message.cc.length > 0 && html`<dt>Cc</dt><dd>${d.message.cc.join(", ")}</dd>`}
-            <dt>When</dt><dd>${d.message.sent.text || d.message.received.text}</dd>
+            ${d.message.sent.text && html`<dt>Sent</dt><dd>${d.message.sent.text}
+              <span class="muted small">the sender's own clock, not checked</span></dd>`}
+            <dt>Received by the bot</dt><dd>${d.message.received.text}</dd>
             ${d.message.attachments.length > 0 && html`<dt>Attachments</dt><dd>${d.message.attachments.map((a) => a.name).join(", ")}</dd>`}
             ${d.speed.seconds != null && html`<dt>Time the bot took to check it</dt><dd>${d.speed.seconds} seconds</dd>`}</dl>
             <${Technical} d=${d} /></div>

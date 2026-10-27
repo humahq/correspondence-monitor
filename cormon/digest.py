@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from . import config, db, drafting, routing, settings
+from . import config, db, drafting, routing, senders, settings
 from .compliance import SAFETY_NOTICE
 from .triage import TIER_LABELS
 
@@ -47,11 +47,14 @@ def build(since: datetime, until: datetime, study_ids: list[str] | None = None) 
             "buckets": {k: [] for k, _ in GROUPS}})
         item = dict(r)
         carried = item["created_at"] < since.isoformat()
+        flags = senders.item_flags(item, s)
         entry["buckets"][_status(item)].append({
             "id": item["id"], "tier_label": TIER_LABELS.get(item["tier"], item["tier"]),
             "site": s.site_name(item["site"]), "participant_id": item["participant_id"],
             "title": item["title"] + {"suppressed": " (disregarded)", "cleared": " (cleared)"}.get(item["state"], "")
-                     + (" (carried over)" if carried else ""),
+                     + (" (carried over)" if carried else "")
+                     + "".join(f" (check the sender: {f})" for f in flags),
+            "flags": flags,
         })
     studies_out = []
     total = 0
@@ -60,12 +63,56 @@ def build(since: datetime, until: datetime, study_ids: list[str] | None = None) 
         total += sum(len(g["entries"]) for g in groups)
         studies_out.append({"study_id": sid, "short_name": e["short_name"], "groups": groups})
     tz = ZoneInfo(settings.get("digest.timezone", "America/New_York"))
+    notes = gaps_and_late(since, until, study_ids)
+    footer = f"Sent by the correspondence monitor. It does not review safety information. {SAFETY_NOTICE}"
+    if notes:
+        footer = "Gaps and late messages in this window:\n" + "\n".join(f"- {n}" for n in notes) + "\n\n" + footer
     return {
         "date": until.astimezone(tz).strftime("%d %b %Y"),
         "window": f"{since.astimezone(tz):%d %b %H:%M} to {until.astimezone(tz):%d %b %H:%M} ({tz.key})",
-        "studies": studies_out, "total": total,
-        "footer": f"Sent by the correspondence monitor. It does not review safety information. {SAFETY_NOTICE}",
+        "studies": studies_out, "total": total, "notes": notes,
+        "footer": footer,
     }
+
+
+def _when(iso: str | None) -> datetime | None:
+    try:
+        d = datetime.fromisoformat(iso.replace("Z", "+00:00")) if iso else None
+    except ValueError:
+        return None
+    return d.replace(tzinfo=timezone.utc) if d and d.tzinfo is None else d
+
+
+def gaps_and_late(since: datetime, until: datetime, study_ids: list[str] | None = None) -> list[str]:
+    """When the bot was not running, and messages that reached it late or waited long to be read, so a reader
+    knows the window was not fully covered (the sender's own time is not trusted, so "late" is a hint)."""
+    out = []
+    for r in db.q("SELECT details FROM audit_log WHERE action='bot_downtime' AND ts>=?", (since.isoformat(),)):
+        d = db.unjs(r["details"], {})
+        start, end = _when(d.get("start")), _when(d.get("end"))
+        if start and end and end >= since and start < until:
+            out.append(f"The bot was not running from {drafting.local_time(d['start'])} to "
+                       f"{drafting.local_time(d['end'])}: messages from then were read when it restarted.")
+    down = db.get_state("down_since")
+    if down:
+        out.append(f"The bot has not been running since {drafting.local_time(down)}.")
+    late = float(settings.get("digest.late_minutes", 60))
+    wait = float(settings.get("system.stall_minutes", 15))
+    rows = db.q("SELECT m.id, m.study_id, m.channel, m.from_addr, m.sent_at, m.received_at,"
+                " (SELECT MIN(started_at) FROM message_timings t WHERE t.message_id=m.id) AS read_at"
+                " FROM messages m WHERE m.received_at>=? AND m.received_at<? ORDER BY m.id",
+                (since.isoformat(), until.isoformat()))
+    for m in rows:
+        if study_ids and m["study_id"] not in study_ids:
+            continue
+        sent, got, read = _when(m["sent_at"]), _when(m["received_at"]), _when(m["read_at"])
+        who = f"Message {m['id']} from {m['from_addr'] or 'unknown sender'}"
+        if sent and got and (got - sent).total_seconds() > late * 60:
+            out.append(f"{who} reached the bot late: the sender's time says {drafting.local_time(m['sent_at'])}, "
+                       f"it arrived {drafting.local_time(m['received_at'])}.")
+        if got and read and (read - got).total_seconds() > wait * 60:
+            out.append(f"{who} waited {int((read - got).total_seconds() // 60)} minutes before the bot read it.")
+    return out
 
 
 def send(hours: float | None = None, study_ids: list[str] | None = None, *, dry_run: bool = False,

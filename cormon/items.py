@@ -135,9 +135,37 @@ def override(item_id: int, field: str, value, actor: str, actor_type: str = "ope
     return []
 
 
+class StepOrder(ValueError):
+    """A change made out of order: clearing what was never sent, clearing twice, clearing a safety item."""
+
+
+# which state an item may move to from each state (ARC-03). A safety item (out_of_scope) is never cleared or
+# hidden by anyone.
+NEXT = {"open": {"cleared", "suppressed", "handled"}, "cleared": {"open"}, "suppressed": {"open"},
+        "handled": {"open"}, "out_of_scope": set()}
+
+
+def order_problem(item: dict, state: str, actor_type: str) -> str | None:
+    """Why this change may not be made now, or None."""
+    if state == item["state"]:
+        return f"#{item['id']} is already {state}"
+    if state not in NEXT.get(item["state"], set()):
+        if item["state"] == "out_of_scope":
+            return f"#{item['id']} is a safety item, which is never cleared or disregarded"
+        return f"#{item['id']} cannot go from {item['state']} to {state}"
+    if actor_type != "operator" and state in ("cleared", "suppressed") and not item["routed"]:
+        return f"#{item['id']} was never sent to anyone, so there is nothing to clear by reply yet"
+    return None
+
+
 def set_state(item_id: int, state: str, actor: str, actor_type: str = "operator", reason: str | None = None, *,
               study_id: str) -> None:
     item = _in_study(item_id, study_id, actor, f"state {state}")
+    why = order_problem(item, state, actor_type)
+    if why:
+        db.audit("item_change_refused_order", entity_type="item", entity_id=item_id, study_id=item["study_id"],
+                 actor=actor, actor_type=actor_type, old_state=item["state"], state=state, why=why)
+        raise StepOrder(why)
     cleared = 1 if state == "cleared" else (0 if state == "open" else item["cleared"])
     db.ex("UPDATE items SET state=?, cleared=?, updated_at=? WHERE id=? AND study_id=?",
           (state, cleared, db.now(), item_id, study_id))

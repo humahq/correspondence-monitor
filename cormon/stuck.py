@@ -45,6 +45,49 @@ def problems() -> list[dict]:
     return out
 
 
+def reconcile_mailbox(log=print) -> dict | None:
+    """Every hour: is every study email in the mailbox also in the database? One still missing at two checks in
+    a row (so not just arriving), or one with no Message-ID (which the reader cannot take), is reported."""
+    from .channels import email_channel
+    from .compliance import alerts
+
+    hour = db.now()[:13]
+    if db.get_state("mailbox_check_hour") == hour:
+        return None
+    db.set_state("mailbox_check_hour", hour)
+    adapter = email_channel()
+    if not hasattr(adapter, "reconcile"):
+        return None
+    res = adapter.reconcile(int(settings.get("mailbox.reconcile_days", 7)))
+    before = set(db.unjs(db.get_state("mailbox_missing"), []))
+    now_missing = {m["rfc"] for m in res["missing"]}
+    db.set_state("mailbox_missing", db.js(sorted(now_missing)))
+    still = [m for m in res["missing"] if m["rfc"] in before]
+    taken = []
+    if still:
+        from . import capture
+        for inb in adapter.take(still):
+            if capture.capture(inb):
+                taken.append(inb.rfc_message_id)
+    db.audit("mailbox_reconciled", entity_type="channel", entity_id="email", checked=res["checked"],
+             missing=len(res["missing"]), still_missing=[m["rfc"] for m in still], read_now=taken,
+             no_id=res["no_id"])
+    if still or res["no_id"]:
+        lines = [f"- from {m['from']}, sent {m['sent']}: "
+                 + ("read now" if m["rfc"] in taken else "could not be read") for m in still[:30]]
+        if res["no_id"]:
+            lines.append(f"- {res['no_id']} email(s) with no Message-ID, which the bot cannot read: forward them "
+                         "again")
+        alerts.notify("mailbox", "Study monitor: emails in the mailbox had been missed",
+                      "The hourly check found study emails in the mailbox that the bot had not read:\n\n"
+                      + "\n".join(lines), every_minutes=24 * 60)
+    else:
+        alerts.clear("mailbox", "Study monitor: the mailbox and the records agree again",
+                     f"All {res['checked']} study emails of the last days are in the bot's records.")
+    log(f"mailbox check: {res['checked']} study emails, {len(still)} missing, {res['no_id']} without an id")
+    return res
+
+
 def _ops(study_ids: set) -> list[str]:
     fixed = settings.get("system.ops_emails") or []
     if fixed:

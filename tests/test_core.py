@@ -998,6 +998,7 @@ def test_one_study_cannot_clear_or_suppress_another_studys_item(monkeypatch):
     db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind,"
           " polarity, title, tier, evidence, link_token, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
           (7, "S1", "t", 1, 1, "k7", "finding", "problem", "x", "medium", "{}", "l7", db.now(), db.now()))
+    db.ex("UPDATE items SET routed=1 WHERE id=7")
     for change in (lambda: items.set_state(7, "cleared", "cra@s2", "cra", study_id="S2"),
                    lambda: items.override(7, "counts", 0, "cra@s2", "cra", force=True, study_id="S2")):
         with pytest.raises(items.OtherStudy):
@@ -1845,6 +1846,7 @@ def test_an_email_that_fails_the_sender_check_cannot_clear_an_alert():
     db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind,"
           " polarity, title, tier, evidence, link_token, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
           (8, "S1", "t", 1, 1, "k8", "finding", "problem", "x", "medium", "{}", "l8", db.now(), db.now()))
+    db.ex("UPDATE items SET routed=1 WHERE id=8")
     person = type("P", (), {"name": "Ann", "email": "cra@site.org", "roles": ["cra"]})()
     study = type("S", (), {"study_id": "S1", "person_by_email": lambda self, a: person})()
     head = capture.parse_email(_mail(FORGED)).headers

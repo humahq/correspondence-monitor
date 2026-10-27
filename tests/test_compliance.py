@@ -97,6 +97,44 @@ def test_audit_trail_still_refuses_update_and_delete():
         db.ex("UPDATE audit_log SET hash='x' WHERE id=?", (rid,))
 
 
+def test_every_change_to_a_row_keeps_old_and_new_values():
+    mid = capture.capture(_chat())
+    db.ex("UPDATE messages SET status='processed', body_text='[cleared after retention period]' WHERE id=?", (mid,))
+    db.ex("UPDATE messages SET status='processed' WHERE id=?", (mid,))         # no change: nothing kept
+    rows = db.q("SELECT changes FROM row_changes WHERE tbl='messages' AND row_id=?", (str(mid),))
+    changes = [db.unjs(r["changes"]) for r in rows]
+    last = changes[-1]
+    assert last["status"] == ["new", "processed"]
+    assert last["body_text:chars"] == [len("BP 168/92 before dosing"), len("[cleared after retention period]")]
+    assert "BP 168" not in db.js(changes)                                    # patient text never copied
+    db.ex("DELETE FROM attachments WHERE message_id=?", (mid,))
+    with pytest.raises(sqlite3.DatabaseError):
+        db.ex("UPDATE row_changes SET changes='{}'")
+    with pytest.raises(sqlite3.DatabaseError):
+        db.ex("DELETE FROM row_changes")
+
+
+def test_row_changes_are_sealed_into_the_audit_chain():
+    mid = capture.capture(_chat())
+    db.ex("UPDATE messages SET status='processed' WHERE id=?", (mid,))
+    assert trail.seal_changes()["rows"] >= 1 and trail.seal_changes() is None
+    assert trail.verify()["ok"]
+    c = db.conn()
+    c.execute("DROP TRIGGER row_changes_no_update")
+    c.execute("UPDATE row_changes SET changes='{\"status\":[\"new\",\"cleared\"]}' WHERE id=1")
+    out = trail.verify()
+    assert not out["ok"] and "altered" in out["why"]
+
+
+def test_change_triggers_are_made_again_when_a_table_gains_a_column():
+    c = db.conn()
+    before = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE name LIKE 'chg_items_%'")}
+    c.execute("ALTER TABLE items ADD COLUMN extra TEXT")
+    trail.track_changes(c)
+    after = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE name LIKE 'chg_items_%'")}
+    assert len(after) == 2 and after != before
+
+
 def test_daily_trail_check_anchors_once_a_day(monkeypatch):
     sent = []
     monkeypatch.setattr(alerts, "notify", lambda *a, **k: sent.append(a))
@@ -245,6 +283,34 @@ def test_google_chat_passes_edits_and_deletions_to_capture():
     assert gone.deleted_at == "2026-10-26T10:09:00Z" and gone.external_id == base["name"]
 
 
+def test_chat_attachments_are_downloaded_once_and_fingerprinted():
+    from cormon.channels.gchat import GoogleChatChannel
+
+    got = []
+
+    def get(url, params=None, timeout=None):
+        got.append(url)
+        return SimpleNamespace(content=b"Week 4 ECG: QTcF 512 ms", raise_for_status=lambda: None)
+
+    ch = GoogleChatChannel(session=SimpleNamespace(get=get))
+    ch._me = "users/100"
+    ch._email_for = lambda user: "crc@site.org"
+    m = {"name": "spaces/S1/messages/7", "sender": {"name": "users/7", "type": "HUMAN"},
+         "createTime": "2026-10-26T10:00:00Z", "text": "", "thread": {"name": "spaces/S1/threads/T"},
+         "attachment": [{"contentName": "ecg.txt", "contentType": "text/plain",
+                         "attachmentDataRef": {"resourceName": "spaces/S1/attachments/A"}},
+                        {"contentName": "labs.pdf", "driveDataRef": {"driveFileId": "D"}}]}
+    inb = ch._to_inbound(m, study_id="NCT04098666", visibility="channel")
+    assert inb and got == ["https://chat.googleapis.com/v1/media/spaces/S1/attachments/A"]
+    assert inb.attachments[0].text == "Week 4 ECG: QTcF 512 ms"
+    assert inb.attachments[1].component == "attachment-reference" and "Drive" in inb.attachments[1].text
+    mid = capture.capture(inb)
+    a = db.q1("SELECT sha256 FROM attachments WHERE message_id=? AND filename='ecg.txt'", (mid,))
+    assert a["sha256"] == records.sha256(b"Week 4 ECG: QTcF 512 ms") and records.check_message(mid) == []
+    ch._to_inbound(m, study_id="NCT04098666", visibility="channel")
+    assert len(got) == 1                                                   # seen again: not downloaded again
+
+
 def test_a_push_note_for_a_message_that_is_gone_marks_it_deleted():
     import requests
 
@@ -329,6 +395,72 @@ def test_a_failed_ai_call_is_logged_too(monkeypatch):
         llm.structured("extract", "S", "U", {"type": "object"}, "s", use_cache=False)
     r = db.q1("SELECT * FROM ai_log")
     assert r["ok"] == 0 and "rate limited" in r["error"] and r["response"] is None
+
+
+def test_a_failing_model_falls_back_once_and_tells_the_admins(monkeypatch):
+    from cormon import llm
+
+    used = []
+
+    def create(**kw):
+        used.append(kw["model"])
+        if kw["model"] == "old-model":
+            raise RuntimeError("model_not_found")
+        return _Resp('{"ok": true}')
+
+    monkeypatch.setattr(llm, "client", lambda: SimpleNamespace(chat=SimpleNamespace(
+        completions=SimpleNamespace(create=create))))
+    monkeypatch.setattr(llm.time, "sleep", lambda s: None)
+    sent = _no_send(monkeypatch)
+    _set(monkeypatch, llm__models__extract="old-model", llm__fallback="gpt-4.1")
+    assert llm.structured("extract", "S", "U", {"type": "object"}, "s", use_cache=False) == {"ok": True}
+    assert used[-1] == "gpt-4.1" and set(used[:-1]) == {"old-model"}
+    assert [r["ok"] for r in db.q("SELECT ok FROM ai_log ORDER BY id")] == [0, 1]
+    a = db.q1("SELECT * FROM audit_log WHERE action='llm_fallback'")
+    assert '"used": "gpt-4.1"' in a["details"] and len(sent) == 1
+
+
+def test_no_fallback_when_none_is_set(monkeypatch):
+    from cormon import llm
+
+    def create(**kw):
+        raise RuntimeError("model_not_found")
+
+    monkeypatch.setattr(llm, "client", lambda: SimpleNamespace(chat=SimpleNamespace(
+        completions=SimpleNamespace(create=create))))
+    monkeypatch.setattr(llm.time, "sleep", lambda s: None)
+    _set(monkeypatch, llm__fallback=None)
+    with pytest.raises(RuntimeError):
+        llm.structured("extract", "S", "U", {"type": "object"}, "s", use_cache=False)
+
+
+def test_weekly_model_check_warns_about_a_retired_model(monkeypatch):
+    from cormon import llm
+
+    sent = _no_send(monkeypatch)
+    _set(monkeypatch, llm__models={"default": "gpt-4.1", "ingest": "old-model"}, llm__fallback=None)
+    monkeypatch.setattr(llm, "client", lambda: SimpleNamespace(models=SimpleNamespace(
+        list=lambda: [SimpleNamespace(id="gpt-4.1")])))
+    assert llm.check_models(lambda *a: None) == ["old-model"] and len(sent) == 1
+    assert llm.check_models(lambda *a: None) is None
+
+
+def test_dependency_scan_writes_the_list_and_records_problems(monkeypatch):
+    from cormon.compliance import deps
+
+    monkeypatch.setattr(deps, "packages", lambda: [{"name": "pypdf", "version": "1.0"},
+                                                   {"name": "requests", "version": "9.9"}])
+
+    class Http:
+        def post(self, url, json, timeout):
+            assert [q["package"]["name"] for q in json["queries"]] == ["pypdf", "requests"]
+            return SimpleNamespace(raise_for_status=lambda: None,
+                                   json=lambda: {"results": [{"vulns": [{"id": "GHSA-1"}]}, {}]})
+
+    res = deps.scan(Http())
+    assert res["packages"] == 2 and res["problems"] == [{"name": "pypdf", "version": "1.0", "ids": ["GHSA-1"]}]
+    assert "known_problems" in (db.settings.data_dir() / "sbom.json").read_text()
+    assert "pypdf 1.0: GHSA-1" in db.q1("SELECT details FROM audit_log WHERE action='dependency_scan'")["details"]
 
 
 def test_decisions_calls_are_logged(monkeypatch):
@@ -420,6 +552,52 @@ def test_watchdog_emails_when_the_bot_stops_and_when_it_is_back(monkeypatch):
                                                          (back["recovered"],))["subject"]
 
 
+def test_hourly_mailbox_check_reads_an_email_missed_twice(monkeypatch):
+    from cormon import channels, stuck
+
+    raw = (b"From: crc@site.org\r\nTo: bot+NCT04098666@huma.ai\r\nSubject: labs\r\nMessage-ID: <missed@site.org>\r\n"
+           b"Date: Mon, 26 Oct 2026 09:00:00 +0000\r\n\r\nALT 3x ULN\r\n")
+    told = []
+    monkeypatch.setattr(stuck.settings, "get", lambda k, d=None: d)
+    from cormon.compliance import alerts as al
+    monkeypatch.setattr(al, "notify", lambda key, subject, body, **k: told.append(body))
+    fake = SimpleNamespace(
+        reconcile=lambda days: {"checked": 3, "no_id": 0, "missing": [
+            {"rfc": "<missed@site.org>", "from": "crc@site.org", "sent": "2026-10-26T09:00:00+00:00",
+             "folder": "INBOX", "uid": "9"}]},
+        take=lambda missing: [capture.parse_email(raw)])
+    monkeypatch.setattr(channels, "email_channel", lambda: fake)
+    stuck.reconcile_mailbox(log=lambda *_: None)
+    assert not told and not db.q1("SELECT 1 FROM messages")             # first time: may just be arriving
+    db.set_state("mailbox_check_hour", "")
+    stuck.reconcile_mailbox(log=lambda *_: None)
+    assert db.q1("SELECT 1 FROM messages WHERE rfc_message_id='<missed@site.org>'")
+    assert told and "read now" in told[0]
+
+
+def test_a_bounce_is_kept_noted_on_the_sent_email_and_the_admins_told(monkeypatch):
+    from cormon import routing
+    from cormon.channels import imap
+
+    told = []
+    from cormon.compliance import alerts as al
+    monkeypatch.setattr(al, "notify", lambda key, subject, body, **k: told.append((key, body)))
+    oid = routing.enqueue(purpose="alert", channel="email", destination="email", body="Please check.",
+                          subject="Alert", to=["cra@nowhere.org"])
+    db.ex("UPDATE outbox SET rfc_message_id='<sent1@huma.ai>', status='sent' WHERE id=?", (oid,))
+    raw = (b"From: Mail Delivery Subsystem <mailer-daemon@googlemail.com>\r\nTo: bot+NCT04098666@huma.ai\r\n"
+           b"Subject: Delivery Status Notification (Failure)\r\nMessage-ID: <b1@google.com>\r\n"
+           b"Date: Mon, 26 Oct 2026 09:00:00 +0000\r\n\r\nFinal-Recipient: rfc822; cra@nowhere.org\r\n"
+           b"Status: 5.1.1\r\nDiagnostic-Code: smtp; 550 5.1.1 The email account does not exist\r\n\r\n"
+           b"Message-ID: <sent1@huma.ai>\r\n")
+    assert imap.is_bounce(capture.parse_email(raw))
+    assert imap.outbox_bounced(raw, {"<sent1@huma.ai>"}) == oid
+    a = db.q1("SELECT details FROM audit_log WHERE action='send_bounced'")
+    assert "does not exist" in a["details"] and told and told[0][0] == f"bounce:{oid}"
+    assert db.q1("SELECT 1 FROM records WHERE kind='bounce' AND owner_id=?", (oid,))
+    assert db.get_state("bounce_seen:<b1@google.com>") and not db.q1("SELECT 1 FROM messages")
+
+
 def test_health_page_says_stalled_when_the_heartbeat_is_old():
     from cormon import webview
 
@@ -458,6 +636,96 @@ def test_stuck_check_reports_a_waiting_message_and_an_unread_channel():
 
 
 # ------------------------------------------------------------------ the safety sentence
+
+def test_digest_lists_downtime_and_late_messages(monkeypatch):
+    from cormon import digest, watchdog
+
+    _no_send(monkeypatch)
+    _set(monkeypatch, system__ops_emails=["john@huma.ai"])
+    db.set_state("heartbeat", _ago(40))
+    watchdog.check(log=lambda *_: None)
+    db.set_state("heartbeat", _ago(0))
+    watchdog.check(log=lambda *_: None)
+    late = capture.capture(_chat(ext="spaces/S1/messages/late"))
+    db.ex("UPDATE messages SET sent_at=? WHERE id=?", (_ago(300), late))
+    waited = capture.capture(_chat(ext="spaces/S1/messages/wait"))
+    db.ex("INSERT INTO message_timings(message_id, started_at, status) VALUES (?,?,?)",
+          (waited, (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat(timespec="seconds"), "done"))
+    now = datetime.now(timezone.utc)
+    out = digest.build(now - timedelta(days=1), now + timedelta(hours=1))
+    notes = " ".join(out["notes"])
+    assert "was not running from" in notes
+    assert f"Message {late} " in notes and "reached the bot late" in notes
+    assert f"Message {waited} " in notes and "waited 30 minutes" in notes
+    assert out["footer"].startswith("Gaps and late messages") and SAFETY_NOTICE in out["footer"]
+
+
+def test_sender_not_on_the_people_list_is_flagged(monkeypatch):
+    from cormon import config, digest, senders
+
+    study = config.study("NCT04098666")
+    known = next(p.email for p in study.people if p.email)
+    assert senders.flags({"channel": "teams", "from_addr": known}, study) == []
+    assert "not on the study's people list" in senders.flags({"channel": "teams", "from_addr": "x@else.org"}, study)[0]
+    forged = {"channel": "email", "from_addr": known, "headers": {"_cormon_sender_check": {"result": "fail"}}}
+    assert "sender check failed" in senders.flags(forged, study)[0]
+
+
+def test_each_question_is_hashed_and_an_unanswered_one_is_its_own_record(monkeypatch):
+    from cormon import answers
+
+    found = {"question": "What is the Week 4 window?", "found": True, "text": "Day 28 ± 3."}
+    missed = {"question": "What is the wifi password?", "found": False, "text": "Not in the documents."}
+    monkeypatch.setattr(answers, "answer_message", lambda *a, **k: [found, missed])
+    monkeypatch.setattr(answers, "save_page", lambda *a, **k: "tok")
+    monkeypatch.setattr(answers, "render", lambda *a, **k: "reply")
+    monkeypatch.setattr(answers, "_post", lambda *a, **k: 5)
+    monkeypatch.setattr(answers, "cra_names", lambda s: [])
+    answers.reply(SimpleNamespace(study_id="S1"), {"id": 9, "channel": "teams"}, "x@site.org")
+    a = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='question_answered'")["details"])
+    assert a["question_sha256"][0] == records.sha256("what is the week 4 window?")
+    miss = db.q("SELECT details FROM audit_log WHERE action='question_not_answered'")
+    assert len(miss) == 1 and "wifi" in miss[0]["details"]
+
+
+def _item(iid, state="open", routed=1, kind="finding"):
+    db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind,"
+          " polarity, title, tier, evidence, link_token, created_at, updated_at, state, routed)"
+          " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (iid, "S1", "t", 1, 1, f"k{iid}", kind, "problem", "x", "medium", "{}", f"l{iid}", db.now(), db.now(),
+           state, routed))
+
+
+def test_steps_must_happen_in_order():
+    from cormon import items
+
+    _item(1, routed=0)
+    with pytest.raises(items.StepOrder, match="never sent"):
+        items.set_state(1, "cleared", "cra@site.org", "cra", study_id="S1")
+    items.set_state(1, "cleared", "ops", "operator", study_id="S1")             # the operator may
+    with pytest.raises(items.StepOrder, match="already cleared"):
+        items.set_state(1, "cleared", "ops", "operator", study_id="S1")
+    _item(2, state="out_of_scope")
+    for state in ("cleared", "suppressed"):
+        with pytest.raises(items.StepOrder, match="safety item"):
+            items.set_state(2, state, "ops", "operator", study_id="S1")
+    assert items.get(2)["state"] == "out_of_scope"
+    assert db.q1("SELECT COUNT(*) n FROM audit_log WHERE action='item_change_refused_order'")["n"] == 4
+
+
+def test_a_reply_cannot_clear_a_safety_item(monkeypatch):
+    from cormon import items, pipeline
+
+    _item(3, state="out_of_scope")
+    said = []
+    monkeypatch.setattr(pipeline, "_answer_in_chat", lambda study, msg, text: said.append(text))
+    person = SimpleNamespace(name="Ann", email="cra@site.org", roles=["cra"])
+    study = SimpleNamespace(study_id="S1", person_by_email=lambda a: person)
+    msg = {"id": 1, "channel": "teams", "study_id": "S1", "from_addr": "cra@site.org", "headers": {}}
+    assert pipeline.handle_instruction(study, msg, {"type": "disregard", "text": "ignore #3"}) is False
+    assert items.get(3)["state"] == "out_of_scope" and items.get(3)["counts"] == 1
+    assert "safety item" in said[0]
+
 
 def test_every_digest_says_silence_is_not_clearance():
     from cormon import digest

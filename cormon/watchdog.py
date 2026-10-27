@@ -28,12 +28,18 @@ def stalled() -> bool:
 def check(log=print) -> dict:
     age = minutes_since_heartbeat()
     if stalled():
+        if not db.get_state("down_since"):
+            db.set_state("down_since", db.get_state("heartbeat") or db.now())
         when = "never" if age is None else f"{age:.0f} minutes ago"
         oid = alerts.notify("stalled", "Study monitor: the bot has stopped",
                             f"The bot last checked in {when}. Until it is running again it is not reading or "
                             "sending messages. Messages are not lost: they are read when it restarts.")
         log(f"bot stalled (last heartbeat {when}){'; admins emailed' if oid else ''}")
         return {"stalled": True, "minutes": age, "alerted": oid}
+    since = db.get_state("down_since")
+    if since:   # the gap is kept for the digest (digest.py)
+        db.audit("bot_downtime", entity_type="service", entity_id="listener", start=since, end=db.now())
+        db.set_state("down_since", "")
     oid = alerts.clear("stalled", "Study monitor: the bot is running again",
                        f"The bot checked in {age:.0f} minute(s) ago and is reading messages again.")
     return {"stalled": False, "minutes": age, "recovered": oid}

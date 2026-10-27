@@ -267,6 +267,17 @@ def cmd_watchdog(args):
     watchdog.check()
 
 
+def cmd_scan(args):
+    from .compliance import deps
+    res = deps.scan()
+    print(f"{res['packages']} packages; list written to {res['sbom']}")
+    for p in res["problems"]:
+        print(f"  KNOWN PROBLEM  {p['name']} {p['version']}: {', '.join(p['ids'])}")
+    if res["problems"]:
+        sys.exit(1)
+    print("no known security problems")
+
+
 def cmd_restore(args):
     from . import backup
     if not args.yes:
@@ -804,6 +815,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_verify)
     sub.add_parser("watchdog", help="email the admins if the listener has stopped (run by a 5-minute timer)"
                    ).set_defaults(fn=cmd_watchdog)
+    sub.add_parser("scan", help="list the installed packages (SBOM) and check them for known security problems"
+                   ).set_defaults(fn=cmd_scan)
     s = sub.add_parser("restore", help="replace the database with a checked backup (service stopped)")
     s.add_argument("file"); s.add_argument("--yes", action="store_true"); s.set_defaults(fn=cmd_restore)
     s = sub.add_parser("purge", help="clear message text older than the retention period")
@@ -909,7 +922,7 @@ def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     try:
         args.fn(args)
-    except KeyError as e:
+    except (KeyError, items.StepOrder) as e:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
 

@@ -95,7 +95,11 @@ def structured(
         data = _call(task, model, system, user, schema, schema_name, key, temperature, seed, reasoning, effort)
     except Exception as e:
         log(None, cached=False, ok=False, error=str(e)[:500])
-        raise
+        backup = settings.get("llm.fallback")
+        if not backup or backup == model:
+            raise
+        _fell_back(task, model, backup, e)
+        return structured(task, system, user, schema, schema_name, use_cache=use_cache, model=backup)
     else:
         log(json.dumps(data), cached=False)
         return data
@@ -104,6 +108,44 @@ def structured(
             with _flying_lock:
                 _flying.pop(key, None)
             mine.set()
+
+
+def _fell_back(task: str, model: str, backup: str, error: Exception) -> None:
+    from .compliance import alerts
+    db.audit("llm_fallback", entity_type="llm", entity_id=task, model=model, used=backup, error=str(error)[:300])
+    alerts.notify(f"model:{model}", f"Study monitor: the AI model {model} is failing",
+                  f"Calls to {model} failed after every retry ({str(error)[:300]}), so the bot used the backup "
+                  f"model {backup} for '{task}'. Answers from the backup model have not been tested as well. "
+                  "Check the model, or change llm.models in the settings.")
+
+
+def configured_models() -> set[str]:
+    models = set((settings.get("llm.models") or {}).values())
+    models |= {m for m in (settings.get("llm.fallback"), settings.get("llm.models.decisions")) if m}
+    return {m for m in models if isinstance(m, str)}
+
+
+def check_models(log=print) -> list[str] | None:
+    """Once a week: every model the settings name is still offered (a model being retired disappears from the
+    list). A missing one is recorded and the admins are told."""
+    from datetime import datetime, timezone
+
+    from .compliance import alerts
+    week = datetime.now(timezone.utc).strftime("%G-W%V")
+    if db.get_state("models_week") == week:
+        return None
+    db.set_state("models_week", week)
+    offered = {m.id for m in client().models.list()}
+    gone = sorted(m for m in configured_models() if m not in offered)
+    db.audit("models_checked", entity_type="llm", entity_id="models", configured=sorted(configured_models()),
+             missing=gone)
+    if gone:
+        alerts.notify("models", "Study monitor: an AI model in the settings is no longer offered",
+                      f"OpenAI no longer lists: {', '.join(gone)}. Calls to it will fail soon or already do. "
+                      "Pick a replacement, run the test sets with it, then change llm.models.",
+                      every_minutes=7 * 24 * 60)
+    log(f"models checked: {len(configured_models())} configured, {len(gone)} not offered")
+    return gone
 
 
 # a call started early (to save time) and the same call made later wait for one answer instead of asking twice

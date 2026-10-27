@@ -24,6 +24,16 @@ BUILT = ("local",)
 FIELDS = ("ts", "actor", "actor_type", "action", "entity_type", "entity_id", "study_id", "details")
 _lock = threading.Lock()
 
+# rows changed in place: every change is kept in row_changes with its old and new value. Patient text (the
+# columns listed) is kept as its length only, so the retention purge still removes it.
+TRACKED = {
+    "messages": {"from_name", "subject", "body_text", "body_html", "headers", "error"},
+    "attachments": {"filename", "text"},
+    "items": {"title", "evidence", "reasoning", "tier_reason", "recipient_reason"},
+    "outbox": {"subject", "body", "meta", "last_error"},
+    "rules": {"text", "source_quote"},
+}
+
 
 def _line(row) -> str:
     return json.dumps([row[k] for k in FIELDS], ensure_ascii=False, separators=(",", ":"))
@@ -63,6 +73,93 @@ def append(row: dict) -> int:
                 c.execute("ROLLBACK")
             raise
     return rid
+
+
+def _trigger_sql(c: sqlite3.Connection, table: str) -> tuple[str, list[str]]:
+    cols = [r[1] for r in c.execute(f"PRAGMA table_info({table})")]
+    key = "id"
+    parts = []
+    for col in cols:
+        if col == key:
+            continue
+        if col in TRACKED[table]:
+            value = f"json_array(length(OLD.{col}), length(NEW.{col}))"
+            name = f"{col}:chars"
+        else:
+            value = f"json_array(OLD.{col}, NEW.{col})"
+            name = col
+        parts.append(f"'{name}', CASE WHEN OLD.{col} IS NOT NEW.{col} THEN {value} END")
+    changed = " OR ".join(f"OLD.{c} IS NOT NEW.{c}" for c in cols if c != key)
+    ts = "strftime('%Y-%m-%dT%H:%M:%S+00:00','now')"
+    tag = sha256(",".join(cols))[:8]
+    update = (f"CREATE TRIGGER chg_{table}_{tag}_u AFTER UPDATE ON {table} WHEN {changed} BEGIN "
+              f"INSERT INTO row_changes(ts, tbl, row_id, changes) VALUES ({ts}, '{table}', OLD.{key}, "
+              f"json_patch('{{}}', json_object({', '.join(parts)}))); END")
+    delete = (f"CREATE TRIGGER chg_{table}_{tag}_d AFTER DELETE ON {table} BEGIN "
+              f"INSERT INTO row_changes(ts, tbl, row_id, changes) VALUES ({ts}, '{table}', OLD.{key}, "
+              f"'{{\"_deleted\":true}}'); END")
+    return tag, [update, delete]
+
+
+def track_changes(c: sqlite3.Connection) -> None:
+    """(Re)make the change triggers; made again when a table gains a column."""
+    for table in TRACKED:
+        tag, sqls = _trigger_sql(c, table)
+        have = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE ?",
+                                        (f"chg_{table}_%",))]
+        if sorted(have) == sorted([f"chg_{table}_{tag}_u", f"chg_{table}_{tag}_d"]):
+            continue
+        for name in have:
+            c.execute(f"DROP TRIGGER {name}")
+        for sql in sqls:
+            c.execute(sql)
+
+
+def _changes_hash(c: sqlite3.Connection, first: int, last: int) -> tuple[str, int]:
+    h, n = hashlib.sha256(), 0
+    for r in c.execute("SELECT id, ts, tbl, row_id, changes FROM row_changes WHERE id BETWEEN ? AND ? ORDER BY id",
+                       (first, last)):
+        h.update((json.dumps(list(r), ensure_ascii=False, separators=(",", ":")) + "\n").encode())
+        n += 1
+    return h.hexdigest(), n
+
+
+def seal_changes(log=print) -> dict | None:
+    """Fold the row changes since the last seal into the audit chain (one entry with their hash), so a change
+    record altered or removed later breaks the check. Run every hour."""
+    c = db.conn()
+    last = db.q1("SELECT MAX(id) m FROM row_changes")["m"]
+    done = int(db.get_state("changes_sealed_to") or 0)
+    if not last or last <= done:
+        return None
+    digest, n = _changes_hash(c, done + 1, last)
+    db.audit("row_changes_sealed", entity_type="service", entity_id="row_changes", first=done + 1, last=last,
+             rows=n, sha256=digest)
+    db.set_state("changes_sealed_to", str(last))
+    return {"first": done + 1, "last": last, "rows": n}
+
+
+def hourly(log=print) -> dict | None:
+    hour = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
+    if db.get_state("changes_hour") == hour:
+        return None
+    db.set_state("changes_hour", hour)
+    return seal_changes(log)
+
+
+def _verify_changes(c: sqlite3.Connection) -> dict | None:
+    """None while every sealed range of row changes still has the hash it was sealed with."""
+    end = 0
+    for r in c.execute("SELECT id, details FROM audit_log WHERE action='row_changes_sealed' ORDER BY id"):
+        d = json.loads(r["details"] or "{}")
+        digest, n = _changes_hash(c, d["first"], d["last"])
+        if digest != d["sha256"] or n != d["rows"]:
+            return {"ok": False, "broken_at": r["id"],
+                    "why": f"the record of changes {d['first']} to {d['last']} was altered after it was sealed"}
+        if d["first"] != end + 1:
+            return {"ok": False, "broken_at": r["id"], "why": "a range of the change record was never sealed"}
+        end = d["last"]
+    return None
 
 
 def anchor_file() -> Path:
@@ -116,6 +213,9 @@ def verify() -> dict:
     for at, aid, ahash in anchors():
         if hashes.get(aid) != ahash:
             return {"ok": False, "broken_at": aid, "why": f"the anchor written {at} no longer matches (entries removed?)"}
+    bad = _verify_changes(c)
+    if bad:
+        return bad
     return {"ok": True, "entries": checked, "chain_start": start, "last_hash": prev, "anchors": len(anchors())}
 
 
