@@ -1,11 +1,13 @@
 # 21 CFR Part 11, Part I: where we stand and how we build it
 
-Draft for Eliot, 2026-10-27. Covers Part I of the compliance PRD (the developer's list). Part II (policies,
-contracts, programs) is Eliot's and is not covered here. Nothing in this plan has been built yet.
+For Eliot, 2026-10-27. Covers Part I of the compliance PRD (the developer's list). Part II (policies,
+contracts, programs) is Eliot's and is not covered here. The free groundwork (Phase 1, first part) was built,
+tested and deployed to the live bot on 27 Oct; the rest is not built yet.
 
 ## 1. Summary
 
-- Part I has 71 requirement IDs. Today: 7 done, 41 partly done, 21 not done, 2 are V2 (later).
+- Part I has 71 requirement IDs. Before this work: 7 done, 41 partly done, 21 not done, 2 are V2 (later).
+  After the 27 Oct deploy: 12 done, 40 partly done, 17 not done, 2 V2.
 - Nothing we found needs a rewrite. Most gaps are missing records (hashes, versions, full AI logs) or missing
   workflow (safety routing, clearing grammar, bounces, recall).
 - Approach, as Eliot asked: a thin wrapper (facade) in front of each compliance function. Each wrapper has a
@@ -13,8 +15,31 @@ contracts, programs) is Eliot's and is not covered here. Nothing in this plan ha
   calls the wrapper, so switching on the paid services is a configuration change plus a revalidation run.
 - The current server (e2-micro) is enough for now. No new paid services are needed until we switch on the
   certified backends. Estimated cost at that point is a few dollars a month at today's data size (section 6).
-- Four product decisions are needed from Eliot before some of the work (section 7). The biggest: today the AI
-  can clear or suppress an alert from a reply, which the PRD forbids (OUT-03, DSP-01).
+- Six product decisions and two scope checks are needed from Eliot before the rest of the work (section 7). The
+  biggest: today the AI can clear or suppress an alert from a reply, which the PRD forbids (OUT-03, DSP-01).
+
+### Deployed on 27 Oct
+
+- Wrappers for records, audit trail, AI log, secrets and alerts (`cormon/compliance/`), all on the free local
+  or email backend. Naming a backend that is not built yet stops the bot instead of quietly using another.
+- A SHA-256 fingerprint for every message, attachment and sent message when it arrives or goes out. What the bot
+  reads from a message carries the message's hash. Every night the bot hashes the files again; a message whose
+  original no longer matches is not read, and the admins are emailed. Messages from before 27 Oct were
+  fingerprinted on 27 Oct, so they are protected from then on but prove nothing about earlier.
+- The audit trail is hash-chained: each entry includes the hash of the one before. Every day the whole chain is
+  checked and the latest hash is written to a separate anchor file. A changed, removed or inserted entry, or
+  entries cut off the end, are caught.
+- Every AI call is logged in full: the request, the answer, the model and its settings, cache hit or not, the
+  message and its hash, the study-model fingerprint and the config version. It holds patient text, so it is
+  kept and purged with the message text.
+- An edited or deleted Google Chat message is kept as a new version; the original is never changed.
+- The sentence "This system does not guarantee the detection of safety signals. Silence does not constitute
+  clearance." is on every digest, item page and admin page.
+- A separate watchdog runs every 5 minutes. If the bot has not checked in for 15 minutes it emails Peter,
+  Eliot and John, again every hour while it lasts, and once when it is back. `/health` returns an error while
+  the bot is stalled. A message waiting more than 15 minutes, or a mailbox not read for 15 minutes, is also
+  emailed.
+- `cormon verify` runs the audit-trail and fingerprint checks by hand. 33 new tests; all 185 pass.
 
 ## 2. The wrappers (facades)
 
@@ -23,10 +48,10 @@ of the wider "split the code into components" work.
 
 | Wrapper | Job | Local backend (now, free) | Certified backend (later) | PRD IDs |
 |---|---|---|---|---|
-| `records` | Store every original (email bytes, chat JSON, attachments, sent messages) with its SHA-256; read and verify by hash | Files under `data/records/` plus a manifest table | Cloud Storage bucket with retention lock (write once, never edit), separate project | CAP-01, CAP-02, CAP-03, OUT-01, EXP-01 |
+| `records` | Store every original (email bytes, chat JSON, attachments, sent messages) with its SHA-256; read and verify by hash | Files under `data/` plus a `records` table of hashes | Cloud Storage bucket with retention lock (write once, never edit), separate project | CAP-01, CAP-02, CAP-03, OUT-01, EXP-01 |
 | `trail` | The audit trail: append-only, each entry hash-chained to the one before, a daily anchor, a verifier | SQLite `audit_log` (already append-only by trigger) plus the chain columns; daily anchor written to a separate file | Same entries mirrored to the locked bucket; anchor in a place the operator role cannot write | AUD-01, AUD-02, AUD-08, SAF-07 |
 | `ailog` | Full record of every AI call: prompt, answer, model and settings, rule-set and study-model version, source hash | SQLite table | Locked bucket (it holds patient text, so it is a PHI store with its own access) | AUD-05, QAA-01, PRV-01 |
-| `secrets` | One place every credential is read from | Today's env vars and files | Secret Manager (already used for two secrets), per-person access, rotation | SEC-03, IAM-04 |
+| `secrets` | One place every credential is read from | Environment variable, else Secret Manager | Secret Manager (already used for two secrets), per-person access, rotation | SEC-03, IAM-04 |
 | `backups` | Copy the database and records, check the copy, restore | Today's daily local copy (`cormon/backup.py`) | Hourly copy to a bucket (RPO 1 hour), timed restore test (RTO 4 hours) | BCK-01 |
 | `alerts` | Tell a human the bot is unhealthy (no heartbeat, ingestion lag, failed sends) | Email to the admins | A paging service | ARC-04, OUT-06, SAF-05 |
 | `keys` | Encryption keys | Google's default disk encryption | Cloud KMS key held by a separate key-admin role | SEC-01, IAM-04 |
@@ -38,9 +63,12 @@ compliance:
   records: local      # local | gcs_locked
   trail: local        # local | gcs_locked
   ailog: local        # local | gcs_locked
-  backups: local      # local | gcs
+  secrets: local      # local | secret_manager
   alerts: email       # email | pager
 ```
+
+The first five wrappers are built (27 Oct). `backups` stays the existing component until Phase 3; `keys` is
+Phase 3.
 
 Each wrapper has a test suite that runs against both backends. That way, flipping a setting also runs the
 same tests that prove the certified backend behaves like the local one.
@@ -56,10 +84,20 @@ The existing code already has natural chokepoints to put these in front of, so t
 
 ## 3. Where we stand, requirement by requirement
 
-Status from reading the code on 2026-10-27. "Partly" means part of the requirement is in place; the gap is
-the note.
+Status from reading the code on 2026-10-27, updated after the 27 Oct deploy. "Partly" means part of the
+requirement is in place; the gap is the note.
 
-### Done (7)
+### Done (12)
+
+Done on 27 Oct:
+
+- CAP-02 SHA-256 at capture; events carry the source hash; nightly re-check; a changed original is not read.
+- CAP-03 Chat edits and deletes kept as new versions.
+- AUD-05 Every AI call logged in full with model, settings, study-model and config version, and source hash.
+- AUD-08 The AI log is kept as long as the message text, and the audit trail forever.
+- SAF-11 The required sentence is on every digest, item page and admin page.
+
+Done before:
 
 - QAA-03 Fixed disclaimer footer on every answer.
 - AUD-03 All times stored in UTC; display timezone shown.
@@ -69,21 +107,17 @@ the note.
 - ARC-02 HTTPS through Caddy; mail and AI calls over TLS.
 - OUT-08 No approval queue, which matches the PRD's default (unattended send).
 
-### Not done (21)
+### Not done (17)
 
 | ID | What is missing |
 |---|---|
-| CAP-02 | Deployed 27 Oct: SHA-256 at capture, events carry the source hash, nightly re-check |
-| CAP-03 | Deployed 27 Oct: chat edits and deletes kept as new versions |
 | CAP-10 | No check that the mailbox and our store agree; no mailbox retention procedure |
 | OUT-06 | Bounces and non-delivery are not detected |
 | OUT-07 | No recall/correction of a sent alert |
 | SAF-03 | No severity taxonomy, no 1-hour / 24-hour acknowledgment clock |
 | SAF-04 | No safety acknowledgment by the medical monitor |
 | SAF-05 | No escalation chain (PV backup, ClinOps lead, then a human by phone) |
-| SAF-11 | The required sentence ("does not guarantee the detection of safety signals. Silence does not constitute clearance.") is not shown |
 | DSP-02 | No "reply CONFIRM" step before a clear takes effect |
-| AUD-05 | Deployed 27 Oct: every AI call logged in full with model, study model and config version |
 | CFG-02 | Changing rules or prompts does not run the test sets |
 | ARC-03 | No formal step-order checks (clear needs an alert, acknowledgment needs a routing) |
 | EXP-01 | `export.py` exports the rules, not a study's records package |
@@ -95,30 +129,30 @@ the note.
 | VAL-05 | Model, prompt or rule changes do not trigger test runs |
 | GOV-02 | No production drift monitoring (sampling for misses, grounding failure rate) |
 
-### Partly done (41)
+### Partly done (40)
 
 | ID | In place | Gap |
 |---|---|---|
-| CAP-01 | Email raw `.eml`, attachments, headers, arrival time | Chat attachments not fetched as bytes; no hashes |
+| CAP-01 | Email raw `.eml`, attachments, headers, arrival time, all hashed (27 Oct) | Chat attachments not fetched as bytes |
 | CAP-04 | Arrival time is ours; sender's time kept | Sender time not marked "untrusted"; pages don't show both |
 | CAP-05 | Sender checks run and are stored; a failed sender cannot clear | Not shown as a flag on the record or in the digest |
 | CAP-06 | Plus-address picks the study; untagged mail never matched | Senders not on the roster are not flagged or kept from sponsor-facing posts |
 | CAP-07 | Chat by push, catch-up every minute | Email is polled; no hourly reconciliation by Gmail history ID |
 | CAP-08 | Digest states its window | No gaps or late items in the digest |
 | CAP-09 | Recipients come from config, not the AI | No adversarial injection test set |
-| OUT-01 | Rendered text stored per sent message | No hash; not write-once |
+| OUT-01 | Rendered text stored per sent message, hashed and re-checked nightly (27 Oct) | Not write-once (Phase 3) |
 | OUT-02 | Gmail sends with its own SPF/DKIM | DMARC `p=reject` on the sending domain is a DNS task |
 | OUT-03 | Who and where come from config | AI decides some "whether": the doctor check (withhold from chat), the careful check, and clearing from a reply (see section 7) |
 | OUT-04 | Templates are fixed; AI edit is optional and checked | No schema check for new facts or instructions |
 | OUT-05 | Pause switch stops sending, ingestion keeps going | No per-study hourly send cap |
-| QAA-01 | Answers saved with an audit entry | No full AI context; no question hash |
+| QAA-01 | Answers saved with an audit entry; full AI context in the AI log (27 Oct) | No question hash |
 | QAA-02 | Answers must quote the documents; "not found" sends to the CRA | Refusal is not logged as its own record |
 | QAA-04 | Q&A test bench with scores | No pass/fail threshold that blocks a release |
 | QAA-05 | Physician rules and calm-reply templates | Templates not under versioned config with approver |
 | QAA-06 | Prompts forbid clinical judgment | No output check |
 | SAF-02 | Safety messages are kept out of normal checks | Routed to nobody today; the medical monitor's email is still missing |
 | SAF-06 | Stuck-message and missed-routing checks | No tests for "no monitor assigned", "recipient unreachable", "router down" |
-| SAF-07 | Safety detection is in the audit log | No source hash; not in an export |
+| SAF-07 | Safety detection is in the audit log, which is hash-chained (27 Oct); the message is fingerprinted | Not in an export |
 | SAF-10 | Site notice only fires on immediate findings from a coordinator | A message with both a safety part and a finding could still trigger it |
 | DSP-01 | Clear and disregard by reply or command | No token + action + reason-code grammar; the AI reads the intent |
 | DSP-03 | Only CRA, ClinOps lead or tester roles can clear by email | Token's study is not matched to the sender's study; commands not roster-checked |
@@ -129,13 +163,12 @@ the note.
 | IAM-04 | Two secrets already in Secret Manager | No separate key-admin role or rotation |
 | AUD-01 | Audit log cannot be edited (database trigger); overrides log old and new values | Many tables are updated in place without old/new in the audit |
 | AUD-02 | Append-only by trigger; never pruned; hash chain, daily anchor and verifier built and deployed 27 Oct | No separate write-once store (Phase 3) |
-| AUD-08 | Audit log kept forever | AI cache is deleted with the patient-data purge, so the AI context does not live as long as the record |
 | CFG-01 | Config files snapshotted with hash and actor; rules carry their document's hash | No approver or effective date; a rebuild replaces the rules |
-| ARC-04 | Heartbeat every tick; admin page marks stale after 5 minutes | `/health` ignores the heartbeat; nothing pages anyone |
+| ARC-04 | Heartbeat every tick; `/health` and a separate watchdog email the admins after 15 minutes (27 Oct) | Email, not a pager with escalation (Phase 3) |
 | SDL-01 | Git, tests before deploy (by habit) | No enforced review before deploy |
 | SDL-03 | Live bot on its own server; practice copies on the laptop | Not enforced by a setting |
 | SEC-01 | TLS in transit; Google disk encryption | No app-level encryption or customer key |
-| SEC-03 | Some secrets in Secret Manager | Others in env vars and files; no rotation |
+| SEC-03 | Credentials read through one wrapper (27 Oct); two in Secret Manager | Others in env vars and files; no rotation |
 | PRV-01 | Patient details masked in the audit log; retention purge | No ICF coverage check at study activation |
 | PRV-04 | Same as SDL-03 | Same |
 | BCK-01 | Daily backup, checked, 7 kept, restore command | Not hourly; not off the server; restore time not tested |
@@ -147,12 +180,12 @@ the note.
 
 ### Phase 1: the free foundation (no new services, no behaviour change for users)
 
-Built and deployed 27 Oct 2026: the wrappers (`cormon/compliance/`), item 2, item 3 (the chain,
-anchor and verifier; old/new values on in-place updates not yet), item 4, item 5 (edits and deletes; chat
-attachment bytes not yet), the safety sentence from item 7, and the `/health` and 15-minute stall alert from item 9
-(`cormon/watchdog.py`, `deploy/cormon-watchdog.timer`). `cormon verify` runs the checks by hand. Still to do in
-Phase 1: item 6, the rest of 7, item 8 (ask Eliot first), the hourly email reconciliation, item 10 (ask Eliot
-which CI).
+Deployed 27 Oct: item 1 (five wrappers), item 2, item 3 (chain, anchor, verifier), item 4, item 5 (edits and
+deletes), the safety sentence from item 7, and item 9 except the hourly email reconciliation.
+
+Still to do in Phase 1, in this order: old/new values in the audit (rest of item 3), chat attachment bytes (rest
+of item 5), item 6, the rest of item 7, the hourly email reconciliation (item 9), then item 8 and item 10 once
+Eliot answers the two scope checks in section 7.
 
 1. Create the wrappers with local backends: `records`, `trail`, `ailog`, `backups`, `alerts`, `secrets`.
    Route the existing chokepoints through them. Each has its own tests, run against the local backend.
@@ -214,6 +247,15 @@ only when certifying.
 
 ## 7. Decisions needed from Eliot
 
+Scope checks (Phase 1 items we have not started):
+
+A. Records export package (EXP-01, item 8): a study's originals, the hash manifest, audit trail, AI log, config
+   history and a PDF/CSV of alerts and dispositions. It is a sizeable job. Do it now, or later?
+B. Automatic tests before deploy (SDL-05, item 10): GitHub Actions (free, but a new service for us), or a gate
+   in our own deploy script that refuses to deploy when tests fail?
+
+Product decisions (Phase 2):
+
 1. AI and consequences (OUT-03, DSP-01). Today the AI can (a) clear or suppress an alert from a reply, after
    the sender and role checks; (b) keep an alert out of the group chat and send it by email only (the doctor
    check and the careful check). Proposal: (a) is replaced by the token grammar in Phase 2. For (b), the AI
@@ -225,3 +267,5 @@ only when certifying.
    activation, or us as a draft for them to approve?
 4. Retention. The PRD default is 2 years after study end (RET-01). The bot is set to 7 years today. Which do we
    use?
+5. Protocol versions by site and date (VAL-04). The largest single item: each finding would be checked against
+   the protocol version in force at that site on that date. When should we do it?
