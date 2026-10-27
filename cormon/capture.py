@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from dateutil import parser as dtparser
 
 from . import config, db, senders, settings
+from .compliance import records
 
 
 @dataclass
@@ -50,6 +51,8 @@ class Inbound:
     study_id: str | None = None       # set by channel adapters that know it (Teams)
     visibility: str | None = None     # set by channel adapters that know it (Teams)
     reply_to_external: str | None = None  # Teams: id of the message this replies to
+    edited_at: str | None = None      # chat: when the author last edited it
+    deleted_at: str | None = None     # chat: when the author deleted it
 
 
 # ---------------------------------------------------------------- email parsing
@@ -246,23 +249,56 @@ def resolve_email_route(inb: Inbound) -> tuple[str | None, str | None, str]:
 
 # ---------------------------------------------------------------- store
 
-def _save_raw(channel: str, msg_id: int, raw: bytes | None) -> str | None:
-    if raw is None:
-        return None
-    d = settings.data_dir() / "raw" / channel
-    d.mkdir(parents=True, exist_ok=True)
-    p = d / f"{msg_id}.{'eml' if channel == 'email' else 'json'}"
-    p.write_bytes(raw)
-    return str(p.relative_to(settings.data_dir()))
+def _fields(inb: Inbound) -> bytes:
+    """What arrived, when the channel gave no raw copy (tests, some simulators)."""
+    return db.js({"channel": inb.channel, "external_id": inb.external_id, "from": inb.from_addr,
+                  "from_name": inb.from_name, "to": inb.to_addrs, "cc": inb.cc_addrs, "subject": inb.subject,
+                  "body_text": inb.body_text, "body_html": inb.body_html, "sent_at": inb.sent_at,
+                  "edited_at": inb.edited_at, "deleted_at": inb.deleted_at}).encode()
 
 
-def _save_attachment(msg_id: int, idx: int, att: InAttachment) -> str:
-    d = settings.data_dir() / "attachments" / str(msg_id)
-    d.mkdir(parents=True, exist_ok=True)
+def _save_raw(inb: Inbound, msg_id: int) -> tuple[str, str]:
+    """The original kept with its SHA-256 (compliance/records.py); returns (path under data/, hash)."""
+    if inb.raw is not None:
+        kind, data, name = "message_raw", inb.raw, f"{msg_id}.{'eml' if inb.channel == 'email' else 'json'}"
+    else:
+        kind, data, name = "message_fields", _fields(inb), f"{msg_id}.fields.json"
+    path = f"raw/{inb.channel}/{name}"
+    return path, records.put(kind, "message", msg_id, data, path)
+
+
+def _save_attachment(msg_id: int, idx: int, att: InAttachment) -> tuple[str, str]:
     safe = re.sub(r"[^A-Za-z0-9._-]+", "_", att.filename or f"att{idx}")[:80]
-    p = d / f"{idx:02d}_{safe}"
-    p.write_bytes(att.data)
-    return str(p.relative_to(settings.data_dir()))
+    path = f"attachments/{msg_id}/{idx:02d}_{safe}"
+    return path, records.put("attachment", "message", msg_id, att.data, path)
+
+
+def _version(msg_id: int, inb: Inbound) -> int | None:
+    """A chat message edited or deleted after capture: kept as a new version beside the original, which is never
+    changed. Returns the new version number, or None when nothing changed."""
+    last = db.q1("SELECT version, change, body_text FROM message_versions WHERE message_id=? ORDER BY version DESC"
+                 " LIMIT 1", (msg_id,))
+    if last and last["change"] == "deleted":
+        return None
+    current = last["body_text"] if last else db.q1("SELECT body_text FROM messages WHERE id=?", (msg_id,))["body_text"]
+    if inb.deleted_at:
+        change = "deleted"
+    elif (inb.body_text or "") != (current or ""):
+        change = "edited"
+    else:
+        return None
+    version = (last["version"] if last else 0) + 1
+    path = f"raw/{inb.channel}/{msg_id}.v{version}.json"
+    digest = records.put("message_version", "message", msg_id, inb.raw if inb.raw is not None else _fields(inb), path)
+    study = db.q1("SELECT study_id FROM messages WHERE id=?", (msg_id,))["study_id"]
+    db.ex("INSERT INTO message_versions(message_id, version, change, body_text, body_html, sha256, raw_path,"
+          " changed_at, received_at) VALUES (?,?,?,?,?,?,?,?,?)",
+          (msg_id, version, change, None if change == "deleted" else inb.body_text,
+           None if change == "deleted" else inb.body_html, digest, path,
+           inb.deleted_at or inb.edited_at, db.now()))
+    db.audit(f"message_{change}", entity_type="message", entity_id=msg_id, study_id=study, version=version,
+             changed_at=inb.deleted_at or inb.edited_at, sha256=digest)
+    return version
 
 
 def known_rfc_ids() -> set[str]:
@@ -272,8 +308,14 @@ def known_rfc_ids() -> set[str]:
 
 
 def capture(inb: Inbound) -> int | None:
-    """Store a message. Returns its id, or None if it was already captured."""
-    if db.q1("SELECT id FROM messages WHERE channel=? AND external_id=?", (inb.channel, inb.external_id)):
+    """Store a message. Returns its id, or None if it was already captured (a chat message changed since is kept
+    as a new version)."""
+    seen = db.q1("SELECT id FROM messages WHERE channel=? AND external_id=?", (inb.channel, inb.external_id))
+    if seen:
+        if inb.channel == "teams":
+            _version(seen["id"], inb)
+        return None
+    if inb.deleted_at:   # deleted before the bot ever read it: nothing to keep
         return None
 
     if inb.channel == "email":
@@ -311,17 +353,16 @@ def capture(inb: Inbound) -> int | None:
          inb.body_text, inb.body_html, db.js(meta), inb.rfc_message_id, inb.in_reply_to,
          db.js(inb.references), inb.sent_at, received, "new"),
     )
-    raw_path = _save_raw(inb.channel, msg_id, inb.raw)
-    if raw_path:
-        db.ex("UPDATE messages SET raw_path=? WHERE id=?", (raw_path, msg_id))
+    raw_path, digest = _save_raw(inb, msg_id)
+    db.ex("UPDATE messages SET raw_path=?, sha256=? WHERE id=?", (raw_path, digest, msg_id))
 
     for i, att in enumerate(inb.attachments):
-        path = _save_attachment(msg_id, i, att)
+        path, att_digest = _save_attachment(msg_id, i, att)
         db.ex(
-            "INSERT INTO attachments (message_id, filename, mime, size, path, text, component, source_date)"
-            " VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO attachments (message_id, filename, mime, size, path, text, component, source_date, sha256)"
+            " VALUES (?,?,?,?,?,?,?,?,?)",
             (msg_id, att.filename, att.mime, len(att.data), path, att.text, att.component,
-             att.source_date or inb.sent_at),
+             att.source_date or inb.sent_at, att_digest),
         )
 
     existing = db.q1("SELECT thread_key FROM threads WHERE thread_key=?", (thread_key,))
@@ -334,7 +375,7 @@ def capture(inb: Inbound) -> int | None:
     db.audit("message_captured", entity_type="message", entity_id=msg_id, study_id=study_id,
              channel=inb.channel, route=route, visibility=visibility, alias=alias,
              sender=inb.from_addr, subject=inb.subject, attachments=len(inb.attachments),
-             thread_key=thread_key, gap_refs=gap or None)
+             thread_key=thread_key, gap_refs=gap or None, sha256=digest)
     return msg_id
 
 

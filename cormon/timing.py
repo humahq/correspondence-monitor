@@ -24,7 +24,13 @@ def start(message_id: int) -> None:
         run = None
     with _lock:
         _now.clear()
-        _now.update(run=run, began=time.perf_counter(), step=None, step_began=None, steps={})
+        _now.update(run=run, message_id=message_id, began=time.perf_counter(), step=None, step_began=None, steps={})
+
+
+def current() -> tuple[int | None, int | None]:
+    """(timing run id, message id) of the message being read now; (None, None) outside a read."""
+    with _lock:
+        return _now.get("run"), _now.get("message_id")
 
 
 def step(name: str) -> None:

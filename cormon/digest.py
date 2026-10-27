@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from . import config, db, drafting, routing, settings
+from .compliance import SAFETY_NOTICE
 from .triage import TIER_LABELS
 
 GROUPS = [
@@ -63,7 +64,7 @@ def build(since: datetime, until: datetime, study_ids: list[str] | None = None) 
         "date": until.astimezone(tz).strftime("%d %b %Y"),
         "window": f"{since.astimezone(tz):%d %b %H:%M} to {until.astimezone(tz):%d %b %H:%M} ({tz.key})",
         "studies": studies_out, "total": total,
-        "footer": "Sent by the correspondence monitor. It does not review safety information.",
+        "footer": f"Sent by the correspondence monitor. It does not review safety information. {SAFETY_NOTICE}",
     }
 
 

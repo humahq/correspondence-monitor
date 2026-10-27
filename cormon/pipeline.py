@@ -9,6 +9,7 @@ from dateutil import parser as dtparser
 
 from . import (answers, asks, capture, careful, checks, config, conversation, db, events, guide, items, matching,
                outbox, reader, routing, senders, settings, textutil, timing, triage)
+from .compliance import records
 from .config import Study
 from . import drafting
 from .drafting import item_link, local_time
@@ -488,6 +489,14 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
     msg = capture.message(msg_id)
     summary: dict = {"message_id": msg_id, "route": msg["route"], "items_created": [], "items_repeat": [],
                      "historical": 0, "hypothetical": 0, "prevented": 0, "out_of_scope": 0, "findings": 0}
+    tampered = records.check_message(msg_id)
+    if tampered:   # the original no longer matches its fingerprint: nothing is read from it
+        db.ex("UPDATE messages SET status='error', error=? WHERE id=?",
+              ("original failed its fingerprint check: " + "; ".join(tampered)[:400], msg_id))
+        db.audit("message_integrity_failed", entity_type="message", entity_id=msg_id, study_id=msg["study_id"],
+                 problems=tampered)
+        summary["integrity_failed"] = tampered
+        return summary
     db.ex("UPDATE messages SET status='processing', processing_at=?, error=NULL WHERE id=?", (db.now(), msg_id))
     early = None
     try:

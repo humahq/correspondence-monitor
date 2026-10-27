@@ -25,7 +25,9 @@ from .. import db, settings
 EVENTS = "https://workspaceevents.googleapis.com/v1"
 PUBSUB = "https://pubsub.googleapis.com/v1"
 TARGET = "//chat.googleapis.com/spaces/-"   # every space the bot account is a member of
-TYPES = ["google.workspace.chat.message.v1.created"]
+# created: read the new message; updated and deleted: capture keeps the change as a new version (CAP-03)
+TYPES = ["google.workspace.chat.message.v1.created", "google.workspace.chat.message.v1.updated",
+         "google.workspace.chat.message.v1.deleted"]
 RENEW_DAYS = 3        # a subscription without message text lasts up to 7 days; renewed when fewer remain
 CHECK_HOURS = 6       # how often the service looks at the subscription
 PULL_SECONDS = 60     # a pull waits this long for a note before asking again
@@ -92,6 +94,11 @@ def ensure(http, log=print, force: bool = False) -> dict:
         http.delete(f"{EVENTS}/{sub['name']}", timeout=30)
         db.audit("chat_events_ended", entity_type="service", entity_id=sub["name"], state=sub.get("state"),
                  reason=sub.get("suspensionReason"))
+        sub = None
+    if sub and sub.get("eventTypes") and not set(TYPES) <= set(sub["eventTypes"]):
+        http.delete(f"{EVENTS}/{sub['name']}", timeout=30)   # made before edits were watched: made again below
+        db.audit("chat_events_types_changed", entity_type="service", entity_id=sub["name"],
+                 had=sub["eventTypes"], want=TYPES)
         sub = None
     if sub is None:
         r = http.post(f"{EVENTS}/subscriptions", json={

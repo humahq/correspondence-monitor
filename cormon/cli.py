@@ -243,6 +243,30 @@ def cmd_backup(args):
         print(f"  - {p}")
 
 
+def cmd_verify(args):
+    from .compliance import records, trail
+    if args.backfill:
+        print(f"fingerprinted {records.backfill()} message(s) captured before fingerprints were kept")
+    t = trail.verify()
+    print(f"audit trail: {'OK' if t['ok'] else 'BROKEN'}  " + (
+        f"{t['entries']} chained entries since #{t['chain_start']}, {t['anchors']} anchor(s)" if t["ok"]
+        else f"at entry {t['broken_at']}: {t['why']}"))
+    r = records.verify_all()
+    print(f"originals: {'OK' if r['ok'] else 'PROBLEMS'}  {r['checked']} checked")
+    for p in r["problems"]:
+        print(f"  - record {p['record']} ({p['kind']} of {p['owner']}): {p['why']}")
+    if args.anchor and t["ok"]:
+        a = trail.anchor()
+        print(f"anchored entry #{a['id']}" if a else "nothing to anchor")
+    if not (t["ok"] and r["ok"]):
+        raise SystemExit(1)
+
+
+def cmd_watchdog(args):
+    from . import watchdog
+    watchdog.check()
+
+
 def cmd_restore(args):
     from . import backup
     if not args.yes:
@@ -774,6 +798,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_status)
     s = sub.add_parser("backup", help="back up the database now and check the copy")
     s.add_argument("--check", metavar="FILE", help="only check an existing backup"); s.set_defaults(fn=cmd_backup)
+    s = sub.add_parser("verify", help="check the audit trail's hash chain and every original's fingerprint")
+    s.add_argument("--backfill", action="store_true", help="first fingerprint messages captured before fingerprints")
+    s.add_argument("--anchor", action="store_true", help="write today's anchor after a clean check")
+    s.set_defaults(fn=cmd_verify)
+    sub.add_parser("watchdog", help="email the admins if the listener has stopped (run by a 5-minute timer)"
+                   ).set_defaults(fn=cmd_watchdog)
     s = sub.add_parser("restore", help="replace the database with a checked backup (service stopped)")
     s.add_argument("file"); s.add_argument("--yes", action="store_true"); s.set_defaults(fn=cmd_restore)
     s = sub.add_parser("purge", help="clear message text older than the retention period")

@@ -8,6 +8,7 @@ import traceback
 
 from . import backup, capture, config, db, digest, outbox, phi, pipeline, settings, stuck, webview
 from .channels import chat_events, email_channel, teams_channel
+from .compliance import records, trail
 
 
 _last_poll: dict[str, float] = {}
@@ -51,6 +52,7 @@ def poll_channels(log=print, named: list[str] | None = None, force: bool = False
                 if mid:
                     n += 1
                     log(f"captured {name} message {mid}")  # no message text: the system log is not for patient data
+            db.set_state(f"polled:{name}", db.now())
         except Exception as e:
             if quick:  # the full read is made next tick instead
                 _last_poll.pop(name, None)
@@ -79,6 +81,8 @@ def tick(log=print, named: list[str] | None = None, force: bool = True) -> None:
     db.set_state("heartbeat", db.now())
     _safely(backup.daily, log)
     _safely(phi.daily, log)
+    _safely(trail.daily, log)
+    _safely(records.daily, log)
     if outbox.is_paused():
         return
     _safely(pipeline.recover_messages, log)

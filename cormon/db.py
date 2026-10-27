@@ -324,6 +324,58 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS ix_audit_entity ON audit_log(entity_type, entity_id);
 
+-- every original kept (raw message, attachment, sent message) with its SHA-256 at capture: compliance/records.py
+CREATE TABLE IF NOT EXISTS records (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,
+    owner_type TEXT NOT NULL,
+    owner_id INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    location TEXT,
+    created_at TEXT NOT NULL,
+    purged_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_records_owner ON records(owner_type, owner_id);
+
+-- a chat message edited or deleted after capture: each change a new version; the original row is never changed
+CREATE TABLE IF NOT EXISTS message_versions (
+    id INTEGER PRIMARY KEY,
+    message_id INTEGER NOT NULL REFERENCES messages(id),
+    version INTEGER NOT NULL,
+    change TEXT NOT NULL CHECK (change IN ('edited','deleted')),
+    body_text TEXT,
+    body_html TEXT,
+    sha256 TEXT NOT NULL,
+    raw_path TEXT,
+    changed_at TEXT,
+    received_at TEXT NOT NULL,
+    UNIQUE (message_id, version)
+);
+
+-- every AI call in full: compliance/ailog.py
+CREATE TABLE IF NOT EXISTS ai_log (
+    id INTEGER PRIMARY KEY,
+    ts TEXT NOT NULL,
+    run_id INTEGER,
+    message_id INTEGER,
+    message_sha256 TEXT,
+    study_id TEXT,
+    study_model TEXT,
+    config_version INTEGER,
+    task TEXT NOT NULL,
+    api TEXT NOT NULL,
+    model TEXT NOT NULL,
+    params TEXT NOT NULL,
+    request BLOB NOT NULL,
+    request_sha256 TEXT NOT NULL,
+    response TEXT,
+    cached INTEGER NOT NULL,
+    ok INTEGER NOT NULL,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_ai_log_message ON ai_log(message_id);
+
 CREATE TRIGGER IF NOT EXISTS audit_log_no_update BEFORE UPDATE ON audit_log
 BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS audit_log_no_delete BEFORE DELETE ON audit_log
@@ -369,6 +421,14 @@ MIGRATIONS = {
     # when a sender took the row; a row left 'sending' long after was interrupted
     ("outbox", "claimed_at"): "ALTER TABLE outbox ADD COLUMN claimed_at TEXT",
     ("messages", "processing_at"): "ALTER TABLE messages ADD COLUMN processing_at TEXT",
+    # SHA-256 of the original at capture; derived records carry their source's (compliance/records.py)
+    ("messages", "sha256"): "ALTER TABLE messages ADD COLUMN sha256 TEXT",
+    ("attachments", "sha256"): "ALTER TABLE attachments ADD COLUMN sha256 TEXT",
+    ("events", "source_sha256"): "ALTER TABLE events ADD COLUMN source_sha256 TEXT",
+    ("outbox", "sha256"): "ALTER TABLE outbox ADD COLUMN sha256 TEXT",
+    # the audit hash chain (compliance/trail.py)
+    ("audit_log", "prev_hash"): "ALTER TABLE audit_log ADD COLUMN prev_hash TEXT",
+    ("audit_log", "hash"): "ALTER TABLE audit_log ADD COLUMN hash TEXT",
 }
 INDEXES = ["CREATE INDEX IF NOT EXISTS ix_outbox_idem ON outbox(idem_key)"]
 
@@ -423,15 +483,14 @@ def audit(
     actor_type: str = "system",
     **details: Any,
 ) -> int:
-    """Append to the audit log and confirm the row was written. Patient details are masked first."""
+    """Append to the audit log (hash-chained: compliance/trail.py) and confirm the row was written. Patient details
+    are masked first."""
     from . import phi
+    from .compliance import trail
     details = phi.mask_all(details)
-    row_id = ex(
-        "INSERT INTO audit_log (ts, actor, actor_type, action, entity_type, entity_id, study_id, details)"
-        " VALUES (?,?,?,?,?,?,?,?)",
-        (now(), actor, actor_type, action, entity_type,
-         None if entity_id is None else str(entity_id), study_id, js(details)),
-    )
+    row_id = trail.append({
+        "ts": now(), "actor": actor, "actor_type": actor_type, "action": action, "entity_type": entity_type,
+        "entity_id": None if entity_id is None else str(entity_id), "study_id": study_id, "details": js(details)})
     if q1("SELECT id FROM audit_log WHERE id=?", (row_id,)) is None:
         raise RuntimeError(f"audit write for {action} could not be confirmed")
     return row_id

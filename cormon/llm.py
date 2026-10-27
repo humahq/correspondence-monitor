@@ -6,6 +6,7 @@ runs; `use_cache=False` forces a fresh call (operator re-run).
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
@@ -14,6 +15,7 @@ import time
 from typing import Any
 
 from . import db, settings, timing
+from .compliance import ailog
 
 _client = None
 
@@ -72,11 +74,15 @@ def structured(
         json.dumps([model, temperature, system, user, schema] + ([effort] if effort else []),
                    sort_keys=True).encode()
     ).hexdigest()
+    log = functools.partial(ailog.record, task, "chat.completions", model,
+                            {"effort": effort} if reasoning else {"temperature": temperature, "seed": seed},
+                            {"system": system, "user": user, "schema_name": schema_name, "schema": schema})
     mine = None
     while use_cache:
         row = db.q1("SELECT response FROM llm_cache WHERE key=?", (key,))
         if row:
             timing.llm_call(task, model, 0, cached=True)
+            log(row["response"], cached=True)
             return json.loads(row["response"])
         with _flying_lock:
             other = _flying.get(key)
@@ -86,7 +92,13 @@ def structured(
             break
         other.wait(settings.get("llm.timeout_seconds", 90) * 4)
     try:
-        return _call(task, model, system, user, schema, schema_name, key, temperature, seed, reasoning, effort)
+        data = _call(task, model, system, user, schema, schema_name, key, temperature, seed, reasoning, effort)
+    except Exception as e:
+        log(None, cached=False, ok=False, error=str(e)[:500])
+        raise
+    else:
+        log(json.dumps(data), cached=False)
+        return data
     finally:
         if mine:
             with _flying_lock:
@@ -143,10 +155,12 @@ def decide(task: str, input: str | list[dict], questions: list[dict], *, use_cac
     Cached by input hash like structured(). Raises after 3 failed attempts."""
     model = settings.get("llm.models.decisions", "gpt-6-luna")
     key = hashlib.sha256(json.dumps(["decisions", model, input, questions], sort_keys=True).encode()).hexdigest()
+    log = functools.partial(ailog.record, task, "decisions", model, {}, {"input": input, "questions": questions})
     if use_cache:
         row = db.q1("SELECT response FROM llm_cache WHERE key=?", (key,))
         if row:
             timing.llm_call(task, model, 0, cached=True)
+            log(row["response"], cached=True)
             return json.loads(row["response"])
     began, last_err = time.perf_counter(), None
     for attempt in range(3):
@@ -163,10 +177,12 @@ def decide(task: str, input: str | list[dict], questions: list[dict], *, use_cac
             time.sleep(attempt + 1)
     else:
         timing.llm_call(task, model, time.perf_counter() - began, cached=False, attempts=3, ok=False)
+        log(None, cached=False, ok=False, error=str(last_err)[:500])
         raise RuntimeError(f"Decisions call failed for {task}: {last_err}")
     timing.llm_call(task, model, time.perf_counter() - began, cached=False, attempts=attempt + 1)
     db.ex("INSERT OR REPLACE INTO llm_cache(key, model, response, created_at) VALUES (?,?,?,?)",
           (key, model, json.dumps(out), db.now()))
+    log(json.dumps(out), cached=False)
     return out
 
 

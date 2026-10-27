@@ -14,6 +14,8 @@ import secrets
 import time
 from datetime import datetime, timedelta, timezone
 
+import requests
+
 from .. import config, db, settings
 from ..capture import Inbound
 from . import study_for_person
@@ -176,11 +178,17 @@ class GoogleChatChannel:
 
     def _to_inbound(self, m: dict, *, study_id: str | None, visibility: str) -> Inbound | None:
         sender = m.get("sender") or {}
-        if sender.get("type") != "HUMAN" or sender.get("name") == self.me or m.get("deleteTime"):
+        if m.get("deleteTime"):   # capture keeps it as a deleted version if the bot had read it, else drops it
+            return Inbound(channel="teams", external_id=m["name"], thread_ref="", from_addr=None, from_name=None,
+                           subject=None, body_text="", sent_at=m.get("createTime") or m["deleteTime"],
+                           study_id=study_id, visibility=visibility, deleted_at=m["deleteTime"],
+                           raw=db.js(m).encode())
+        if sender.get("type") != "HUMAN" or sender.get("name") == self.me:
             return None
         text = (m.get("text") or m.get("argumentText") or "").strip()
         if not text:
             return None
+        edited = m.get("lastUpdateTime")
         thread = (m.get("thread") or {}).get("name") or m["name"]
         named = [(a.get("userMention") or {}).get("user") or {} for a in m.get("annotations") or []
                  if a.get("type") == "USER_MENTION"]
@@ -194,7 +202,7 @@ class GoogleChatChannel:
             subject=None, body_text=text, body_html=m.get("formattedText"), sent_at=m.get("createTime"),
             study_id=study_id, visibility=visibility,
             reply_to_external=thread if m.get("threadReply") else None,
-            raw=db.js(m).encode(),
+            raw=db.js(m).encode(), edited_at=edited if edited and edited != m.get("createTime") else None,
         )
 
     def fetch(self) -> list[Inbound]:
@@ -266,7 +274,16 @@ class GoogleChatChannel:
             if place is None:
                 continue
             visibility, study_id = place
-            inb = self._to_inbound(self._get(f"/{name}"), study_id=study_id, visibility=visibility)
+            try:
+                m = self._get(f"/{name}")
+            except requests.HTTPError as e:
+                if getattr(e.response, "status_code", None) != 404:
+                    raise
+                m = {"name": name, "deleteTime": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+            inb = self._to_inbound(m, study_id=study_id, visibility=visibility)
+            if inb and inb.deleted_at:
+                out.append(inb)
+                continue
             if inb and visibility == "direct":
                 inb.study_id = study_for_person(inb.from_addr)
             elif inb and visibility == "group":

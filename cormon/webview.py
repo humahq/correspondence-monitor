@@ -9,6 +9,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import config, db, items, senders, settings, weblogin
+from .compliance import SAFETY_NOTICE
 from .drafting import also_broken, local_time, sender_ctx
 from .triage import TIER_LABELS
 
@@ -129,7 +130,7 @@ def render_item(item: dict) -> str:
 <p class="muted">Check: {_e(ev.get('method'))} · recipient: {_e(item['recipient_person'])}
 ({_e(item['recipient_reason'])})</p>
 <h2>History</h2><table><tr><th>When</th><th>Who</th><th>What</th></tr>{rows}</table>
-<p class="muted">This monitor does not review safety information.</p>
+<p class="muted">This monitor does not review safety information. {SAFETY_NOTICE}</p>
 </body></html>"""
 
 
@@ -221,6 +222,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
+            from . import watchdog
+            age = watchdog.minutes_since_heartbeat()
+            if watchdog.stalled():
+                return self._send(503, "stalled: " + ("no heartbeat yet" if age is None else
+                                                      f"last heartbeat {age:.0f} minutes ago"), "text/plain")
             return self._send(200, "ok", "text/plain")
         if self.path.startswith("/auth/callback") and weblogin.ready():
             code, headers, body = weblogin.callback(self.path)

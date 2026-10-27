@@ -12,7 +12,6 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import secrets
 import time
 from http.cookies import SimpleCookie
@@ -90,11 +89,9 @@ def may_see(email: str, study_id: str) -> bool:
 
 
 def _client_secret() -> str:
-    env = settings.get("web.login.client_secret_env")
-    if env and os.environ.get(env):
-        return os.environ[env]
-    from .channels.imap import _secret_from_vm
-    value = _secret_from_vm(settings.get("web.login.secret") or {}) if settings.get("web.login.secret") else None
+    from .compliance import secrets as vault
+    value = vault.get(env=settings.get("web.login.client_secret_env"), secret=settings.get("web.login.secret"),
+                        what="the sign-in client secret")
     if not value:
         raise RuntimeError("the sign-in client secret is not set (web.login.secret or web.login.client_secret_env)")
     return value

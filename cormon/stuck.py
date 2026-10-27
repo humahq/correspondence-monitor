@@ -1,6 +1,7 @@
-"""Things that went wrong for good: a message that could not be sent, a site message that could not be read,
-an alert that was never sent. Each is emailed once to the people who run the bot (system.ops_emails, or each
-study's clinops lead), so nothing fails silently. Only problems since this check first ran are reported."""
+"""Things that went wrong for good: a message that could not be sent, a site message that could not be read or
+has waited too long, a channel not read for too long, an alert that was never sent. Each is emailed once to the
+people who run the bot (system.ops_emails, or each study's clinops lead), so nothing fails silently. Only problems
+since this check first ran are reported. A listener that has stopped altogether is caught by watchdog.py."""
 
 from __future__ import annotations
 
@@ -23,6 +24,19 @@ def problems() -> list[dict]:
         out.append({"key": f"message:{r['id']}", "study_id": r["study_id"],
                     "what": f"Site message {r['id']} could not be read: {r['error']}. "
                             f"Read it again with `cormon rerun {r['id']}`."})
+    lag = float(settings.get("system.stall_minutes", 15))
+    if db.get_state("paused") != "1":   # while paused, waiting messages are expected
+        for r in db.q("SELECT id, study_id, received_at FROM messages WHERE status IN ('new','processing')"
+                      " AND received_at<? AND received_at>=?", (db.later(-lag), since)):
+            out.append({"key": f"waiting:{r['id']}", "study_id": r["study_id"],
+                        "what": f"Site message {r['id']} has waited more than {lag:.0f} minutes to be read "
+                                f"(arrived {r['received_at']})."})
+    for name, label in (("email", "Email"), ("teams", "Chat")):
+        last = db.get_state(f"polled:{name}")
+        if last and last < db.later(-lag):
+            out.append({"key": f"unread:{name}:{last}", "study_id": None,
+                        "what": f"{label} has not been read for more than {lag:.0f} minutes (last read {last}). "
+                                "See `cormon log` for the channel error."})
     for r in db.q("SELECT i.id, i.study_id FROM items i JOIN audit_log a ON a.entity_type='item'"
                   " AND a.entity_id=CAST(i.id AS TEXT) AND a.action='item_route_failed'"
                   " WHERE i.routed=0 AND i.created_at>=?", (since,)):

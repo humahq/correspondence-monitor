@@ -10,13 +10,12 @@ Password, first found wins: the env var named in `password_env`, then Google Sec
 from __future__ import annotations
 
 import imaplib
-import os
 import re
 import smtplib
-import subprocess
 from datetime import date, datetime, timedelta, timezone
 
 from .. import db, settings
+from ..compliance import secrets
 from ..capture import Inbound, general_addresses, known_rfc_ids, parse_email, resolve_email_route
 from .sim import build_mime
 
@@ -29,44 +28,10 @@ def _cfg(key: str, default=None):
 
 def password() -> str:
     env = _cfg("password_env", "CORMON_GMAIL_APP_PASSWORD")
-    if os.environ.get(env):
-        return os.environ[env].replace(" ", "").strip()
-    secret = _cfg("secret") or {}
-    if secret.get("name"):
-        on_gce = _secret_from_vm(secret)
-        if on_gce:
-            return on_gce
-        cmd = ["gcloud", "secrets", "versions", "access", "latest", f"--secret={secret['name']}"]
-        if secret.get("project"):
-            cmd.append(f"--project={secret['project']}")
-        try:
-            out = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        except FileNotFoundError:
-            raise RuntimeError("gcloud is not installed, and the app password env var is not set") from None
-        if out.returncode == 0 and out.stdout.strip():
-            return out.stdout.replace(" ", "").strip()
-        raise RuntimeError(f"could not read the app password from Secret Manager: {out.stderr.strip()[:300]}")
-    raise RuntimeError(f"no Gmail app password: set {env} or mailbox.imap.secret")
-
-
-def _secret_from_vm(secret: dict) -> str | None:
-    """On a Google Cloud VM, read the secret with the VM's own service account (no gcloud, no copied password)."""
-    import base64
-
-    import requests
-    meta = "http://metadata.google.internal/computeMetadata/v1"
-    try:
-        tok = requests.get(f"{meta}/instance/service-accounts/default/token",
-                           headers={"Metadata-Flavor": "Google"}, timeout=2).json()["access_token"]
-    except (requests.RequestException, ValueError, KeyError):
-        return None  # not on Google Cloud
-    project = secret.get("project") or requests.get(f"{meta}/project/project-id",
-                                                    headers={"Metadata-Flavor": "Google"}, timeout=2).text
-    r = requests.get(f"https://secretmanager.googleapis.com/v1/projects/{project}/secrets/{secret['name']}"
-                     "/versions/latest:access", headers={"Authorization": f"Bearer {tok}"}, timeout=15)
-    if r.status_code != 200:
-        raise RuntimeError(f"could not read the app password from Secret Manager: {r.text[:300]}")
-    return base64.b64decode(r.json()["payload"]["data"]).decode().replace(" ", "").strip()
+    value = secrets.get(env=env, secret=_cfg("secret"), what="the Gmail app password")
+    if not value:
+        raise RuntimeError(f"no Gmail app password: set {env} or mailbox.imap.secret")
+    return value.replace(" ", "").strip()
 
 
 def _uid(meta: bytes) -> str | None:

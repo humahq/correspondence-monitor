@@ -67,9 +67,10 @@ def mask_all(value):
 
 
 def purge(days: int | None = None, log=print) -> dict:
-    """Clear message text, raw copies, answer-page questions, model-call caches and participant facts older than
-    `days` (data.retention_days when not given). Alerts keep their short quote of the message as the monitoring
-    record; the audit log is append-only and keeps its (masked) entries."""
+    """Clear message text, raw copies and edited versions, answer-page questions, model-call caches and the full AI
+    log, and participant facts older than `days` (data.retention_days when not given). Alerts keep their short quote
+    of the message as the monitoring record; the audit log is append-only and keeps its (masked) entries; the
+    fingerprints of purged originals stay, marked purged."""
     days = days if days is not None else settings.get("data.retention_days")
     if not days:
         return {"skipped": "data.retention_days is not set"}
@@ -78,9 +79,14 @@ def purge(days: int | None = None, log=print) -> dict:
                                         (cutoff,))]
     files = [r["path"] for r in db.q("SELECT a.path FROM attachments a JOIN messages m ON m.id=a.message_id"
                                      " WHERE m.received_at<? AND a.path IS NOT NULL", (cutoff,))]
-    for p in raws + files:
+    versions = [r["raw_path"] for r in db.q("SELECT v.raw_path FROM message_versions v JOIN messages m ON"
+                                            " m.id=v.message_id WHERE m.received_at<? AND v.raw_path IS NOT NULL",
+                                            (cutoff,))]
+    for p in raws + files + versions:
         path = Path(p) if Path(p).is_absolute() else settings.data_dir() / p
         path.unlink(missing_ok=True)
+    from .compliance import records
+    records.mark_purged(raws + files + versions)
     out = {
         "attachments": db.changed("UPDATE attachments SET text=NULL, path=NULL WHERE (path IS NOT NULL OR text IS NOT NULL)"
                                   " AND message_id IN (SELECT id FROM messages WHERE received_at<?)", (cutoff,)),
@@ -92,6 +98,10 @@ def purge(days: int | None = None, log=print) -> dict:
                                    " WHERE created_at<? AND message_text!='[cleared after retention period]'",
                                    (cutoff,)),
         "llm_cache": db.changed("DELETE FROM llm_cache WHERE created_at<?", (cutoff,)),
+        "ai_log": db.changed("DELETE FROM ai_log WHERE ts<?", (cutoff,)),
+        "message_versions": db.changed("UPDATE message_versions SET body_text=NULL, body_html=NULL, raw_path=NULL"
+                                       " WHERE (body_text IS NOT NULL OR raw_path IS NOT NULL) AND message_id IN"
+                                       " (SELECT id FROM messages WHERE received_at<?)", (cutoff,)),
         "patient_facts": db.changed("DELETE FROM patient_facts WHERE COALESCE(sent_at, created_at)<?", (cutoff,)),
     }
     db.audit("retention_purge", entity_type="service", entity_id="retention", days=int(days), **out)

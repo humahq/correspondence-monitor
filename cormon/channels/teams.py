@@ -64,6 +64,12 @@ def _text(content: str) -> str:
     return html.unescape(t).strip()
 
 
+def _touched(m: dict) -> datetime:
+    """When the message was last written, edited or deleted."""
+    stamps = [m.get(k) for k in ("createdDateTime", "lastEditedDateTime", "deletedDateTime")]
+    return max(datetime.fromisoformat(s.replace("Z", "+00:00")) for s in stamps if s)
+
+
 class TeamsChannel:
     def __init__(self):
         self._me = None
@@ -106,18 +112,24 @@ class TeamsChannel:
 
     def _to_inbound(self, m: dict, *, study_id: str | None, visibility: str, thread_ref: str,
                     reply_to: str | None, ext_prefix: str) -> Inbound | None:
-        if m.get("messageType") != "message" or m.get("deletedDateTime"):
+        if m.get("messageType") != "message":
             return None
+        if m.get("deletedDateTime"):   # capture keeps it as a deleted version if the bot had read it, else drops it
+            return Inbound(channel="teams", external_id=f"{ext_prefix}:{m['id']}", thread_ref=thread_ref,
+                           from_addr=None, from_name=None, subject=None, body_text="",
+                           sent_at=m.get("createdDateTime") or m["deletedDateTime"], study_id=study_id,
+                           visibility=visibility, deleted_at=m["deletedDateTime"], raw=db.js(m).encode())
         user = (m.get("from") or {}).get("user") or {}
         if not user or user.get("id") == self.me:
             return None
+        edited = m.get("lastEditedDateTime")
         return Inbound(
             channel="teams", external_id=f"{ext_prefix}:{m['id']}", thread_ref=thread_ref,
             from_addr=self._email_for(user["id"]), from_name=user.get("displayName"),
             subject=m.get("subject"), body_text=_text((m.get("body") or {}).get("content", "")),
             body_html=(m.get("body") or {}).get("content"), sent_at=m.get("createdDateTime"),
             study_id=study_id, visibility=visibility, reply_to_external=reply_to,
-            raw=db.js(m).encode(),
+            raw=db.js(m).encode(), edited_at=edited,
         )
 
     def fetch(self) -> list[Inbound]:
@@ -131,7 +143,7 @@ class TeamsChannel:
             base = f"/teams/{ch['team_id']}/channels/{ch['channel_id']}/messages"
             data = self._get(base, **{"$top": 25, "$expand": "replies"})
             for m in data.get("value", []):
-                created = datetime.fromisoformat(m["createdDateTime"].replace("Z", "+00:00"))
+                created = _touched(m)
                 prefix = f"{ch['team_id']}:{ch['channel_id']}"
                 if created > since:
                     inb = self._to_inbound(m, study_id=study.study_id, visibility="channel",
@@ -141,7 +153,7 @@ class TeamsChannel:
                         out.append(inb)
                         newest = max(newest, created)
                 for rep in m.get("replies", []):
-                    rc = datetime.fromisoformat(rep["createdDateTime"].replace("Z", "+00:00"))
+                    rc = _touched(rep)
                     if rc <= since:
                         continue
                     inb = self._to_inbound(rep, study_id=study.study_id, visibility="channel",
@@ -155,7 +167,7 @@ class TeamsChannel:
             for chat in chats.get("value", []):
                 msgs = self._get(f"/chats/{chat['id']}/messages", **{"$top": 20})
                 for m in msgs.get("value", []):
-                    created = datetime.fromisoformat(m["createdDateTime"].replace("Z", "+00:00"))
+                    created = _touched(m)
                     if created <= since:
                         continue
                     inb = self._to_inbound(m, study_id=None, visibility="direct",

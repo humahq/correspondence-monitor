@@ -1,0 +1,10 @@
+[Unit]
+Description=Correspondence monitor watchdog (emails the admins if the listener stops)
+
+[Service]
+Type=oneshot
+User=cormon
+WorkingDirectory=/opt/cormon
+Environment=CORMON_HOME=/opt/cormon
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/cormon/.venv/bin/cormon watchdog

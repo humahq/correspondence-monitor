@@ -2829,7 +2829,7 @@ class _FakePush:
             self.made += 1
             name = f"subscriptions/s{self.made}"
             self.subs[name] = {"name": name, "state": "ACTIVE", "expireTime": "2026-10-30T00:00:00Z",
-                               "notificationEndpoint": json["notificationEndpoint"]}
+                               "notificationEndpoint": json["notificationEndpoint"], "eventTypes": json["eventTypes"]}
             return self._r(body={"name": "operations/1", "done": True, "response": self.subs[name]})
         if url.endswith(":pull"):
             got, self.notes = self.notes, []
@@ -2878,6 +2878,12 @@ def test_the_chat_push_subscription_is_made_renewed_and_made_again_when_google_e
     res = chat_events.ensure(g, log=lambda *a: None, force=True)
     assert res["action"] == "made" and res["name"] == "subscriptions/s2" and "subscriptions/s1" not in g.subs
     assert db.q1("SELECT 1 FROM audit_log WHERE action='chat_events_ended'")
+
+    g.subs["subscriptions/s2"]["eventTypes"] = chat_events.TYPES[:1]                  # made before edits were read
+    res = chat_events.ensure(g, log=lambda *a: None, force=True)
+    assert res["action"] == "made" and set(g.subs[res["name"]]["eventTypes"]) == set(chat_events.TYPES)
+    assert "subscriptions/s2" not in g.subs and db.q1("SELECT 1 FROM audit_log WHERE action='chat_events_types_changed'")
+    assert chat_events.ensure(g, log=lambda *a: None, force=True)["action"] != "made"          # kept, not made again
 
     monkeypatch.setitem(conf, "gchat.events.topic", "")
     assert not chat_events.enabled()                                                  # poll only

@@ -397,7 +397,8 @@
         ${NAV.map(([to, name]) => html`<a key=${to} href=${to} class=${section === to ? "on" : ""} onClick=${linkTo(to)}>${name}</a>`)}
         <div class="who">${EMAIL}<br /><a href="/auth/logout">Sign out</a></div></aside>
       <main>${page}<div class="foot-note">Read-only. Every page view is logged. This monitor does not review safety
-        information.</div></main></div>`;
+        information. This system does not guarantee the detection of safety signals. Silence does not constitute
+        clearance.</div></main></div>`;
   }
 
   ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} />`);

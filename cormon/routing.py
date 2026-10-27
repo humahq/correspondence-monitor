@@ -7,6 +7,7 @@ import re
 from email.utils import make_msgid
 
 from . import capture, careful, config, db, drafting, items, phi, settings
+from .compliance import records
 from .config import Person, Study
 
 REPEAT_HOURS = 6
@@ -70,13 +71,17 @@ def enqueue(*, purpose: str, channel: str, destination: str, body: str, item_id:
                  found=sorted(set(in_body + in_subject + in_files)))
     rfc_id = make_msgid(domain=settings.get("mailbox.address", "bot@huma.ai").split("@")[1]) \
         if channel == "email" else None
+    to_json, cc_json = db.js(to or []), db.js(cc or [])
     oid = db.ex(
         "INSERT INTO outbox (item_id, message_id, purpose, channel, destination, template_id, from_addr, to_addrs,"
         " cc_addrs, subject, body, meta, status, rfc_message_id, created_at, idem_key)"
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (item_id, message_id, purpose, channel, destination, template_id, from_addr, db.js(to or []),
-         db.js(cc or []), subject, body, db.js(meta or {}), status, rfc_id, db.now(), idem),
+        (item_id, message_id, purpose, channel, destination, template_id, from_addr, to_json,
+         cc_json, subject, body, db.js(meta or {}), status, rfc_id, db.now(), idem),
     )
+    digest = records.put("outbound", "outbox", oid, records.sent_bytes(channel, destination, from_addr, to_json,
+                                                                       cc_json, subject, body), None)
+    db.ex("UPDATE outbox SET sha256=? WHERE id=?", (digest, oid))
     db.audit("draft_created", entity_type="item" if item_id else "outbox", entity_id=item_id or oid,
              study_id=study_id, outbox_id=oid, purpose=purpose, channel=channel, destination=destination,
              template=template_id, to=to, cc=cc, subject=subject, status=status)

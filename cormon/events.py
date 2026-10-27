@@ -152,8 +152,10 @@ def store(msg_id: int, data: dict, source: str = "system") -> int:
     version = row["v"] + 1
     from .llm import model_for
 
-    eid = db.ex("INSERT INTO events(message_id, version, data, model, source, created_at) VALUES (?,?,?,?,?,?)",
-                (msg_id, version, db.js(data), model_for("extract"), source, db.now()))
+    src = db.q1("SELECT sha256 FROM messages WHERE id=?", (msg_id,))
+    eid = db.ex("INSERT INTO events(message_id, version, data, model, source, created_at, source_sha256)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (msg_id, version, db.js(data), model_for("extract"), source, db.now(), src["sha256"] if src else None))
     return eid
 
 
