@@ -7,8 +7,8 @@ tested and deployed to the live bot on 27 Oct; the rest is not built yet.
 ## 1. Summary
 
 - Part I has 71 requirement IDs. Before this work: 7 done, 41 partly done, 21 not done, 2 are V2 (later).
-  After the 27 Oct deploy: 12 done, 40 partly done, 17 not done, 2 V2. With the second 27 Oct build (not yet
-  deployed): 24 done, 32 partly done, 13 not done, 2 V2.
+  After the 27 Oct deploy: 12 done, 40 partly done, 17 not done, 2 V2. After the second 27 Oct deploy: 24 done,
+  32 partly done, 13 not done, 2 V2.
 - Nothing we found needs a rewrite. Most gaps are missing records (hashes, versions, full AI logs) or missing
   workflow (safety routing, clearing grammar, bounces, recall).
 - Approach, as Eliot asked: a thin wrapper (facade) in front of each compliance function. Each wrapper has a
@@ -90,7 +90,8 @@ requirement is in place; the gap is the note.
 
 ### Done (24)
 
-Built and tested on 27 Oct, not yet on the live server:
+Built, tested and deployed on the evening of 27 Oct (with pypdf 6.21.2 and certifi 2026.10.23, which fix
+the known problems the first scan found):
 
 - AUD-01 Every change to messages, attachments, items, outbox and rules is kept as old and new values in an
   append-only change log (patient text as lengths only); each hour's changes are sealed into the hash chain.
@@ -152,7 +153,7 @@ Done before:
 | ID | In place | Gap |
 |---|---|---|
 | CAP-06 | Plus-address picks the study; untagged mail never matched; senders not on the people list are flagged on the page and in the digest (built 27 Oct) | Not kept from sponsor-facing posts |
-| CAP-09 | Recipients come from config, not the AI; a 20-message trick test set (built 27 Oct) | On an old practice copy, one trick worked (an invented "standing exception" hid an old consent form); needs a run on the live rules |
+| CAP-09 | Recipients come from config, not the AI; a 20-message trick test set (built 27 Oct). On the live rules no trick changed an answer: each miss is also missed in the same email without the trick | The set is small (20); the plain versions of these emails are themselves often missed (6 of 17 right), which is a matching problem to fix first |
 | CAP-10 | Hourly check that the mailbox and our store agree (built 27 Oct) | No mailbox retention procedure |
 | OUT-01 | Rendered text stored per sent message, hashed and re-checked nightly (27 Oct) | Not write-once (Phase 3) |
 | OUT-02 | Gmail sends with its own SPF/DKIM | DMARC `p=reject` on the sending domain is a DNS task |
