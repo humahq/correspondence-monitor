@@ -153,7 +153,7 @@ Done before:
 | ID | In place | Gap |
 |---|---|---|
 | CAP-06 | Plus-address picks the study; untagged mail never matched; senders not on the people list are flagged on the page and in the digest (built 27 Oct) | Not kept from sponsor-facing posts |
-| CAP-09 | Recipients come from config, not the AI; a 20-message trick test set (built 27 Oct). On the live rules no trick changed an answer: each miss is also missed in the same email without the trick | The set is small (20); the plain versions of these emails are themselves often missed (6 of 17 right), which is a matching problem to fix first |
+| CAP-09 | Recipients come from config, not the AI; a 20-message trick test set (built 27 Oct), run on the live DNL rules (12 of 20 right; the same emails without the tricks 13 of 17) | Two tricks worked: an invented "standing exception" hid an old consent form (j19), and an order inside an admin email made the bot report a made-up eGFR deviation (j11). The set is small (20) |
 | CAP-10 | Hourly check that the mailbox and our store agree (built 27 Oct) | No mailbox retention procedure |
 | OUT-01 | Rendered text stored per sent message, hashed and re-checked nightly (27 Oct) | Not write-once (Phase 3) |
 | OUT-02 | Gmail sends with its own SPF/DKIM | DMARC `p=reject` on the sending domain is a DNS task |
