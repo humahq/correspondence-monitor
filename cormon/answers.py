@@ -24,8 +24,9 @@ from . import capture, careful, conversation, db, guide, llm, memory, reader, ro
 from .compliance import sha256
 from .config import Study
 
-ASKED = re.compile(r"\?|^\s*(?:what|when|how|which|where|why|who|is|are|can|could|should|do|does|did|may|must|"
-                   r"would|will)\b", re.I | re.M)
+ASKED = re.compile(r"\?|^\W*(?:(?:hey|hi|hello|ok|okay)\s+)?(?:@?huma\s+)?(?:@?bot\b\W*)?"
+                   r"(?:what|when|how|which|where|why|who|is|are|can|could|should|do|does|did|may|must|would|will|"
+                   r"tell|list|explain|describe|summari[sz]e)\b", re.I | re.M)
 MAX_QUESTIONS = 3
 FOOTER = "From the study documents. Please confirm with your CRA before acting on it."
 FACTS_CHARS = 40000  # whole protocol sections in a facts file, so another AI can be pasted all of it
