@@ -294,7 +294,7 @@ def check(study: Study, text: str, email: str, participant: str, use_cache: bool
     found = [ev for ev in found if ev["steps"]]
     if not found:
         return []
-    with ThreadPoolExecutor(min(4, len(found))) as ex:
+    with llm.Pool(min(4, len(found))) as ex:
         results = list(ex.map(lambda ev: tick(ev, email, participant, use_cache, facts), found))
     for r in results:
         r["acted"] = r["present"] == "yes" and bool(r["missing"])

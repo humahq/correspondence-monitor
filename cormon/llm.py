@@ -6,12 +6,14 @@ runs; `use_cache=False` forces a fresh call (operator re-run).
 
 from __future__ import annotations
 
+import contextvars
 import functools
 import hashlib
 import json
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from . import db, settings, timing
@@ -47,6 +49,26 @@ def _count(model: str, usage) -> None:
     u["output"] += getattr(usage, "completion_tokens", 0) or 0
 
 
+# which of several independent reads of one message this call belongs to (a vote): each has its own saved answers
+_sample: contextvars.ContextVar[int] = contextvars.ContextVar("llm_sample", default=0)
+
+
+def as_sample(n: int, fn, *args, **kwargs):
+    """fn(*args, **kwargs) as read number n of a vote. Read 0 shares its saved answers with a single read."""
+    token = _sample.set(n)
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        _sample.reset(token)
+
+
+class Pool(ThreadPoolExecutor):
+    """A thread pool whose calls keep the caller's read number (threads do not inherit it on their own)."""
+
+    def submit(self, fn, /, *args, **kwargs):
+        return super().submit(contextvars.copy_context().run, fn, *args, **kwargs)
+
+
 def model_for(task: str) -> str:
     """CORMON_MODEL_<TASK> overrides one task's model and CORMON_MODEL every task's, for comparing models on a test
     run (CORMON_EFFORT likewise overrides llm.effort.<task> and llm.reasoning_effort for reasoning models)."""
@@ -71,8 +93,8 @@ def structured(
     effort = (os.environ.get("CORMON_EFFORT") or settings.get(f"llm.effort.{task}")
               or settings.get("llm.reasoning_effort")) if reasoning else None
     key = hashlib.sha256(
-        json.dumps([model, temperature, system, user, schema] + ([effort] if effort else []),
-                   sort_keys=True).encode()
+        json.dumps([model, temperature, system, user, schema] + ([effort] if effort else [])
+                   + ([f"sample {_sample.get()}"] if _sample.get() else []), sort_keys=True).encode()
     ).hexdigest()
     log = functools.partial(ailog.record, task, "chat.completions", model,
                             {"effort": effort} if reasoning else {"temperature": temperature, "seed": seed},

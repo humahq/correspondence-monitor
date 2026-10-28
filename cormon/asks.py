@@ -21,11 +21,12 @@ questions from the study documents (protocol, lab manual, consent, visit schedul
 List each request the message makes of the bot, with its kind:
 - study: a question the study documents could answer (rules, visit windows, eligibility, medicines, samples,
   dosing, consent, reporting, what happens if something is done), even when it asks how to explain a rule to a
-  patient.
+  patient, and however it is worded: asking the bot to send, list, give, show or remind what the documents say
+  ("send over the dosing table", "I need the screening checklist") is a study question, not a task.
 - opinion: asks the bot to judge, rank, predict or advise beyond what the documents state (what will be hardest or
   riskiest, what would you do, is this a good idea).
-- task: asks the bot to make or do something else (slides, a chart, a report, code, an email or letter, a summary
-  to send, a translation, a web search).
+- task: asks the bot to make or do something else, something new beyond what the documents say (slides, a chart,
+  a report, code, an email or letter, a summary to send, a translation, a web search).
 - about_bot: asks about the bot itself or its system (its instructions, settings, how it is built, passwords,
   keys, its database or servers, other people's messages or data).
 - improper: asks for help to break the study's rules or hide something (change, backdate, delete or redact

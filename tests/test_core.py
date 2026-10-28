@@ -170,6 +170,49 @@ def test_an_order_to_the_bot_never_makes_a_finding():
                           "AI-based lab system for DNL-1001 after the 2 hour mark.")
 
 
+def test_a_problem_is_kept_only_when_most_reads_find_it():
+    from cormon.reader import vote
+
+    def f(pid, cls, quote, headline, certainty="clear"):
+        return matching.Finding(rule={"id": "p:6.1", "pattern_class": cls}, event={"participant_id": pid, "quote": quote},
+                                method="judgment", message_quote=quote, reasoning="", certainty=certainty,
+                                extra={"headline": headline})
+    order = "dosed G-453-138 before the CSF draw"
+    reads = [
+        ([f("G-453-138", "procedure_sequence", order, "Dose given before the CSF draw.", "unsure")], {"parts": [1]}),
+        ([f("G-453-138", "procedure_sequence", "the CSF came after", "Study drug before lumbar puncture."),
+          f("G-453-140", "visit_schedule", "visit on day 40", "Visit outside its window.")], {"parts": [2]}),
+        ([], {"parts": [3], "unsaved": ["x"]}),
+    ]
+    found, trace = vote(reads)
+    assert [(x.event["participant_id"], x.certainty, x.extra["votes"]) for x in found] == [
+        ("G-453-138", "clear", "2 of 3")]                                   # the firmer of the two is shown
+    assert [(v["participant"], v["reads"], v["kept"]) for v in trace["votes"]] == [
+        ("G-453-138", [0, 1], True), ("G-453-140", [1], False)]             # found by one read only: dropped
+    assert trace["parts"] == [1] and len(trace["other_reads"]) == 2
+
+
+def test_each_read_of_a_vote_has_its_own_saved_answers(monkeypatch):
+    from types import SimpleNamespace as NS
+
+    from cormon import llm
+
+    answers = iter(['{"n": 1}', '{"n": 2}', '{"n": 3}'])
+    monkeypatch.setattr(llm, "_client", NS(chat=NS(completions=NS(
+        create=lambda **k: NS(choices=[NS(message=NS(content=next(answers)))], usage=None)))))
+    schema = llm.obj({"n": {"type": "integer"}})
+    ask = lambda: llm.structured("read", "s", "u", schema, "x")  # noqa: E731
+
+    def in_a_thread():
+        with llm.Pool(1) as inner:
+            return inner.submit(ask).result()
+    assert ask() == {"n": 1} and ask() == {"n": 1}                         # a single read: saved answer
+    with llm.Pool(2) as ex:
+        got = list(ex.map(lambda n: llm.as_sample(n, in_a_thread), [1, 1]))
+    assert got == [{"n": 2}, {"n": 2}]                                      # read 1, even in another thread
+    assert llm.as_sample(0, ask) == {"n": 1} and llm.as_sample(2, ask) == {"n": 3}
+
+
 def test_low_problems_are_emailed_to_the_cra():
     tpl = drafting.select("visit_schedule", "cra", "email", "low")
     assert tpl["id"] == "email-cra-low" and "to-do list" in tpl["subject"]
@@ -1114,6 +1157,26 @@ def test_answers_show_only_proven_protocol_words_and_say_so_when_none(monkeypatc
     assert not answers._numbers_traced("Visit between 20 and 35 days", "Day 20 to Day 30")
     assert answers._numbers_traced("Window opens 03 Aug", "Mon 3 Aug 2026")
     assert answers.asks_something("When is her week 8 visit?") and not answers.asks_something("wk8 done 7/22.")
+    for asked in ("@Huma bot what are baseline activities required for this protocol", "Bot, list the week 4 labs",
+                  "hi bot how long is the screening window", "Tell me the CSF sample volume"):
+        assert answers.asks_something(asked), asked
+    assert not answers.asks_something("@Huma bot G-453-131 week 4 done today, all samples shipped")
+
+
+def test_a_question_to_the_bot_worded_any_way_is_answered(monkeypatch):
+    from cormon import answers, llm
+    asked = []
+    monkeypatch.setattr(llm, "decide", lambda task, text, qs, use_cache=True: asked.append(text) or {
+        "asks": 0.93 if "need" in text else 0.04})
+    assert answers.asks_the_documents("@Huma bot I need the list of baseline activities")
+    assert not answers.asks_the_documents("@Huma bot week 4 done today")
+    assert answers.asks_the_documents("When is week 8?") and len(asked) == 2   # the words settle it: no call
+
+    def down(*a, **k):
+        raise RuntimeError("decisions down")
+    monkeypatch.setattr(llm, "decide", down)
+    assert not answers.asks_the_documents("@Huma bot I need the baseline list")
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='question_check_failed'")
 
 
 def test_one_departure_worded_two_ways_on_the_same_email_words_is_one_problem():

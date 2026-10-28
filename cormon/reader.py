@@ -1212,7 +1212,6 @@ def _fact_lines(fact: str, anchors: list[str], items: list[dict], limit: int = 4
 def fact_checks(study: Study, part: dict, items: list[dict], notes: list[str], email: str, sent: datetime,
                 use_cache: bool) -> list[dict]:
     """One small check per statement, so a second or third departure in an email is not lost behind the first."""
-    from concurrent.futures import ThreadPoolExecutor
     by_id = {i["id"]: i for i in items}
     schema = _fact_schema(study)
 
@@ -1231,7 +1230,7 @@ def fact_checks(study: Study, part: dict, items: list[dict], notes: list[str], e
     stmts = part.get("statements", [])
     if not stmts:
         return []
-    with ThreadPoolExecutor(min(8, len(stmts))) as ex:
+    with llm.Pool(min(8, len(stmts))) as ex:
         return [f for fs in ex.map(one, stmts) for f in fs]
 
 
@@ -1376,10 +1375,68 @@ def keep(study: Study, msg: dict, trace: dict) -> None:
 def check(study: Study, msg: dict, email: str, *, use_cache: bool = True, log=None,
           save: bool = True) -> tuple[list[Finding], dict]:
     """Findings for one email, and a trace of what was read and decided (for the audit log and tests).
-    save=False: the participant facts read are left in trace["unsaved"] for keep()."""
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(4) as pool:
-        return _check(study, msg, email, use_cache, log, save, pool)
+    save=False: the participant facts read are left in trace["unsaved"] for keep().
+    With the checker's votes set to n (CORMON_VOTES overrides it on a test run), n independent reads run at the
+    same time and a problem is kept only when most of them found it, so one read's slip neither adds nor loses one."""
+    votes = int(os.environ.get("CORMON_VOTES") or guide.checker(study).get("votes") or 1)
+    if votes <= 1:
+        found, trace = _one_read(study, msg, email, use_cache, log)
+    else:
+        with llm.Pool(votes) as ex:
+            reads = list(ex.map(lambda n: llm.as_sample(n, _one_read, study, msg, email, use_cache, log),
+                                range(votes)))
+        found, trace = vote(reads)
+        if log:
+            log(f"reader vote: {sum(v['kept'] for v in trace['votes'])} of {len(trace['votes'])} problems kept "
+                f"by {votes // 2 + 1} or more of {votes} reads")
+    if save:
+        keep(study, msg, trace)
+    return found, trace
+
+
+def _one_read(study, msg, email, use_cache, log) -> tuple[list[Finding], dict]:
+    with llm.Pool(4) as pool:
+        return _check(study, msg, email, use_cache, log, False, pool)
+
+
+def _alike(a: Finding, b: Finding) -> int:
+    """How surely two reads' findings are one problem: 2 the same departure, 1 the same kind for the same
+    participant, 0 not one."""
+    if (a.event.get("participant_id") or "").upper() != (b.event.get("participant_id") or "").upper():
+        return 0
+    ka, kb = ({"email_quote": f.event.get("quote") or "", "section_id": f.rule["id"],
+               "problem": f.extra.get("headline") or "", "code_fact": f.extra.get("code_fact")} for f in (a, b))
+    if same_problem(ka, kb) or _same_fact(ka, kb) or (_norm(ka["email_quote"])
+                                                      and _norm(ka["email_quote"]) == _norm(kb["email_quote"])):
+        return 2
+    return int(a.rule["pattern_class"] == b.rule["pattern_class"])
+
+
+def vote(reads: list[tuple[list[Finding], dict]]) -> tuple[list[Finding], dict]:
+    """The findings most reads agree on. Each read's finding joins the likeliest group not yet holding one from
+    that read; a group found by a majority is kept, shown through its firmest finding (clear before unsure)."""
+    groups: list[dict[int, Finding]] = []
+    for n, (found, _) in enumerate(reads):
+        for f in found:
+            best = max(((_alike(f, g[k]), i) for i, g in enumerate(groups) if n not in g for k in g),
+                       default=(0, -1))
+            if best[0]:
+                groups[best[1]][n] = f
+            else:
+                groups.append({n: f})
+    need = len(reads) // 2 + 1
+    out, record = [], []
+    for g in groups:
+        pick = min(g, key=lambda n: (g[n].certainty != "clear", n))
+        f = g[pick]
+        record.append({"participant": f.event.get("participant_id"), "headline": f.extra.get("headline"),
+                       "pattern_class": f.rule["pattern_class"], "reads": sorted(g), "kept": len(g) >= need})
+        if len(g) >= need:
+            f.extra["votes"] = f"{len(g)} of {len(reads)}"
+            out.append(f)
+    trace = dict(reads[0][1], votes=record,
+                 other_reads=[{k: v for k, v in t.items() if k != "unsaved"} for _, t in reads[1:]])
+    return out, trace
 
 
 def _check(study, msg, email, use_cache, log, save, pool) -> tuple[list[Finding], dict]:
@@ -1391,7 +1448,7 @@ def _check(study, msg, email, use_cache, log, save, pool) -> tuple[list[Finding]
     sent = _email_date(msg)
     keys = key_sections(study, items)
     meds = medicine_lists(sources)
-    therapeutic_index(meds, use_cache)
+    llm.as_sample(0, therapeutic_index, meds, use_cache)  # a fact about the medicines, not about this email
     trace: dict = {"parts": []}
     out: list[Finding] = []
     meta: list[tuple[dict, dict]] = []

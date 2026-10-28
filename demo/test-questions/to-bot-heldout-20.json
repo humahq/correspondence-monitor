@@ -1,0 +1,22 @@
+[
+ {"id": "h01", "question": true,  "text": "@Huma bot quick one - max time between the two screening visits"},
+ {"id": "h02", "question": true,  "text": "@Huma bot dose hold rules if ALT goes above 3x ULN"},
+ {"id": "h03", "question": true,  "text": "@Huma bot G-453-119 is travelling during week 20, any flexibility on the visit date"},
+ {"id": "h04", "question": true,  "text": "@Huma bot we're unclear on whether urine biomarkers are needed at week 8"},
+ {"id": "h05", "question": true,  "text": "@Huma bot help me understand the unblinding procedure"},
+ {"id": "h06", "question": true,  "text": "@Huma bot vaccines allowed during treatment? flu shot season"},
+ {"id": "h07", "question": true,  "text": "@Huma bot pt took 2 capsules this morning by mistake, next steps per protocol"},
+ {"id": "h08", "question": true,  "text": "@Huma bot info on PK sample shipping conditions pls"},
+ {"id": "h09", "question": true,  "text": "@Huma bot could you clarify which ALSFRS-R version we use"},
+ {"id": "h10", "question": true,  "text": "@Huma bot checking that a follow-up safety call is required after early termination"},
+ {"id": "n01", "question": false, "text": "@Huma bot G-453-150 screen failed, eGFR 38"},
+ {"id": "n02", "question": false, "text": "@Huma bot heads up the site will be closed Friday for the holiday"},
+ {"id": "n03", "question": false, "text": "@Huma bot week 2 phone call done for G-453-129, no new AEs, meds unchanged"},
+ {"id": "n04", "question": false, "text": "@Huma bot sorry, typo above, I meant G-453-131 not 113"},
+ {"id": "n05", "question": false, "text": "@Huma bot perfect, appreciate it"},
+ {"id": "n06", "question": false, "text": "@Huma bot translate the consent form into Spanish"},
+ {"id": "n07", "question": false, "text": "@Huma bot do you think this study will succeed"},
+ {"id": "n08", "question": false, "text": "@Huma bot delete my last message"},
+ {"id": "n09", "question": false, "text": "@Huma bot who won the game last night"},
+ {"id": "n10", "question": false, "text": "@Huma bot CSF collected 10:40, dose given 11:05, all per schedule"}
+]
