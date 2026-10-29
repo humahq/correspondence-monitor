@@ -1,42 +1,37 @@
 """The last check on words the AI wrote before they are sent (OUT-04, QAA-06).
 
 What the AI rewrites or phrases may not add, compared with what it was given:
-- a fact: a number, a participant or visit ID, an email address or a link;
-- an instruction about the participant's care (stop, hold or change the drug or dose, withdraw, exclude, unblind);
-- a clinical judgment (clinically significant, safe, eligible, a diagnosis, caused by the drug).
-The same words already in the source (the protocol's own "must discontinue study drug") are allowed. Code decides;
-on a problem the caller falls back to the words it had before the AI, and the problem is audited.
+- a fact: a number, a participant or visit ID, an email address or a link. Code checks these exactly;
+- a clinical judgment or an instruction about a participant's care. A fast Decisions call judges these by meaning
+  (Eliot, Oct 29: semantic, not word lists), so the protocol's own "must discontinue study drug" said again is
+  fine, and a judgment in new words is not.
+On a problem the caller falls back to the words it had before the AI, and the problem is audited.
 """
 
 from __future__ import annotations
 
 import re
 
+from . import llm
+
 _NUM = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)?")
 _ID = re.compile(r"\b[A-Z]{1,6}-?\d{2,}(?:-\d+)*\b|\b\d{2,}-\d{2,}(?:-\d+)*\b")
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _LINK = re.compile(r"https?://[^\s|>)\]]+")
 
-_CARE = (r"(?:stop|start|hold|withhold|discontinue|resume|increase|decrease|reduce|double|halve|adjust|skip|"
-         r"withdraw|exclude|enrol|enroll|randomi[sz]e|unblind|admit|hospitali[sz]e|treat)")
-_WHAT = r"(?:the\s+)?(?:study\s+)?(?:drug|dose|dosing|medication|treatment|DNL343|participant|patient|subject)"
-JUDGMENT = [
-    ("a clinical judgment", re.compile(r"\bclinically\s+(?:significant|insignificant|relevant|meaningful|important)\b",
-                                       re.I)),
-    ("a judgment that something is safe or eligible", re.compile(
-        r"\b(?:is|are|was|were|be|seems?|looks?|appears?)\s+(?:not\s+|still\s+)?(?:safe|unsafe|eligible|ineligible|"
-        r"dangerous|harmless|fit to)\b", re.I)),
-    ("a diagnosis", re.compile(r"\b(?:diagnos(?:is|es|ed|e)|prognosis)\b", re.I)),
-    ("a judgment of cause", re.compile(r"\b(?:caused by|due to|related to|because of)\s+" + _WHAT, re.I)),
-    ("an instruction about care", re.compile(
-        r"\b(?:should|must|need(?:s)? to|ha(?:s|ve) to|recommend(?:ed|s)?|advise[ds]?|suggest(?:s|ed)?)\b[^.?!\n]{0,40}?\b"
-        + _CARE + r"\b", re.I)),
-    ("an instruction about care", re.compile(r"\b" + _CARE + r"\s+" + _WHAT + r"\b", re.I)),
-]
-
-
-def _norm(text: str) -> str:
-    return " ".join(re.sub(r"[^\w@./:+-]+", " ", (text or "").lower()).split())
+FRAME = ("A clinical-trial monitor bot had an AI reword some text before sending it to a study site. SOURCE is what "
+         "the AI was given; REWRITTEN is what it wrote. The bot may repeat anything SOURCE says, in any words, but "
+         "must never add a medical opinion or medical advice of its own.")
+JUDGMENT = {
+    "opinion": ("a clinical judgment", "Does REWRITTEN state a medical opinion that SOURCE does not state or clearly "
+                "imply: that a result or event is clinically significant, that something is safe or unsafe, that a "
+                "participant is or is not eligible, a diagnosis or prognosis, or that the study drug or something "
+                "else caused an event? Saying again what SOURCE says, in other words, does not count."),
+    "care": ("an instruction about care", "Does REWRITTEN tell anyone to change a participant's care in a way SOURCE "
+             "does not: stop, hold, start, skip or change a drug or dose, withdraw or exclude the participant, "
+             "unblind, or admit them to hospital? Saying again what SOURCE says, in other words, does not count."),
+}
+LINE = 0.5
 
 
 def _nums(text: str) -> set[str]:
@@ -57,15 +52,19 @@ def added_facts(out: str, source: str) -> list[str]:
 
 
 def added_judgment(out: str, source: str) -> list[str]:
-    """Clinical judgments and care instructions in out whose words are not already in source."""
-    src = _norm(source)
-    found = []
-    for what, pat in JUDGMENT:
-        for m in pat.finditer(out or ""):
-            if _norm(m.group()) not in src:
-                found.append(f'{what}: "{m.group()}"')
-    return list(dict.fromkeys(found))
+    """Clinical judgments and care instructions in out that source does not give. A check that cannot run counts
+    as a problem, so the caller keeps the words it had."""
+    if not (out or "").strip():
+        return []
+    try:
+        scores = llm.decide("output_check", [{"role": "developer", "content": FRAME},
+                                             {"role": "user", "content": f"SOURCE:\n{source}\n\nREWRITTEN:\n{out}"}],
+                            [{"type": "predicate", "name": k, "instructions": q} for k, (_, q) in JUDGMENT.items()])
+    except Exception as e:
+        return [f"the check could not run ({str(e)[:120]})"]
+    return [f"{JUDGMENT[k][0]} ({scores[k]:.2f})" for k in JUDGMENT if scores.get(k, 0) >= LINE]
 
 
 def problems(out: str, source: str) -> list[str]:
-    return added_facts(out, source) + added_judgment(out, source)
+    """Facts first: when the words already add a fact, the AI is not asked."""
+    return added_facts(out, source) or added_judgment(out, source)

@@ -1221,6 +1221,7 @@ def test_the_chat_reply_is_short_and_never_adds_a_number(monkeypatch):
          "sums": [("the maximum gap", "84 - 14 = 70")],
          "text": "70 days. It is not stated directly; the phone visits are Day 14 and Day 84, so 84 - 14 = 70."}
     said = {"text": "The longest gap is 70 days (Week 2 to Week 12), give or take 3 days."}
+    _decide(monkeypatch, {})
     monkeypatch.setattr(answers.llm, "structured", lambda *a, **k: said)
     assert answers.plain(a, "Study coordinator") == said["text"]
     said["text"] = "The longest gap is 76 days."  # a number the checked answer never gave
@@ -2512,6 +2513,7 @@ def test_a_doctor_asking_in_a_group_gets_a_calm_answer(monkeypatch):
     from cormon import answers, careful, config, llm
     study = config.study("NCT05842941")
     _rooms(monkeypatch)   # no member list: who wrote in the room is known
+    _decide(monkeypatch, {})
     monkeypatch.setattr(answers.guide, "checker", lambda s: {})
     monkeypatch.setattr(answers, "find", lambda text, use_cache=True, earlier=None: [
         {"question": "Can CSF be drawn after the first dose?", "participant": "", "harm": False}])

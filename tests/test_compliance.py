@@ -912,31 +912,55 @@ def test_a_chat_correction_goes_to_the_same_thread():
 
 # ------------------------------------------------------------------ output check (OUT-04, QAA-06)
 
-def test_output_check_finds_added_facts_and_judgments():
+def _judge(monkeypatch, **scores):
+    """llm.decide for the output check: the given scores (0 for any other question); the inputs it was asked."""
+    from cormon import llm
+
+    asked = []
+    monkeypatch.setattr(llm, "decide", lambda task, inp, qs, use_cache=True: asked.append(inp[1]["content"])
+                        or {q["name"]: scores.get(q["name"], 0.0) for q in qs})
+    return asked
+
+
+def test_output_check_finds_added_facts_exactly(monkeypatch):
     from cormon import outcheck
 
+    asked = _judge(monkeypatch)
     src = "Participant 104-002 had eGFR 52 at Visit 3. See https://x.org/a"
     assert outcheck.problems("Participant 104-002 had eGFR 52 at Visit 3. See https://x.org/a", src) == []
     assert any("numbers" in p and "48" in p for p in outcheck.added_facts("eGFR 52, down from 48.", src))
     assert any("ID" in p for p in outcheck.added_facts("Also 104-009.", src))
     assert any("link" in p for p in outcheck.added_facts("See https://evil.org", src))
-    assert outcheck.added_judgment("This is clinically significant.", src)
-    assert outcheck.added_judgment("You should stop the study drug now.", src)
-    assert outcheck.added_judgment("The participant is not eligible.", src)
-    assert outcheck.added_judgment("This is likely caused by the study drug.", src)
-    assert outcheck.added_judgment("Please check the eGFR and reply.", src) == []
-    allowed = "Participants must discontinue study drug if ALT > 3x ULN."
-    assert outcheck.added_judgment("They must discontinue study drug.", allowed) == []
+    assert outcheck.problems("eGFR 52, down from 48.", src) and len(asked) == 1   # a new fact: the AI is not asked
+
+
+def test_output_check_asks_the_ai_about_judgments_by_meaning(monkeypatch):
+    from cormon import llm, outcheck
+
+    asked = _judge(monkeypatch, opinion=0.93)
+    assert outcheck.added_judgment("This is clinically significant.", "eGFR 52.") == ["a clinical judgment (0.93)"]
+    assert "SOURCE:\neGFR 52." in asked[0] and "REWRITTEN:\nThis is clinically significant." in asked[0]
+    _judge(monkeypatch, care=0.88)
+    assert outcheck.added_judgment("Hold the dose.", "eGFR 52.") == ["an instruction about care (0.88)"]
+    _judge(monkeypatch, opinion=0.2, care=0.1)
+    assert outcheck.added_judgment("They must discontinue study drug.", "Must discontinue study drug.") == []
+
+    def down(*a, **k):
+        raise RuntimeError("Decisions call failed")
+    monkeypatch.setattr(llm, "decide", down)
+    assert "could not run" in outcheck.added_judgment("Fine.", "Fine.")[0]   # no check: the checked words are kept
 
 
 def test_an_ai_edit_that_adds_advice_is_not_used(monkeypatch):
     from cormon import drafting, llm
 
     body = 'Visit 3 for 104-002 was late. Site wrote: "seen on day 30". Details: https://b/items/x (#5)'
+    _judge(monkeypatch, care=0.97)
     monkeypatch.setattr(llm, "structured", lambda *a, **k: {"body": body + " You should hold the study drug."})
     ctx = {"finding": {"message_quote": "seen on day 30", "doc_quote": ""}, "item": {"link": "https://b/items/x", "id": 5}}
     assert drafting.ai_edit(body, ctx) == body
     assert db.q1("SELECT 1 FROM audit_log WHERE action='draft_edit_refused'")
+    _judge(monkeypatch)
     monkeypatch.setattr(llm, "structured", lambda *a, **k: {"body": body.replace("Details", "See")})
     assert drafting.ai_edit(body, ctx) == body.replace("Details", "See")
 
@@ -946,8 +970,10 @@ def test_an_answer_reworded_into_a_judgment_falls_back_to_the_checked_words(monk
 
     a = {"question": "When is the Week 4 visit?", "text": "Day 28, give or take 3 days.", "sums": [],
          "quotes": [("Schedule", "Week 4 / Day 28 ± 3")], "found": True, "traced": True}
+    _judge(monkeypatch, opinion=0.91)
     monkeypatch.setattr(llm, "structured", lambda *a, **k: {"text": "Day 28 ± 3. It is safe to dose then."})
     assert answers._plain_said(a, "CRC", False) == a["text"] and a["output_check"]
+    _judge(monkeypatch)
     monkeypatch.setattr(llm, "structured", lambda *a, **k: {"text": "Day 28, within 3 days either side."})
     assert answers._plain_said(dict(a), "CRC", False) == "Day 28, within 3 days either side."
 
