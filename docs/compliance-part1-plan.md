@@ -8,8 +8,8 @@ tested and deployed to the live bot on 27 Oct; the rest is not built yet.
 
 - Part I has 71 requirement IDs. Before this work: 7 done, 41 partly done, 21 not done, 2 are V2 (later).
   After the 27 Oct deploy: 12 done, 40 partly done, 17 not done, 2 V2. After the second 27 Oct deploy: 24 done,
-  32 partly done, 13 not done, 2 V2. With the 28 Oct build (on the laptop, not deployed): 30 done, 29 partly
-  done, 10 not done, 2 V2.
+  32 partly done, 13 not done, 2 V2. After the 28 Oct build (since deployed): 30 done, 29 partly done, 10 not
+  done, 2 V2.
 - Nothing we found needs a rewrite. Most gaps are missing records (hashes, versions, full AI logs) or missing
   workflow (safety routing, clearing grammar, bounces, recall).
 - Approach, as Eliot asked: a thin wrapper (facade) in front of each compliance function. Each wrapper has a
@@ -43,7 +43,7 @@ tested and deployed to the live bot on 27 Oct; the rest is not built yet.
   emailed.
 - `cormon verify` runs the audit-trail and fingerprint checks by hand. 33 new tests; all 185 pass.
 
-### Built on 28 Oct (laptop only, not deployed)
+### Built on 28 Oct (since deployed)
 
 - Recall or correct a sent message (`cormon recall` / `cormon correct`): a follow-up goes to the same people in
   the same email or chat thread. A message not yet sent is held instead. (OUT-07)
@@ -54,7 +54,10 @@ tested and deployed to the live bot on 27 Oct; the rest is not built yet.
   (`cormon approve`) within 24 hours. The person who asks cannot approve or run it. (SEC-04, DSP-05)
 - A fixed list of reason codes for clear and suppress; "other" needs a written reason. (DSP-04)
 - An output check on AI wording: a rewording that adds a number, ID, email, link or a clinical judgment not in
-  the source is refused and the checked words are used. (OUT-04, QAA-06)
+  the source is refused and the checked words are used. (OUT-04, QAA-06) On 29 Oct, as Eliot asked, the
+  judgment part became an AI check by meaning (one Decisions call) instead of a word list; numbers, IDs, emails
+  and links stay an exact code check. Tested: 10 of 10 sample rewordings right, Q&A score unchanged, doctor
+  test 25 of 28 (24 of 28 before). Deployed 29 Oct.
 - Notes need a second person's approval, have versions and a start date; old notes stay in force. Config
   versions can be approved (`cormon config approve`). (DSP-06, CFG-01)
 - A weekly drift email: grounding failure rates against the four weeks before, plus 10 random quiet messages for
@@ -149,13 +152,14 @@ Done before:
 - ARC-01 No code path writes to any sponsor system (no EDC, CRM or calendar connection exists).
 - ARC-02 HTTPS through Caddy; mail and AI calls over TLS.
 - OUT-08 No approval queue, which matches the PRD's default (unattended send).
-- OUT-04 AI wording that adds a fact not in the source is refused (28 Oct, not deployed).
-- OUT-05 Per-study hourly send cap (28 Oct, not deployed).
-- OUT-07 Recall and correction of a sent message, in the same thread (28 Oct, not deployed).
+- OUT-04 AI wording that adds a fact or a judgment not in the source is refused (28 Oct; judged by meaning
+  from 29 Oct).
+- OUT-05 Per-study hourly send cap of 100 (28 Oct).
+- OUT-07 Recall and correction of a sent message, in the same thread (28 Oct).
 - SAF-06 Tests for no monitor, unreachable recipient and router down (28 Oct). SAF-02 is still open.
-- DSP-06 Notes have versions, an approver and a start date (28 Oct, not deployed).
-- GOV-02 Weekly drift email with grounding rates and a sample of quiet messages to mark (28 Oct, not
-  deployed). It only finds misses if a person marks the sample.
+- DSP-06 Notes have versions, an approver and a start date (28 Oct).
+- GOV-02 Weekly drift email with grounding rates and a sample of quiet messages to mark (28 Oct). It only
+  finds misses if a person marks the sample.
 
 ### Not done (10)
 
