@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from . import capture, config, db, items, llm, rooms
+from . import capture, config, db, items, llm, outcheck, rooms
 from .channels.gchat import chat_text
 from .config import Person, Study
 from .settings import CONFIG_DIR, load_yaml
@@ -234,6 +234,10 @@ def _reword(study: Study, text: str, about: list[tuple[Person, dict]], why: str)
         return None
     links = re.findall(r"https?://[^\s|>]+", text)
     if not said or not _numbers(said) <= _numbers(text) or any(u not in said for u in links):
+        return None
+    if added := outcheck.problems(said, text):
+        db.audit("careful_reword_refused", entity_type="study", entity_id=study.study_id, study_id=study.study_id,
+                 problems=added)
         return None
     return said
 

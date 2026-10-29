@@ -212,6 +212,33 @@ def record_config_changes(actor: str | None = None, reason: str | None = None) -
     return changed
 
 
+class ConfigApprovalRefused(ValueError):
+    pass
+
+
+def unapproved() -> list[dict]:
+    """Each config file whose version in use has no second person's approval (CFG-01). A version applies from
+    the moment it is recorded (recorded_at is its effective date); the approval is the second look."""
+    return [dict(r) for r in db.q(
+        "SELECT v.id, v.path, v.actor, v.recorded_at FROM config_versions v WHERE v.approved_by IS NULL"
+        " AND v.id=(SELECT MAX(id) FROM config_versions w WHERE w.path=v.path) ORDER BY v.id")]
+
+
+def approve_version(version_id: int, who: str) -> dict:
+    row = db.q1("SELECT * FROM config_versions WHERE id=?", (version_id,))
+    if row is None:
+        raise ConfigApprovalRefused(f"there is no config version {version_id}")
+    if row["approved_by"]:
+        raise ConfigApprovalRefused(f"config version {version_id} was already approved by {row['approved_by']}")
+    if who.lower() == (row["actor"] or "").lower():
+        raise ConfigApprovalRefused(f"config version {version_id} was made by {who}; a different person must approve it")
+    db.ex("UPDATE config_versions SET approved_by=?, approved_at=? WHERE id=? AND approved_by IS NULL",
+          (who, db.now(), version_id))
+    db.audit("config_approved", entity_type="config", entity_id=row["path"], actor=who, actor_type="operator",
+             version=version_id, sha256=row["sha256"], made_by=row["actor"], effective_from=row["recorded_at"])
+    return dict(db.q1("SELECT id, path, approved_by, approved_at FROM config_versions WHERE id=?", (version_id,)))
+
+
 def get_path(data: Any, dotted: str) -> Any:
     node = data
     for part in dotted.split("."):

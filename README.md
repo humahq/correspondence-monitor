@@ -348,12 +348,21 @@ cormon items [--tier T] [--clearing] [--sponsor-view]
 cormon item ID [--drafts]             evidence, drafts, full history
 cormon rerun MESSAGE_ID               re-classify one message (fresh model call)
 cormon draft ITEM_ID [--force --send] produce drafts on demand
-cormon suppress ITEM_ID --reason ...  / unsuppress / clear [--undo]
+cormon suppress ITEM_ID --code CODE --reason ...  / unsuppress / clear --code CODE [--undo]
+                                      CODE: fixed, allowed, misread, duplicate, deviation_logged, not_this_study,
+                                      other (other needs --reason)
 cormon override ITEM_ID --tier medium | --recipient PERSON_ID | --send-draft no | --counts no
+cormon correct OUTBOX_ID --text "..." --reason "..."   follow-up with the right words, same people and thread
+cormon recall OUTBOX_ID --reason "..."                 "please disregard" follow-up; not sent yet: held instead
 cormon digest --hours 24 [--send]     digest for any window; the schedule is unaffected
 cormon pause / resume                 capture continues while paused; nothing is classified or sent
 cormon config show|set|edit|history   routing rules, thresholds, templates (changes recorded with who/when)
-cormon note add --scope message|person|study|global --target X --kind fact|instruction "text"
+cormon config approve FILE VERSION_ID a second person approves the config version in use
+cormon note add --scope message|person|study|global --target X --kind fact|instruction [--from DATE] "text"
+cormon note edit|approve|history|retire --target NOTE_ID   a note applies once another person approves it
+cormon drift [--sample] [--send]      the weekly quality check (also emailed weekly to the admins)
+cormon drift --mark MESSAGE_ID ok|missed [--note ...]     record your review of a sampled message
+cormon approve ID / approvals         approve another person's two-person request; list the requests
 cormon log [--item ID] [--message ID] the audit log
 cormon rules [--pattern eligibility]  the study model
 cormon rules --report                 what was kept, dropped or merged and why; number rules; contradictions
@@ -369,6 +378,15 @@ cormon restore FILE --yes             replace the database with a checked backup
 cormon purge [--days N] --yes         clear message text older than N days (data.retention_days)
 cormon forget-participant STUDY PID --yes   delete the dates and events remembered for one participant
 ```
+
+Two people: reset, restore, purge, forget-participant, import-model, and disregarding (or marking "not counted")
+an alert the sponsor would see. Run the command; it records a request. A different person runs
+`cormon --as NAME approve ID`; then run the command again with `--approval ID` (within 24 hours, once).
+`compliance.two_person: false` turns this off in a practice copy. Names come from `--as` or the computer login,
+which the bot cannot check.
+
+Each study sends at most `outbox.hourly_cap_per_study` messages an hour (default 100; 0 = no cap). The rest wait,
+and the admins are emailed once an hour while it lasts. Alerts about the bot's own health are never held.
 
 ### Alerts arrive once
 - Each outgoing message is taken by one sender only, so two senders never send it twice. The same draft queued twice within 6 hours is kept once (`cormon draft ID --force` resends on purpose).

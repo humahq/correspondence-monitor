@@ -391,6 +391,33 @@ BEGIN SELECT RAISE(ABORT, 'row_changes is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS row_changes_no_delete BEFORE DELETE ON row_changes
 BEGIN SELECT RAISE(ABORT, 'row_changes is append-only'); END;
 
+-- an action that destroys data or hides an alert the sponsor would see: one person asks, another approves
+-- (compliance/approvals.py)
+CREATE TABLE IF NOT EXISTS approvals (
+    id INTEGER PRIMARY KEY,
+    action TEXT NOT NULL,
+    target TEXT NOT NULL,
+    reason TEXT,
+    requested_by TEXT NOT NULL,
+    requested_at TEXT NOT NULL,
+    approved_by TEXT,
+    approved_at TEXT,
+    used_at TEXT
+);
+
+-- messages picked at random each week for a person to check for a missed problem (drift.py)
+CREATE TABLE IF NOT EXISTS drift_samples (
+    id INTEGER PRIMARY KEY,
+    week TEXT NOT NULL,
+    message_id INTEGER NOT NULL,
+    picked_at TEXT NOT NULL,
+    verdict TEXT CHECK (verdict IN ('ok','missed')),
+    reviewer TEXT,
+    note TEXT,
+    reviewed_at TEXT,
+    UNIQUE (week, message_id)
+);
+
 CREATE TRIGGER IF NOT EXISTS audit_log_no_update BEFORE UPDATE ON audit_log
 BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS audit_log_no_delete BEFORE DELETE ON audit_log
@@ -446,14 +473,38 @@ MIGRATIONS = {
     # the audit hash chain (compliance/trail.py)
     ("audit_log", "prev_hash"): "ALTER TABLE audit_log ADD COLUMN prev_hash TEXT",
     ("audit_log", "hash"): "ALTER TABLE audit_log ADD COLUMN hash TEXT",
+    # why an alert was cleared or disregarded, from items.REASON_CODES
+    ("items", "reason_code"): "ALTER TABLE items ADD COLUMN reason_code TEXT",
+    # the study a sent message belongs to, for the hourly send cap
+    ("outbox", "study_id"): "ALTER TABLE outbox ADD COLUMN study_id TEXT",
+    # notes: versions, a second person's approval and the date a note starts to apply (notes.py)
+    ("notes", "version"): "ALTER TABLE notes ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
+    ("notes", "replaces"): "ALTER TABLE notes ADD COLUMN replaces INTEGER",
+    ("notes", "effective_from"): "ALTER TABLE notes ADD COLUMN effective_from TEXT",
+    ("notes", "approved_by"): "ALTER TABLE notes ADD COLUMN approved_by TEXT",
+    ("notes", "approved_at"): "ALTER TABLE notes ADD COLUMN approved_at TEXT",
+    # a config change approved by a second person (cormon config approve)
+    ("config_versions", "approved_by"): "ALTER TABLE config_versions ADD COLUMN approved_by TEXT",
+    ("config_versions", "approved_at"): "ALTER TABLE config_versions ADD COLUMN approved_at TEXT",
 }
-INDEXES = ["CREATE INDEX IF NOT EXISTS ix_outbox_idem ON outbox(idem_key)"]
+# run once, right after the column is added
+BACKFILL = {
+    ("outbox", "study_id"): "UPDATE outbox SET study_id=COALESCE("
+                            "(SELECT study_id FROM items WHERE items.id=outbox.item_id),"
+                            "(SELECT study_id FROM messages WHERE messages.id=outbox.message_id))",
+    # notes made before approvals were kept go on applying
+    ("notes", "approved_at"): "UPDATE notes SET approved_by='(before approvals)', approved_at=created_at",
+}
+INDEXES = ["CREATE INDEX IF NOT EXISTS ix_outbox_idem ON outbox(idem_key)",
+           "CREATE INDEX IF NOT EXISTS ix_outbox_study_sent ON outbox(study_id, sent_at)"]
 
 
 def _migrate(c: sqlite3.Connection) -> None:
     for (table, column), sql in MIGRATIONS.items():
         if column not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
             c.execute(sql)
+            if (table, column) in BACKFILL:
+                c.execute(BACKFILL[(table, column)])
     for sql in INDEXES:
         c.execute(sql)
 

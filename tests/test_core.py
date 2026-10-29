@@ -1065,7 +1065,7 @@ def test_one_study_cannot_clear_or_suppress_another_studys_item(monkeypatch):
             change()
     assert items.get(7)["state"] == "open" and items.get(7)["counts"] == 1
     assert len(db.q("SELECT 1 FROM audit_log WHERE action='item_change_refused_other_study'")) == 2
-    items.set_state(7, "cleared", "cra@s1", "cra", study_id="S1")
+    items.set_state(7, "cleared", "cra@s1", "cra", study_id="S1", code="fixed")
     assert items.get(7)["state"] == "cleared"
     # a CRA of study S2 replying "cleared" in the thread of an S1 alert changes nothing
     oid = routing.enqueue(purpose="teams_study_team", channel="teams", destination="teams_study_channel", body="b",

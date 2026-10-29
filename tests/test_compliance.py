@@ -702,13 +702,13 @@ def test_steps_must_happen_in_order():
     _item(1, routed=0)
     with pytest.raises(items.StepOrder, match="never sent"):
         items.set_state(1, "cleared", "cra@site.org", "cra", study_id="S1")
-    items.set_state(1, "cleared", "ops", "operator", study_id="S1")             # the operator may
+    items.set_state(1, "cleared", "ops", "operator", study_id="S1", code="fixed")   # the operator may
     with pytest.raises(items.StepOrder, match="already cleared"):
-        items.set_state(1, "cleared", "ops", "operator", study_id="S1")
+        items.set_state(1, "cleared", "ops", "operator", study_id="S1", code="fixed")
     _item(2, state="out_of_scope")
     for state in ("cleared", "suppressed"):
         with pytest.raises(items.StepOrder, match="safety item"):
-            items.set_state(2, state, "ops", "operator", study_id="S1")
+            items.set_state(2, state, "ops", "operator", study_id="S1", code="fixed")
     assert items.get(2)["state"] == "out_of_scope"
     assert db.q1("SELECT COUNT(*) n FROM audit_log WHERE action='item_change_refused_order'")["n"] == 4
 
@@ -733,3 +733,400 @@ def test_every_digest_says_silence_is_not_clearance():
     now = datetime.now(timezone.utc)
     assert SAFETY_NOTICE in digest.build(now - timedelta(days=1), now)["footer"]
     assert "Silence does not constitute clearance." in SAFETY_NOTICE
+
+
+# ------------------------------------------------------------------ reason codes (DSP-04)
+
+def test_clearing_needs_a_reason_code_from_the_fixed_list():
+    from cormon import items
+
+    _item(4)
+    with pytest.raises(items.NoReasonCode, match="reason code"):
+        items.set_state(4, "cleared", "ops", "operator", study_id="S1")
+    with pytest.raises(items.NoReasonCode, match="reason code"):
+        items.set_state(4, "cleared", "ops", "operator", study_id="S1", code="because")
+    with pytest.raises(items.NoReasonCode, match="written out"):
+        items.set_state(4, "suppressed", "ops", "operator", study_id="S1", code="other")
+    assert items.get(4)["state"] == "open"
+    items.set_state(4, "suppressed", "ops", "operator", "site re-sent the right form", study_id="S1", code="other")
+    assert items.get(4)["reason_code"] == "other"
+    a = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='item_suppressed'")["details"])
+    assert a["code"] == "other" and a["code_label"].startswith("Other")
+    items.set_state(4, "open", "ops", "operator", study_id="S1")                     # reopening needs none
+    assert items.get(4)["reason_code"] is None
+
+
+def test_a_reply_that_clears_is_recorded_with_its_own_code(monkeypatch):
+    from cormon import items, pipeline
+
+    _item(5)
+    monkeypatch.setattr(pipeline, "_answer_in_chat", lambda *a: None)
+    person = SimpleNamespace(name="Ann", email="cra@site.org", roles=["cra"])
+    study = SimpleNamespace(study_id="S1", person_by_email=lambda a: person)
+    msg = {"id": 1, "channel": "teams", "study_id": "S1", "from_addr": "cra@site.org", "headers": {}}
+    assert pipeline.handle_instruction(study, msg, {"type": "cleared", "text": "cleared #5"})
+    assert items.get(5)["state"] == "cleared" and items.get(5)["reason_code"] == "by_reply"
+
+
+# ------------------------------------------------------------------ two people (SEC-04, DSP-05)
+
+def test_two_person_rule_one_asks_another_approves_once():
+    from cormon.compliance import approvals
+
+    said = []
+    assert approvals.gate("purge", "days=30", "ann", "old text", None, say=said.append) is False
+    rid = db.q1("SELECT id FROM approvals")["id"]
+    assert f"approve {rid}" in said[0]
+    with pytest.raises(approvals.Refused, match="not approved yet"):
+        approvals.use(rid, "purge", "days=30", "ann")
+    with pytest.raises(approvals.Refused, match="different person"):
+        approvals.approve(rid, "Ann")
+    approvals.approve(rid, "bob")
+    with pytest.raises(approvals.Refused, match="not purge days=7"):
+        approvals.use(rid, "purge", "days=7", "ann")
+    with pytest.raises(approvals.Refused, match="may not also run it"):
+        approvals.use(rid, "purge", "days=30", "bob")
+    assert approvals.gate("purge", "days=30", "ann", None, rid) is True
+    with pytest.raises(approvals.Refused, match="already used"):
+        approvals.use(rid, "purge", "days=30", "ann")
+    acts = [r["action"] for r in db.q("SELECT action FROM audit_log WHERE entity_type='approval' ORDER BY id")]
+    assert acts.count("approval_refused") == 5 and "approval_given" in acts and "approval_used" in acts
+
+
+def test_an_old_approval_has_expired():
+    from cormon.compliance import approvals
+
+    rid = approvals.request("reset", "db", "ann", None)
+    db.ex("UPDATE approvals SET requested_at=? WHERE id=?", (_ago(25 * 60), rid))
+    with pytest.raises(approvals.Refused, match="older than"):
+        approvals.approve(rid, "bob")
+
+
+def test_disregarding_an_alert_the_sponsor_sees_needs_a_second_person(capsys):
+    from cormon import cli, items
+
+    _item(6)
+    cli.main(["--as", "ann", "suppress", "6", "--code", "misread", "--reason", "not a deviation"])
+    assert items.get(6)["state"] == "open" and "Request #1" in capsys.readouterr().out
+    cli.main(["--as", "bob", "approve", "1"])
+    cli.main(["--as", "ann", "suppress", "6", "--code", "misread", "--reason", "not a deviation", "--approval", "1"])
+    assert items.get(6)["state"] == "suppressed" and items.get(6)["reason_code"] == "misread"
+    _item(7)
+    cli.main(["--as", "ann", "suppress", "7", "--reason", "x"])                     # no code: nothing asked
+    assert "give a reason code" in capsys.readouterr().out and not db.q1("SELECT 1 FROM approvals WHERE id=2")
+
+
+def test_two_person_rule_can_be_turned_off_for_a_practice_copy(monkeypatch):
+    from cormon.compliance import approvals
+
+    _set(monkeypatch, compliance__two_person=False)
+    assert approvals.gate("reset", "db", "ann", None, None) is True and not db.q1("SELECT 1 FROM approvals")
+
+
+# ------------------------------------------------------------------ hourly send cap (OUT-05)
+
+def test_a_study_sends_at_most_its_hourly_number(monkeypatch):
+    from cormon import outbox, routing
+
+    _set(monkeypatch, outbox__hourly_cap_per_study=2)
+    told = []
+    from cormon.compliance import alerts as al
+    monkeypatch.setattr(al, "notify", lambda key, subject, body, **k: told.append(key))
+    went = []
+    monkeypatch.setattr(outbox, "_adapter", lambda ch: SimpleNamespace(send=lambda r: went.append(r["id"]) or {}))
+    ids = [routing.enqueue(purpose="alert", channel="email", destination="email", body=f"b{i}", subject="s",
+                           to=["cra@site.org"], study_id="S1") for i in range(3)]
+    other = routing.enqueue(purpose="alert", channel="email", destination="email", body="b", subject="s",
+                            to=["cra@site.org"], study_id="S2")
+    health = routing.enqueue(purpose="ops_alert", channel="email", destination="email", body="down", subject="s",
+                             to=["john@huma.ai"], study_id="S1")
+    outbox.dispatch()
+    assert went == ids[:2] + [other, health]
+    row = db.q1("SELECT status, next_try_at FROM outbox WHERE id=?", (ids[2],))
+    assert row["status"] == "queued" and row["next_try_at"] > db.now()
+    assert told == ["send_cap:S1"] and db.q1("SELECT 1 FROM audit_log WHERE action='send_capped'")
+    assert outbox.dispatch(only_id=ids[2])["sent"] == 1                       # a person sending one on purpose may
+
+
+# ------------------------------------------------------------------ recall and correction (OUT-07)
+
+def _sent_email():
+    from cormon import routing
+
+    oid = routing.enqueue(purpose="email_cra", channel="email", destination="email", body="Visit 3 was late.",
+                          subject="Re: Visit 3", to=["cra@site.org"], cc=["lead@sponsor.org"], item_id=9,
+                          meta={"thread_key": "email:T1", "gmail_thread": "T1", "references": ["<a@site.org>"]},
+                          study_id="S1")
+    db.ex("UPDATE outbox SET status='sent', sent_at=?, rfc_message_id='<o1@huma.ai>' WHERE id=?", (db.now(), oid))
+    return oid
+
+
+def test_a_sent_email_is_recalled_in_its_own_thread():
+    from cormon import corrections
+
+    oid = _sent_email()
+    res = corrections.follow_up(oid, "ann", "wrong participant")
+    new = db.q1("SELECT * FROM outbox WHERE id=?", (res["outbox_id"],))
+    meta = db.unjs(new["meta"])
+    assert new["purpose"] == "recall" and new["subject"] == "Please disregard: Visit 3"
+    assert db.unjs(new["to_addrs"]) == ["cra@site.org"] and db.unjs(new["cc_addrs"]) == ["lead@sponsor.org"]
+    assert meta["in_reply_to"] == "<o1@huma.ai>" and meta["gmail_thread"] == "T1" and meta["corrects"] == oid
+    assert "disregard" in new["body"] and "wrong participant" in new["body"] and new["study_id"] == "S1"
+    assert db.q1("SELECT status FROM outbox WHERE id=?", (oid,))["status"] == "sent"      # the original is kept
+    a = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='sent_message_recalled'")["details"])
+    assert a["outbox_id"] == oid and a["follow_up_outbox_id"] == res["outbox_id"]
+
+
+def test_a_correction_carries_the_right_words():
+    from cormon import corrections
+
+    oid = _sent_email()
+    res = corrections.follow_up(oid, "ann", "the visit was 2 days late, not 5", text="Visit 3 was 2 days late.")
+    new = db.q1("SELECT * FROM outbox WHERE id=?", (res["outbox_id"],))
+    assert new["purpose"] == "correction" and new["subject"] == "Correction: Visit 3"
+    assert "Visit 3 was 2 days late." in new["body"]
+
+
+def test_a_message_not_yet_sent_is_held_instead():
+    from cormon import corrections, routing
+
+    oid = routing.enqueue(purpose="teams_study_team", channel="teams", destination="teams_alert_channel", body="b",
+                          meta={"target": {"space": "spaces/A", "thread": "spaces/A/threads/t"}})
+    res = corrections.follow_up(oid, "ann", "sent by mistake")
+    assert res == {"held": True, "outbox_id": None}
+    assert db.q1("SELECT status FROM outbox WHERE id=?", (oid,))["status"] == "held"
+    with pytest.raises(corrections.CannotCorrect, match="reason"):
+        corrections.follow_up(oid, "ann", " ")
+
+
+def test_a_chat_correction_goes_to_the_same_thread():
+    from cormon import corrections, routing
+
+    oid = routing.enqueue(purpose="teams_study_team", channel="teams", destination="teams_alert_channel", body="b",
+                          meta={"target": {"space": "spaces/A", "thread": "spaces/A/threads/t"}})
+    db.ex("UPDATE outbox SET status='sent', sent_at=? WHERE id=?", (db.now(), oid))
+    res = corrections.follow_up(oid, "ann", "typo", text="Visit 3, not Visit 4.")
+    meta = db.unjs(db.q1("SELECT meta FROM outbox WHERE id=?", (res["outbox_id"],))["meta"])
+    assert meta["target"] == {"space": "spaces/A", "thread": "spaces/A/threads/t"}
+
+
+# ------------------------------------------------------------------ output check (OUT-04, QAA-06)
+
+def test_output_check_finds_added_facts_and_judgments():
+    from cormon import outcheck
+
+    src = "Participant 104-002 had eGFR 52 at Visit 3. See https://x.org/a"
+    assert outcheck.problems("Participant 104-002 had eGFR 52 at Visit 3. See https://x.org/a", src) == []
+    assert any("numbers" in p and "48" in p for p in outcheck.added_facts("eGFR 52, down from 48.", src))
+    assert any("ID" in p for p in outcheck.added_facts("Also 104-009.", src))
+    assert any("link" in p for p in outcheck.added_facts("See https://evil.org", src))
+    assert outcheck.added_judgment("This is clinically significant.", src)
+    assert outcheck.added_judgment("You should stop the study drug now.", src)
+    assert outcheck.added_judgment("The participant is not eligible.", src)
+    assert outcheck.added_judgment("This is likely caused by the study drug.", src)
+    assert outcheck.added_judgment("Please check the eGFR and reply.", src) == []
+    allowed = "Participants must discontinue study drug if ALT > 3x ULN."
+    assert outcheck.added_judgment("They must discontinue study drug.", allowed) == []
+
+
+def test_an_ai_edit_that_adds_advice_is_not_used(monkeypatch):
+    from cormon import drafting, llm
+
+    body = 'Visit 3 for 104-002 was late. Site wrote: "seen on day 30". Details: https://b/items/x (#5)'
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: {"body": body + " You should hold the study drug."})
+    ctx = {"finding": {"message_quote": "seen on day 30", "doc_quote": ""}, "item": {"link": "https://b/items/x", "id": 5}}
+    assert drafting.ai_edit(body, ctx) == body
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='draft_edit_refused'")
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: {"body": body.replace("Details", "See")})
+    assert drafting.ai_edit(body, ctx) == body.replace("Details", "See")
+
+
+def test_an_answer_reworded_into_a_judgment_falls_back_to_the_checked_words(monkeypatch):
+    from cormon import answers, llm
+
+    a = {"question": "When is the Week 4 visit?", "text": "Day 28, give or take 3 days.", "sums": [],
+         "quotes": [("Schedule", "Week 4 / Day 28 ± 3")], "found": True, "traced": True}
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: {"text": "Day 28 ± 3. It is safe to dose then."})
+    assert answers._plain_said(a, "CRC", False) == a["text"] and a["output_check"]
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: {"text": "Day 28, within 3 days either side."})
+    assert answers._plain_said(dict(a), "CRC", False) == "Day 28, within 3 days either side."
+
+
+# ------------------------------------------------------------------ notes and config approval (DSP-06, CFG-01)
+
+def test_a_note_applies_only_once_another_person_approves_it():
+    from cormon import notes
+
+    nid = notes.add("study", "S1", "fact", "Site 104 uses paper diaries", "ann")
+    assert notes.applicable(None, "S1", []) == [] and notes.status(notes.get(nid)) == "waiting for approval"
+    with pytest.raises(notes.NoteRefused, match="different person"):
+        notes.approve(nid, "ann")
+    notes.approve(nid, "bob")
+    assert [n["id"] for n in notes.applicable(None, "S1", [])] == [nid]
+
+
+def test_a_note_starts_on_its_date_and_a_new_version_replaces_the_old():
+    from cormon import notes
+
+    first = notes.add("study", "S1", "fact", "v1", "ann")
+    notes.approve(first, "bob")
+    later = notes.edit(first, "v2", "ann", effective_from="2999-01-01T00:00:00+00:00")
+    notes.approve(later, "bob")
+    assert [n["text"] for n in notes.applicable(None, "S1", [])] == ["v1"]      # v2 has not started
+    assert notes.status(notes.get(later)).startswith("starts")
+    now = notes.edit(first, "v3", "ann")
+    assert [n["text"] for n in notes.applicable(None, "S1", [])] == ["v1"]      # v3 not approved yet
+    notes.approve(now, "bob")
+    assert [n["text"] for n in notes.applicable(None, "S1", [])] == ["v3"]
+    hist = notes.history(first)
+    assert [h["text"] for h in hist] == ["v1", "v2", "v3"] and hist[0]["status"] == "replaced"
+
+
+def test_notes_apply_at_once_when_approval_is_off(monkeypatch):
+    from cormon import notes
+
+    _set(monkeypatch, notes__need_approval=False)
+    nid = notes.add("global", None, "instruction", "Use UK dates", "ann")
+    assert [n["id"] for n in notes.applicable(None, "S1", [])] == [nid]
+
+
+def test_notes_made_before_approvals_keep_applying(tmp_path):
+    c = sqlite3.connect(tmp_path / "old.db")
+    c.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, scope TEXT, target TEXT, kind TEXT, text TEXT,"
+              " author TEXT, active INTEGER DEFAULT 1, created_at TEXT)")
+    c.execute("INSERT INTO notes (scope, target, kind, text, author, created_at) VALUES"
+              " ('global', NULL, 'fact', 'old', 'ann', '2026-01-01')")
+    for (table, column), sql in db.MIGRATIONS.items():
+        if table == "notes":
+            c.execute(sql)
+            if (table, column) in db.BACKFILL:
+                c.execute(db.BACKFILL[(table, column)])
+    row = c.execute("SELECT approved_by, approved_at, version FROM notes").fetchone()
+    assert row == ("(before approvals)", "2026-01-01", 1)
+
+
+def test_a_config_version_is_approved_by_someone_else():
+    from cormon import config
+
+    db.ex("INSERT INTO config_versions(path, sha256, content, actor, recorded_at) VALUES (?,?,?,?,?)",
+          ("config/triage.yaml", "abc", "x: 1", "ann", db.now()))
+    vid = db.q1("SELECT id FROM config_versions")["id"]
+    assert [w["id"] for w in config.unapproved()] == [vid]
+    with pytest.raises(config.ConfigApprovalRefused, match="different person"):
+        config.approve_version(vid, "ann")
+    config.approve_version(vid, "bob")
+    assert config.unapproved() == [] and db.q1("SELECT 1 FROM audit_log WHERE action='config_approved'")
+
+
+# ------------------------------------------------------------------ quality in use (GOV-02)
+
+def test_drift_counts_grounding_from_the_reader_trace():
+    from cormon import drift
+
+    trace = {"parts": [{"findings": [{"outcome": "clear", "quote_found": True},
+                                     {"outcome": "unsure", "quote_found": False},
+                                     {"outcome": "rejected"}, {"outcome": "duplicate"}]}]}
+    db.audit("reader_checked", entity_type="message", entity_id=1, trace=trace)
+    now = datetime.now(timezone.utc) + timedelta(minutes=1)
+    m = drift.measure(*drift._window(now))
+    assert (m["proposed"], m["rejected"], m["unsure"], m["no_exact_words"]) == (3, 1, 1, 1)
+
+
+def test_drift_flags_a_rate_that_has_clearly_risen(monkeypatch):
+    from cormon import drift
+
+    base = {k: 0 for k in ("messages", "alerts", "safety", "proposed", "rejected", "unsure", "no_exact_words",
+                           "ai_calls", "ai_failed", "fallback_used", "wording_refused", "judgment_flagged",
+                           "blocked_outgoing", "answer_messages", "not_answered")}
+    weeks = iter([dict(base, proposed=20, rejected=10)] + [dict(base, proposed=20, rejected=2)] * 4)
+    monkeypatch.setattr(drift, "measure", lambda s, e: next(weeks))
+    rep = drift.report()
+    assert any("rejected" in f and "50%" in f and "10%" in f for f in rep["flags"])
+    assert "Needs a look" in drift.render(rep, [])
+
+
+def test_drift_samples_quiet_messages_for_a_person_to_mark(monkeypatch):
+    from cormon import drift
+
+    sent = _no_send(monkeypatch)
+    _set(monkeypatch, system__ops_emails=["john@huma.ai"], drift__sample_size=2)
+    mids = [capture.capture(_chat(ext=f"spaces/S1/messages/q{i}")) for i in range(4)]
+    db.ex("UPDATE messages SET status='processed'")
+    _item(1)
+    db.ex("UPDATE items SET first_message_id=?, last_message_id=? WHERE id=1", (mids[0], mids[0]))
+    oid = drift.weekly(log=lambda *_: None)
+    picked = [r["message_id"] for r in db.q("SELECT message_id FROM drift_samples")]
+    assert len(picked) == 2 and mids[0] not in picked
+    assert oid and "cormon drift --mark" in db.q1("SELECT body FROM outbox WHERE id=?", (oid,))["body"]
+    assert drift.weekly(log=lambda *_: None) is None                           # once a week
+    drift.mark(picked[0], "missed", "ann", "late visit not raised")
+    rep = drift.report()
+    assert rep["missed"] == 1 and any("missed problem" in f for f in rep["flags"])
+
+
+# ------------------------------------------------------------------ safety routing failure paths (SAF-06)
+
+def test_no_monitor_listed_a_safety_message_goes_to_nobody_and_cannot_be_cleared():
+    from cormon import config, items, routing
+
+    study = config.study("NCT04098666")
+    assert not any(p.email for p in study.people_with_role("medical_monitor"))
+    mid = capture.capture(_chat(text="Participant 001 was admitted to hospital"))
+    iid, _ = items.upsert(study=study, thread_key="teams:t1", message_id=mid, dedup_key="s1", kind="out_of_scope",
+                          pattern_class=None, rule_id=None, participant_id="001", site=None, polarity="problem",
+                          title="safety", tier="low", tier_reason="safety", evidence={}, reasoning=None,
+                          state="out_of_scope")
+    assert routing.route_item(iid) == [] and not db.q1("SELECT 1 FROM outbox")
+    with pytest.raises(items.StepOrder, match="safety item"):
+        items.set_state(iid, "cleared", "ops", "operator", study_id=study.study_id, code="fixed")
+
+
+def test_no_cra_or_lead_listed_is_said_and_flagged():
+    from cormon import items
+
+    study = SimpleNamespace(people_with_role=lambda role, site=None: [])
+    person, why = items.choose_recipient(study, "104")
+    assert person is None and "no CRA or ClinOps lead" in why
+    assert "immediate item has no named recipient" in items.check_consistency(
+        {"state": "open", "send_draft": 1, "counts": 1, "tier": "immediate", "recipient_person": None,
+         "kind": "finding"})
+
+
+def test_unreachable_recipient_is_retried_then_failed_then_reported(monkeypatch):
+    from cormon import outbox, routing, stuck
+
+    db.set_state("stuck_since", _ago(5))
+    _set(monkeypatch, system__ops_emails=["john@huma.ai"])
+
+    def down(row):
+        raise RuntimeError("550 no such user")
+    monkeypatch.setattr(outbox, "_adapter", lambda ch: SimpleNamespace(send=down))
+    oid = routing.enqueue(purpose="email_cra", channel="email", destination="email", body="b", subject="s",
+                          to=["gone@site.org"], study_id="S1")
+    for _ in range(len(outbox.RETRY_MINUTES) + 1):
+        db.ex("UPDATE outbox SET next_try_at=NULL WHERE id=?", (oid,))
+        outbox.dispatch()
+    row = db.q1("SELECT status, attempts, last_error FROM outbox WHERE id=?", (oid,))
+    assert row["status"] == "failed" and row["attempts"] == len(outbox.RETRY_MINUTES) + 1 and "550" in row["last_error"]
+    assert f"outbox:{oid}" in [p["key"] for p in stuck.problems()]
+    warned = stuck.warn(log=lambda *_: None)
+    assert "john@huma.ai" in db.q1("SELECT to_addrs FROM outbox WHERE id=?", (warned,))["to_addrs"]
+
+
+def test_router_down_an_alert_never_sent_is_retried_then_reported(monkeypatch):
+    from cormon import pipeline, routing, stuck
+
+    db.set_state("route_missed_since", _ago(60))
+    db.set_state("stuck_since", _ago(60))
+    mid = capture.capture(_chat())
+    db.ex("UPDATE messages SET status='processed' WHERE id=?", (mid,))
+    _item(8, routed=0)
+    db.ex("UPDATE items SET first_message_id=?, created_at=? WHERE id=8", (mid, _ago(30)))
+
+    def broken(item_id, **k):
+        raise RuntimeError("routing config unreadable")
+    monkeypatch.setattr(routing, "route_item", broken)
+    assert pipeline.route_missed(log=lambda *_: None) == [8]
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='item_route_failed' AND entity_id='8'")
+    assert "item:8" in [p["key"] for p in stuck.problems()]
+    assert pipeline.route_missed(log=lambda *_: None) == []                     # tried once, then left to a person

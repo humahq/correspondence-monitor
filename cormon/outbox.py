@@ -9,15 +9,45 @@ from __future__ import annotations
 
 import time
 
-from . import db
+from . import db, settings
 from .channels import email_channel, teams_channel
 
 RETRY_MINUTES = (0.5, 2, 10, 30, 120)  # the wait after each failed try; then the row is failed
 STALE_MINUTES = 10
+CAP_WAIT_MINUTES = 5
+UNCAPPED = ("ops_alert", "ops_warning")  # the bot telling its admins it is unwell is never held back
 
 
 def is_paused() -> bool:
     return db.get_state("paused") == "1"
+
+
+def hourly_cap() -> int:
+    """At most this many messages an hour for one study (OUT-05); 0 turns the cap off."""
+    return int(settings.get("outbox.hourly_cap_per_study", 100) or 0)
+
+
+def _over_cap(r: dict, sent_now: dict[str, int]) -> bool:
+    """This study has sent its hourly number: the row waits and the admins are told once an hour."""
+    cap, study = hourly_cap(), r.get("study_id")
+    if not cap or not study or r["purpose"] in UNCAPPED:
+        return False
+    if study not in sent_now:
+        sent_now[study] = db.q1("SELECT COUNT(*) n FROM outbox WHERE study_id=? AND status='sent' AND sent_at>=?",
+                                (study, db.later(-60)))["n"]
+    if sent_now[study] < cap:
+        return False
+    db.ex("UPDATE outbox SET next_try_at=? WHERE id=? AND status='queued'", (db.later(CAP_WAIT_MINUTES), r["id"]))
+    hour = db.now()[:13]
+    if db.get_state(f"send_cap:{study}") != hour:
+        db.set_state(f"send_cap:{study}", hour)
+        db.audit("send_capped", entity_type="outbox", entity_id=r["id"], study_id=study, cap=cap)
+        from .compliance import alerts
+        alerts.notify(f"send_cap:{study}", f"Study monitor: sending paused for an hour for {study}",
+                      f"Study {study} has sent {cap} messages in the last hour, the most allowed "
+                      "(outbox.hourly_cap_per_study). The rest wait and go out as the hour moves on. If this is "
+                      "not expected, pause the bot (`cormon pause`) and look at `cormon outbox`.")
+    return True
 
 
 def _adapter(channel: str):
@@ -61,8 +91,11 @@ def dispatch(limit: int = 50, only_id: int | None = None) -> dict:
         statuses = ("queued", "failed", "held")
         rows = db.q("SELECT * FROM outbox WHERE id=? AND status IN ('queued','failed','held')", (only_id,))
     sent = failed = 0
+    sent_now: dict[str, int] = {}
     for row in rows:
         r = _row(row)
+        if only_id is None and _over_cap(r, sent_now):
+            continue
         if r["item_id"]:
             item = db.q1("SELECT state FROM items WHERE id=?", (r["item_id"],))
             if item and item["state"] == "suppressed":
@@ -77,6 +110,8 @@ def dispatch(limit: int = 50, only_id: int | None = None) -> dict:
             result = _adapter(r["channel"]).send(r)
             _mark_sent(r, result, send_seconds=round(time.perf_counter() - began, 2))
             sent += 1
+            if r.get("study_id") in sent_now:
+                sent_now[r["study_id"]] += 1
         except Exception as e:
             last = r["attempts"] > len(RETRY_MINUTES)
             db.ex("UPDATE outbox SET status=?, next_try_at=?, last_error=? WHERE id=?",

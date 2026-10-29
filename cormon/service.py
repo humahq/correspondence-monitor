@@ -6,7 +6,7 @@ import threading
 import time
 import traceback
 
-from . import backup, capture, config, db, digest, llm, outbox, phi, pipeline, settings, stuck, webview
+from . import backup, capture, config, db, digest, drift, llm, outbox, phi, pipeline, settings, stuck, webview
 from .channels import chat_events, email_channel, teams_channel
 from .compliance import deps, records, trail
 
@@ -102,6 +102,7 @@ def tick(log=print, named: list[str] | None = None, force: bool = True) -> None:
         log("daily digest queued")
     _safely(outbox.recover, log)
     _safely(stuck.warn, log)
+    _safely(drift.weekly, log)
     _safely(stuck.reconcile_mailbox, log)
     _safely(chat_push, log)
     t4 = time.perf_counter()

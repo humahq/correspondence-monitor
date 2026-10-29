@@ -8,7 +8,8 @@ tested and deployed to the live bot on 27 Oct; the rest is not built yet.
 
 - Part I has 71 requirement IDs. Before this work: 7 done, 41 partly done, 21 not done, 2 are V2 (later).
   After the 27 Oct deploy: 12 done, 40 partly done, 17 not done, 2 V2. After the second 27 Oct deploy: 24 done,
-  32 partly done, 13 not done, 2 V2.
+  32 partly done, 13 not done, 2 V2. With the 28 Oct build (on the laptop, not deployed): 30 done, 29 partly
+  done, 10 not done, 2 V2.
 - Nothing we found needs a rewrite. Most gaps are missing records (hashes, versions, full AI logs) or missing
   workflow (safety routing, clearing grammar, bounces, recall).
 - Approach, as Eliot asked: a thin wrapper (facade) in front of each compliance function. Each wrapper has a
@@ -41,6 +42,25 @@ tested and deployed to the live bot on 27 Oct; the rest is not built yet.
   the bot is stalled. A message waiting more than 15 minutes, or a mailbox not read for 15 minutes, is also
   emailed.
 - `cormon verify` runs the audit-trail and fingerprint checks by hand. 33 new tests; all 185 pass.
+
+### Built on 28 Oct (laptop only, not deployed)
+
+- Recall or correct a sent message (`cormon recall` / `cormon correct`): a follow-up goes to the same people in
+  the same email or chat thread. A message not yet sent is held instead. (OUT-07)
+- A cap of 100 sends per study per hour (`outbox.hourly_cap_per_study`). Over the cap, sends wait and the admins
+  are emailed. Ops alerts are never capped. (OUT-05)
+- Two-person rule (`compliance.two_person`, on by default): reset, restore, purge, forget-participant,
+  import-model, and a suppression or "not counted" the sponsor would see need a second person's approval
+  (`cormon approve`) within 24 hours. The person who asks cannot approve or run it. (SEC-04, DSP-05)
+- A fixed list of reason codes for clear and suppress; "other" needs a written reason. (DSP-04)
+- An output check on AI wording: a rewording that adds a number, ID, email, link or a clinical judgment not in
+  the source is refused and the checked words are used. (OUT-04, QAA-06)
+- Notes need a second person's approval, have versions and a start date; old notes stay in force. Config
+  versions can be approved (`cormon config approve`). (DSP-06, CFG-01)
+- A weekly drift email: grounding failure rates against the four weeks before, plus 10 random quiet messages for
+  a person to mark ok or missed (`cormon drift`). (GOV-02)
+- Tests for no monitor listed, an unreachable recipient and the router down. (SAF-06)
+- 26 new tests; all 230 pass. The database upgrade was tried on a copy of the practice database.
 
 ## 2. The wrappers (facades)
 
@@ -88,7 +108,7 @@ The existing code already has natural chokepoints to put these in front of, so t
 Status from reading the code on 2026-10-27, updated after the 27 Oct deploy. "Partly" means part of the
 requirement is in place; the gap is the note.
 
-### Done (24)
+### Done (30)
 
 Built, tested and deployed on the evening of 27 Oct (with pypdf 6.21.2 and certifi 2026.10.23, which fix
 the known problems the first scan found):
@@ -129,12 +149,18 @@ Done before:
 - ARC-01 No code path writes to any sponsor system (no EDC, CRM or calendar connection exists).
 - ARC-02 HTTPS through Caddy; mail and AI calls over TLS.
 - OUT-08 No approval queue, which matches the PRD's default (unattended send).
+- OUT-04 AI wording that adds a fact not in the source is refused (28 Oct, not deployed).
+- OUT-05 Per-study hourly send cap (28 Oct, not deployed).
+- OUT-07 Recall and correction of a sent message, in the same thread (28 Oct, not deployed).
+- SAF-06 Tests for no monitor, unreachable recipient and router down (28 Oct). SAF-02 is still open.
+- DSP-06 Notes have versions, an approver and a start date (28 Oct, not deployed).
+- GOV-02 Weekly drift email with grounding rates and a sample of quiet messages to mark (28 Oct, not
+  deployed). It only finds misses if a person marks the sample.
 
-### Not done (13)
+### Not done (10)
 
 | ID | What is missing |
 |---|---|
-| OUT-07 | No recall/correction of a sent alert |
 | SAF-03 | No severity taxonomy, no 1-hour / 24-hour acknowledgment clock |
 | SAF-04 | No safety acknowledgment by the medical monitor |
 | SAF-05 | No escalation chain (PV backup, ClinOps lead, then a human by phone) |
@@ -143,12 +169,10 @@ Done before:
 | EXP-01 | `export.py` exports the rules, not a study's records package |
 | SDL-02 | Commits are not linked to tickets |
 | SDL-05 | No CI; nothing blocks a deploy when tests fail |
-| SEC-04 | Destructive commands need `--yes` from one person, not two |
 | VAL-04 | No protocol version by site and date |
 | VAL-05 | Model, prompt or rule changes do not trigger test runs |
-| GOV-02 | No production drift monitoring (sampling for misses, grounding failure rate) |
 
-### Partly done (32)
+### Partly done (29)
 
 | ID | In place | Gap |
 |---|---|---|
@@ -158,24 +182,21 @@ Done before:
 | OUT-01 | Rendered text stored per sent message, hashed and re-checked nightly (27 Oct) | Not write-once (Phase 3) |
 | OUT-02 | Gmail sends with its own SPF/DKIM | DMARC `p=reject` on the sending domain is a DNS task |
 | OUT-03 | Who and where come from config | AI decides some "whether": the doctor check (withhold from chat), the careful check, and clearing from a reply (see section 7) |
-| OUT-04 | Templates are fixed; AI edit is optional and checked | No schema check for new facts or instructions |
-| OUT-05 | Pause switch stops sending, ingestion keeps going | No per-study hourly send cap |
 | QAA-04 | Q&A test bench with scores | No pass/fail threshold that blocks a release |
 | QAA-05 | Physician rules and calm-reply templates | Templates not under versioned config with approver |
-| QAA-06 | Prompts forbid clinical judgment | No output check |
+| QAA-06 | Prompts forbid clinical judgment; a rewording that adds a judgment is refused (28 Oct) | A judgment in the final Q&A answer is only recorded, not blocked: no real answers yet to measure the check on |
 | SAF-02 | Safety messages are kept out of normal checks | Routed to nobody today; the medical monitor's email is still missing |
-| SAF-06 | Stuck-message and missed-routing checks | No tests for "no monitor assigned", "recipient unreachable", "router down" |
 | SAF-07 | Safety detection is in the audit log, which is hash-chained (27 Oct); the message is fingerprinted | Not in an export |
 | SAF-10 | Site notice only fires on immediate findings from a coordinator | A message with both a safety part and a finding could still trigger it |
 | DSP-01 | Clear and disregard by reply or command | No token + action + reason-code grammar; the AI reads the intent |
 | DSP-03 | Only CRA, ClinOps lead or tester roles can clear by email | Token's study is not matched to the sender's study; commands not roster-checked |
-| DSP-04 | A reason is kept when given | Free text, not a fixed list of reason codes |
-| DSP-05 | Operator overrides are marked and survive later passes | Reason optional; no second person for a suppression the sponsor would see |
-| DSP-06 | Notes can be added and retired | No version history, approver or effective date |
+| DSP-04 | Fixed reason codes for clear and suppress by command (28 Oct) | A clear by reply gets the code "by_reply"; the code comes from the reply grammar (DSP-01) |
+| DSP-05 | Overrides are marked and survive later passes; a suppression the sponsor would see needs a second person (28 Oct) | Command-line names are the computer login or `--as`, not checked |
+| SEC-04 | Destructive commands need a second person's approval within 24 hours (28 Oct) | Same as DSP-05: names not checked |
 | IAM-01 | Admin pages need Google sign-in and an allow-list | MFA relies on Google settings; command-line operator name is the computer login |
 | IAM-04 | Two secrets already in Secret Manager | No separate key-admin role or rotation |
 | AUD-02 | Append-only by trigger; never pruned; hash chain, daily anchor and verifier built and deployed 27 Oct | No separate write-once store (Phase 3) |
-| CFG-01 | Config files snapshotted with hash and actor; rules carry their document's hash | No approver or effective date; a rebuild replaces the rules |
+| CFG-01 | Config files snapshotted with hash and actor; rules carry their document's hash; a second person can approve a config version (28 Oct) | A config change takes effect before it is approved; a rebuild replaces the rules |
 | ARC-04 | Heartbeat every tick; `/health` and a separate watchdog email the admins after 15 minutes (27 Oct) | Email, not a pager with escalation (Phase 3) |
 | SDL-01 | Git, tests before deploy (by habit) | No enforced review before deploy |
 | SDL-03 | Live bot on its own server; practice copies on the laptop | Not enforced by a setting |
@@ -220,8 +241,7 @@ Eliot answers the two scope checks in section 7.
   (SAF-02 to SAF-06).
 - Clearing by grammar: token + action + reason code, then "reply CONFIRM" (DSP-01 to DSP-04). The AI no
   longer clears anything on its own reading.
-- Bounces, recall, per-study send cap, two-person rule for sponsor-visible suppression and destructive
-  commands (OUT-05 to OUT-07, DSP-05, SEC-04).
+- Bounces (OUT-06). Recall, the send cap and the two-person rule were built on 28 Oct.
 - Protocol version by site and date (VAL-04). This is the largest single item.
 
 ### Phase 3: switch on the certified backends (paid; only when we go for certification)

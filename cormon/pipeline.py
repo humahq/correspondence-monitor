@@ -435,10 +435,10 @@ def handle_instruction(study: Study, msg: dict, instruction: dict) -> bool:
             items.override(item_id, "counts", 0, who, actor_type, reason=instruction.get("text"), force=True,
                            study_id=sid)
             items.set_state(item_id, "suppressed", who, actor_type, reason=f"reply: {instruction.get('text')}",
-                            study_id=sid)
+                            study_id=sid, code="by_reply")
         else:
             items.set_state(item_id, "cleared", who, actor_type, reason=f"reply: {instruction.get('text')}",
-                            study_id=sid)
+                            study_id=sid, code="by_reply")
     done = "cleared" if kind == "cleared" else "disregarded (it will not count)"
     _answer_in_chat(study, msg, f"Done: {', '.join(f'#{i}' for i in item_ids)} {done}, by {person.name}."
                     + (" Not changed: " + "; ".join(refused.values()) + "." if refused else ""))

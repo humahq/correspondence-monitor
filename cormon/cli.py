@@ -21,6 +21,12 @@ def actor(args) -> str:
     return getattr(args, "as_", None) or settings.actor()
 
 
+def second_person(args, action: str, target: str) -> bool:
+    """SEC-04 / DSP-05: True when a second person has approved this (or it is off); else the request is made."""
+    from .compliance import approvals
+    return approvals.gate(action, target, actor(args), getattr(args, "reason", None), getattr(args, "approval", None))
+
+
 def table(rows: list[dict], cols: list[tuple[str, str, int]]) -> None:
     if not rows:
         print("(none)")
@@ -56,6 +62,8 @@ def cmd_reset(args):
 
     if not args.yes:
         print("this archives the current database and starts an empty one; add --yes to confirm")
+        return
+    if not second_person(args, "reset", "db"):
         return
     src = db.db_path()
     db.audit("database_archived", entity_type="service", entity_id="db", actor=actor(args), actor_type="operator",
@@ -171,6 +179,8 @@ def cmd_rules_decide(args):
 
 
 def cmd_import_model(args):
+    if not second_person(args, "import-model", str(Path(args.db).expanduser().resolve())):
+        return
     counts = ingest.import_model(Path(args.db), args.reason, actor(args), args.study, args.table)
     print(f"study model replaced from {args.db}: {counts}")
 
@@ -218,6 +228,14 @@ def cmd_status(args):
         print(f"study model {st.study_id}: " + ("coverage gate not run yet (cormon coverage)" if not g else
               "coverage gate passed" if not g["warnings"] else
               "coverage gate WARNINGS (cormon coverage): " + "; ".join(g["warnings"])))
+    waiting = config.unapproved()
+    if waiting:
+        print("config in use without a second person's approval (cormon config approve <file> <id>): "
+              + ", ".join(f"{w['path']} #{w['id']}" for w in waiting))
+    pending_notes = [r["id"] for r in db.q("SELECT id FROM notes WHERE active=1 AND approved_by IS NULL")]
+    if pending_notes:
+        print("notes waiting for approval (cormon note approve --target ID): "
+              + ", ".join(map(str, pending_notes)))
     print("open items: " + ", ".join(
         f"{r['tier']}={r['n']}" for r in db.q(
             "SELECT tier, COUNT(*) n FROM items WHERE state='open' AND counts=1 GROUP BY tier")) or "none")
@@ -283,6 +301,8 @@ def cmd_restore(args):
     if not args.yes:
         print("Stop the service first (sudo systemctl stop cormon), then run again with --yes.")
         return
+    if not second_person(args, "restore", str(Path(args.file).expanduser().resolve())):
+        return
     res = backup.restore(Path(args.file))
     print(f"restored {res['restored']}; the old database is kept as {res['kept']}  rows: {res['counts']}")
 
@@ -293,6 +313,8 @@ def cmd_purge(args):
         print(f"This clears message text, attachments and saved participant dates older than "
               f"{args.days or 'data.retention_days'} days. Run again with --yes.")
         return
+    if not second_person(args, "purge", f"days={args.days or 'retention_days'}"):
+        return
     print(phi.purge(args.days))
 
 
@@ -300,6 +322,8 @@ def cmd_forget(args):
     from . import phi
     if not args.yes:
         print(f"This deletes what the bot remembers about {args.participant} in {args.study}. Run again with --yes.")
+        return
+    if not second_person(args, "forget-participant", f"{args.study}:{args.participant}"):
         return
     print(f"removed {phi.forget_participant(args.study, args.participant)} saved fact rows")
 
@@ -497,8 +521,28 @@ def _study_of(item_id: int) -> str:
     return items.get(item_id)["study_id"]
 
 
+def _sponsor_sees(item_id: int) -> bool:
+    it = items.get(item_id)
+    return it["state"] == "open" and bool(it["counts"]) and it["kind"] != "out_of_scope"
+
+
+def _reason_ok(state: str, args) -> bool:
+    if bad := items.reason_problem(state, args.code, args.reason):
+        print(f"not changed: {bad}")
+        for k, label in items.REASON_CODES.items():
+            if k != "by_reply":
+                print(f"  {k:17} {label}")
+        return False
+    return True
+
+
 def cmd_suppress(args):
-    items.set_state(args.id, "suppressed", actor(args), "operator", args.reason, study_id=_study_of(args.id))
+    if not _reason_ok("suppressed", args):
+        return
+    if _sponsor_sees(args.id) and not second_person(args, "disregard", f"item:{args.id}"):
+        return
+    items.set_state(args.id, "suppressed", actor(args), "operator", args.reason, study_id=_study_of(args.id),
+                    code=args.code)
     print(f"item {args.id} suppressed; queued messages for it are held")
 
 
@@ -510,8 +554,10 @@ def cmd_unsuppress(args):
 
 
 def cmd_clear(args):
+    if not args.undo and not _reason_ok("cleared", args):
+        return
     items.set_state(args.id, "open" if args.undo else "cleared", actor(args), "operator", args.reason,
-                    study_id=_study_of(args.id))
+                    study_id=_study_of(args.id), code=None if args.undo else args.code)
     print(f"item {args.id} {'uncleared' if args.undo else 'cleared'}")
 
 
@@ -531,6 +577,9 @@ def cmd_override(args):
         changes.append(("counts", _bool(args.counts)))
     if not changes:
         print("nothing to change (use --tier, --recipient, --send-draft, --counts)")
+        return
+    if ("counts", 0) in changes and _sponsor_sees(args.id) and not second_person(args, "not-counted",
+                                                                                 f"item:{args.id}"):
         return
     for field, value in changes:
         problems = items.override(args.id, field, value, actor(args), "operator", args.reason, args.force,
@@ -560,16 +609,78 @@ def cmd_digest(args):
 
 
 def cmd_note(args):
+    when = args.from_ and _iso_day(args.from_)
     if args.action == "add":
-        nid = notes.add(args.scope, args.target, args.kind, args.text, actor(args))
-        print(f"note {nid} added ({args.scope}{':' + args.target if args.target else ''})")
+        nid = notes.add(args.scope, args.target, args.kind, args.text, actor(args), effective_from=when)
+        print(f"note {nid} added ({args.scope}{':' + args.target if args.target else ''}); "
+              + notes.status(notes.get(nid)))
+    elif args.action == "edit":
+        nid = notes.edit(int(args.target), args.text, actor(args), effective_from=when)
+        print(f"note {nid} is version {notes.get(nid)['version']} of note {args.target}; "
+              f"{notes.status(notes.get(nid))} (note {args.target} applies until then)")
+    elif args.action == "approve":
+        n = notes.approve(int(args.target), actor(args))
+        print(f"note {n['id']} approved by {n['approved_by']}: {notes.status(n)}")
+    elif args.action == "history":
+        table(notes.history(int(args.target)),
+              [("id", "id", 4), ("version", "v", 3), ("status", "status", 22), ("author", "author", 14),
+               ("approved_by", "approved by", 14), ("effective_from", "from", 20), ("text", "text", 60)])
     elif args.action == "list":
-        table([dict(r) for r in db.q("SELECT * FROM notes WHERE active=1 ORDER BY id")],
-              [("id", "id", 4), ("scope", "scope", 8), ("target", "target", 26), ("kind", "kind", 11),
-               ("author", "author", 12), ("text", "text", 70)])
+        rows = [dict(r, status=notes.status(dict(r))) for r in db.q("SELECT * FROM notes WHERE active=1 ORDER BY id")]
+        table([r for r in rows if r["status"] != "replaced"],
+              [("id", "id", 4), ("version", "v", 3), ("status", "status", 22), ("scope", "scope", 8),
+               ("target", "target", 26), ("kind", "kind", 11), ("author", "author", 12), ("text", "text", 60)])
     elif args.action == "retire":
         notes.retire(int(args.target), actor(args))
         print(f"note {args.target} retired")
+
+
+def _iso_day(text: str) -> str:
+    from dateutil import parser as dtparser
+    from datetime import timezone
+    d = dtparser.parse(text)
+    return (d if d.tzinfo else d.replace(tzinfo=timezone.utc)).astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def cmd_approve(args):
+    from .compliance import approvals
+    a = approvals.approve(args.id, actor(args))
+    print(f"#{a['id']} approved by {a['approved_by']}: {a['action']} {a['target']} (asked by {a['requested_by']}). "
+          f"They can now run it with --approval {a['id']} within {approvals.APPROVAL_HOURS} hours.")
+
+
+def cmd_approvals(args):
+    from .compliance import approvals
+    rows = approvals.pending()
+    for r in rows:
+        r["state"] = "approved" if r["approved_by"] else "waiting"
+    table(rows, [("id", "id", 4), ("action", "action", 18), ("target", "target", 30), ("state", "state", 9),
+                 ("requested_by", "asked by", 14), ("approved_by", "approved by", 14), ("reason", "reason", 40)])
+
+
+def cmd_correct(args):
+    from . import corrections
+    res = corrections.follow_up(args.id, actor(args), args.reason, None if args.recall else args.text)
+    if res["held"]:
+        print(f"message {args.id} had not been sent: it is held and will not go")
+    if res["outbox_id"]:
+        print(f"{'correction' if not args.recall else 'recall'} queued as message {res['outbox_id']} "
+              f"to the same people and thread")
+    if not outbox.is_paused():
+        print(outbox.dispatch())
+
+
+def cmd_drift(args):
+    from . import drift
+    if args.mark:
+        drift.mark(args.mark, args.verdict, actor(args), args.note)
+        print(f"message {args.mark} marked {args.verdict}")
+        return
+    if args.send:
+        db.set_state("drift_week", "")
+        print(f"report queued as message {drift.weekly()}")
+        return
+    print(drift.render(drift.report(), drift.pick_sample() if args.sample else []))
 
 
 CONFIG_FILES = {"triage": "config/triage.yaml", "routing": "config/routing.yaml",
@@ -618,9 +729,15 @@ def cmd_config(args):
         changed = config.record_config_changes(actor(args), args.reason or "edited")
         print(f"recorded: {changed or 'no change'}")
     elif args.action == "history":
-        table([dict(r) for r in db.q("SELECT id, path, actor, recorded_at, substr(sha256,1,10) sha FROM config_versions"
-                                     " ORDER BY id DESC LIMIT 30")],
-              [("id", "id", 4), ("path", "file", 36), ("actor", "who", 24), ("recorded_at", "when", 26), ("sha", "sha", 10)])
+        table([dict(r) for r in db.q("SELECT id, path, actor, recorded_at, approved_by, substr(sha256,1,10) sha"
+                                     " FROM config_versions ORDER BY id DESC LIMIT 30")],
+              [("id", "id", 4), ("path", "file", 36), ("actor", "who", 24), ("recorded_at", "in use from", 26),
+               ("approved_by", "approved by", 16), ("sha", "sha", 10)])
+    elif args.action == "approve":
+        if not (args.path or "").isdigit():
+            sys.exit("give the version id from `cormon config history`: cormon config approve <file> <id>")
+        v = config.approve_version(int(args.path), actor(args))
+        print(f"config version {v['id']} ({v['path']}) approved by {v['approved_by']}")
 
 
 def cmd_test(args):
@@ -723,6 +840,10 @@ def cmd_gmail(args):
 
 # ---------------------------------------------------------------- parser
 
+def _approval(s) -> None:
+    s.add_argument("--approval", type=int, metavar="ID", help="the approval a second person gave (cormon approve)")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="cormon", description="Correspondence monitor: operator control surface",
                                 formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -741,7 +862,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("init", help="create the database and record the current config").set_defaults(fn=cmd_init)
 
     s = sub.add_parser("reset", help="archive the database and start fresh, keeping the study model")
-    s.add_argument("--yes", action="store_true"); s.add_argument("--reason"); s.set_defaults(fn=cmd_reset)
+    s.add_argument("--yes", action="store_true"); s.add_argument("--reason"); _approval(s); s.set_defaults(fn=cmd_reset)
 
     s = sub.add_parser("ingest", help="build the study model from the study documents")
     s.add_argument("--study"); s.add_argument("--force", action="store_true"); s.set_defaults(fn=cmd_ingest)
@@ -791,7 +912,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--study", action="append", help="only this study (repeatable); default every study in it")
     s.add_argument("--table", action="append", choices=ingest.MODEL_TABLES,
                    help="only this model table (repeatable), e.g. guide; default all of them")
-    s.set_defaults(fn=cmd_import_model)
+    _approval(s); s.set_defaults(fn=cmd_import_model)
 
     s = sub.add_parser("rules", help="list the study model's rules")
     s.add_argument("--study", default=next(iter(config.studies()), None))
@@ -818,12 +939,17 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("scan", help="list the installed packages (SBOM) and check them for known security problems"
                    ).set_defaults(fn=cmd_scan)
     s = sub.add_parser("restore", help="replace the database with a checked backup (service stopped)")
-    s.add_argument("file"); s.add_argument("--yes", action="store_true"); s.set_defaults(fn=cmd_restore)
+    s.add_argument("file"); s.add_argument("--yes", action="store_true"); s.add_argument("--reason"); _approval(s)
+    s.set_defaults(fn=cmd_restore)
     s = sub.add_parser("purge", help="clear message text older than the retention period")
-    s.add_argument("--days", type=int); s.add_argument("--yes", action="store_true"); s.set_defaults(fn=cmd_purge)
+    s.add_argument("--days", type=int); s.add_argument("--yes", action="store_true"); s.add_argument("--reason")
+    _approval(s); s.set_defaults(fn=cmd_purge)
     s = sub.add_parser("forget-participant", help="delete the dates and events the bot remembers for one participant")
     s.add_argument("study"); s.add_argument("participant"); s.add_argument("--yes", action="store_true")
-    s.set_defaults(fn=cmd_forget)
+    s.add_argument("--reason"); _approval(s); s.set_defaults(fn=cmd_forget)
+    s = sub.add_parser("approve", help="approve another person's request for an action that needs two people")
+    s.add_argument("id", type=int); s.set_defaults(fn=cmd_approve)
+    sub.add_parser("approvals", help="requests for two-person actions not yet used").set_defaults(fn=cmd_approvals)
     s = sub.add_parser("pause", help="pause processing and sending"); s.add_argument("--reason"); s.set_defaults(fn=cmd_pause)
     sub.add_parser("resume", help="resume processing").set_defaults(fn=cmd_resume)
 
@@ -860,30 +986,50 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("id", type=int); s.add_argument("--force", action="store_true")
     s.add_argument("--send", action="store_true", help="send them immediately"); s.set_defaults(fn=cmd_draft)
 
-    s = sub.add_parser("suppress", help="suppress an item"); s.add_argument("id", type=int)
-    s.add_argument("--reason", required=True); s.set_defaults(fn=cmd_suppress)
+    codes = ", ".join(k for k in items.REASON_CODES if k != "by_reply")
+    s = sub.add_parser("suppress", help="suppress (disregard) an item"); s.add_argument("id", type=int)
+    s.add_argument("--code", help=f"why, from the fixed list: {codes}")
+    s.add_argument("--reason", required=True); _approval(s); s.set_defaults(fn=cmd_suppress)
     s = sub.add_parser("unsuppress", help="reopen a suppressed item"); s.add_argument("id", type=int)
     s.add_argument("--reason"); s.set_defaults(fn=cmd_unsuppress)
     s = sub.add_parser("clear", help="mark a clearing-list item cleared"); s.add_argument("id", type=int)
+    s.add_argument("--code", help=f"why, from the fixed list: {codes}")
     s.add_argument("--undo", action="store_true"); s.add_argument("--reason"); s.set_defaults(fn=cmd_clear)
 
     s = sub.add_parser("override", help="override tier, recipient, sending or whether a finding counts")
     s.add_argument("id", type=int); s.add_argument("--tier", choices=TIERS); s.add_argument("--recipient")
     s.add_argument("--send-draft"); s.add_argument("--counts"); s.add_argument("--reason")
-    s.add_argument("--force", action="store_true"); s.set_defaults(fn=cmd_override)
+    s.add_argument("--force", action="store_true"); _approval(s); s.set_defaults(fn=cmd_override)
+
+    s = sub.add_parser("correct", help="send a correction to a message the bot sent (same people, same thread)")
+    s.add_argument("id", type=int, help="the outbox id (cormon outbox)"); s.add_argument("--text", required=True)
+    s.add_argument("--reason", required=True); s.set_defaults(fn=cmd_correct, recall=False)
+    s = sub.add_parser("recall", help="ask people to disregard a message the bot sent; hold it if not sent yet")
+    s.add_argument("id", type=int, help="the outbox id (cormon outbox)"); s.add_argument("--reason", required=True)
+    s.set_defaults(fn=cmd_correct, recall=True, text=None)
+
+    s = sub.add_parser("drift", help="the weekly quality check: rates against the usual, and messages to review")
+    s.add_argument("--sample", action="store_true", help="also pick this week's messages to review")
+    s.add_argument("--send", action="store_true", help="send the weekly report to the admins now")
+    s.add_argument("--mark", type=int, metavar="MESSAGE_ID", help="record your review of a sampled message")
+    s.add_argument("verdict", nargs="?", choices=["ok", "missed"]); s.add_argument("--note")
+    s.set_defaults(fn=cmd_drift)
 
     s = sub.add_parser("digest", help="produce the digest for a chosen window")
     s.add_argument("--hours", type=float); s.add_argument("--study"); s.add_argument("--send", action="store_true")
     s.set_defaults(fn=cmd_digest)
 
-    s = sub.add_parser("note", help="record a fact or instruction with a scope")
-    s.add_argument("action", choices=["add", "list", "retire"])
+    s = sub.add_parser("note", help="record a fact or instruction with a scope (applies once a second person "
+                                    "approves it)")
+    s.add_argument("action", choices=["add", "edit", "approve", "history", "list", "retire"])
     s.add_argument("text", nargs="?"); s.add_argument("--scope", choices=notes.SCOPES, default="study")
-    s.add_argument("--target", help="message id, person email, or study id (note id for retire)")
+    s.add_argument("--target", help="message id, person email, or study id (the note id for edit, approve, "
+                                    "history and retire)")
+    s.add_argument("--from", dest="from_", help="the date the note starts to apply (default: once approved)")
     s.add_argument("--kind", choices=["fact", "instruction"], default="fact"); s.set_defaults(fn=cmd_note)
 
     s = sub.add_parser("config", help="show, set or edit routing rules, thresholds, templates (changes recorded)")
-    s.add_argument("action", choices=["show", "set", "edit", "history"])
+    s.add_argument("action", choices=["show", "set", "edit", "history", "approve"])
     s.add_argument("file", nargs="?", default="triage", help="triage | routing | templates | settings | study:<id>")
     s.add_argument("path", nargs="?", help="dotted path, e.g. rules.0.tier"); s.add_argument("value", nargs="?")
     s.add_argument("--reason"); s.set_defaults(fn=cmd_config)
@@ -922,7 +1068,7 @@ def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     try:
         args.fn(args)
-    except (KeyError, items.StepOrder) as e:
+    except (KeyError, ValueError, PermissionError) as e:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
 

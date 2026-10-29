@@ -20,7 +20,7 @@ from datetime import date, datetime
 
 from dateutil.relativedelta import relativedelta
 
-from . import capture, careful, conversation, db, guide, llm, memory, reader, routing, settings
+from . import capture, careful, conversation, db, guide, llm, memory, outcheck, reader, routing, settings
 from .compliance import sha256
 from .config import Study
 
@@ -518,6 +518,9 @@ def _plain_said(a: dict, reader_role: str, use_cache: bool) -> str:
     backing = " ".join([facts, a["question"]] + [w for _, w in a["quotes"]])
     lead = re.split(r"(?<=[.!?])\s", a["text"], maxsplit=1)[0]  # the direct answer: its numbers must all stay
     ok = said and _numbers_traced(said, backing) and _norm_nums(lead) <= _norm_nums(said)
+    if ok and (added := outcheck.added_judgment(said, backing)):
+        a.setdefault("output_check", []).extend(added)
+        ok = False
     return said if ok else a["text"]
 
 
@@ -625,6 +628,13 @@ def answer_message(study: Study, msg: dict, email: str, use_cache: bool = True,
         if tone:
             a["tone"] = tone
         a["plain"] = plain(a, role, use_cache)
+        if a.get("output_check"):  # the rewording added a judgment: the checked answer was sent instead
+            db.audit("answer_wording_refused", entity_type="message", entity_id=msg.get("id"),
+                     study_id=study.study_id, question=a["question"], problems=a["output_check"])
+        backing = " ".join([a["question"], email] + [w for _, w in a.get("quotes") or []] + (a.get("record") or []))
+        if judged := outcheck.added_judgment(a["plain"], backing):  # recorded to measure; not blocked yet
+            db.audit("answer_judgment_flagged", entity_type="message", entity_id=msg.get("id"),
+                     study_id=study.study_id, question=a["question"], problems=judged)
     return answers
 
 

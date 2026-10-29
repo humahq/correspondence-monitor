@@ -74,10 +74,10 @@ def enqueue(*, purpose: str, channel: str, destination: str, body: str, item_id:
     to_json, cc_json = db.js(to or []), db.js(cc or [])
     oid = db.ex(
         "INSERT INTO outbox (item_id, message_id, purpose, channel, destination, template_id, from_addr, to_addrs,"
-        " cc_addrs, subject, body, meta, status, rfc_message_id, created_at, idem_key)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " cc_addrs, subject, body, meta, status, rfc_message_id, created_at, idem_key, study_id)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (item_id, message_id, purpose, channel, destination, template_id, from_addr, to_json,
-         cc_json, subject, body, db.js(meta or {}), status, rfc_id, db.now(), idem),
+         cc_json, subject, body, db.js(meta or {}), status, rfc_id, db.now(), idem, study_id),
     )
     digest = records.put("outbound", "outbox", oid, records.sent_bytes(channel, destination, from_addr, to_json,
                                                                        cc_json, subject, body), None)

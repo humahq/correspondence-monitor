@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from dateutil import parser as dtparser
 from jinja2 import Environment, StrictUndefined
 
-from . import config, db, llm, settings, textutil
+from . import config, db, llm, outcheck, settings, textutil
 from .config import Person, Study
 from .triage import TIER_LABELS
 
@@ -221,6 +221,9 @@ def ai_edit(body: str, ctx: dict) -> str:
     out = llm.structured("draft_edit", EDIT_SYSTEM, body, schema, "edited_message")["body"]
     must_keep = [ctx["finding"]["message_quote"], ctx["finding"]["doc_quote"], ctx["item"]["link"],
                  str(ctx["item"]["id"])]
-    if all(k in out for k in must_keep if k) and not _LEFTOVER.search(out):
-        return out
-    return body
+    if not all(k in out for k in must_keep if k) or _LEFTOVER.search(out):
+        return body
+    if added := outcheck.problems(out, body):
+        db.audit("draft_edit_refused", entity_type="item", entity_id=ctx["item"]["id"], problems=added)
+        return body
+    return out

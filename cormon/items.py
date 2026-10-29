@@ -158,22 +158,53 @@ def order_problem(item: dict, state: str, actor_type: str) -> str | None:
     return None
 
 
+# why an alert was cleared or disregarded: one of a fixed list (DSP-04), with words as well when "other"
+REASON_CODES = {
+    "fixed": "Fixed or followed up at the site",
+    "allowed": "Allowed by the study documents",
+    "misread": "Not a problem: the bot misread the message",
+    "duplicate": "Already reported in another alert",
+    "deviation_logged": "Recorded as a protocol deviation",
+    "not_this_study": "Not about this study",
+    "other": "Other (the reason is written out)",
+    "by_reply": "Cleared by a reply (the reply's words are kept)",
+}
+NEEDS_CODE = ("cleared", "suppressed")
+
+
+class NoReasonCode(ValueError):
+    """Clearing or disregarding an alert without a reason from the fixed list."""
+
+
+def reason_problem(state: str, code: str | None, reason: str | None) -> str | None:
+    if state not in NEEDS_CODE:
+        return None
+    if code not in REASON_CODES:
+        return "give a reason code: " + ", ".join(k for k in REASON_CODES if k != "by_reply")
+    if code == "other" and not (reason or "").strip():
+        return 'reason code "other" needs the reason written out (--reason)'
+    return None
+
+
 def set_state(item_id: int, state: str, actor: str, actor_type: str = "operator", reason: str | None = None, *,
-              study_id: str) -> None:
+              study_id: str, code: str | None = None) -> None:
     item = _in_study(item_id, study_id, actor, f"state {state}")
     why = order_problem(item, state, actor_type)
     if why:
         db.audit("item_change_refused_order", entity_type="item", entity_id=item_id, study_id=item["study_id"],
                  actor=actor, actor_type=actor_type, old_state=item["state"], state=state, why=why)
         raise StepOrder(why)
+    if bad := reason_problem(state, code, reason):
+        raise NoReasonCode(bad)
     cleared = 1 if state == "cleared" else (0 if state == "open" else item["cleared"])
-    db.ex("UPDATE items SET state=?, cleared=?, updated_at=? WHERE id=? AND study_id=?",
-          (state, cleared, db.now(), item_id, study_id))
+    db.ex("UPDATE items SET state=?, cleared=?, reason_code=?, updated_at=? WHERE id=? AND study_id=?",
+          (state, cleared, code if state in NEEDS_CODE else None, db.now(), item_id, study_id))
     if state == "suppressed":
         db.ex("UPDATE outbox SET status='held', last_error='item suppressed' WHERE item_id=? AND status='queued'",
               (item_id,))
     db.audit(f"item_{state}", entity_type="item", entity_id=item_id, study_id=item["study_id"],
-             actor=actor, actor_type=actor_type, old_state=item["state"], reason=reason)
+             actor=actor, actor_type=actor_type, old_state=item["state"], reason=reason, code=code,
+             code_label=REASON_CODES.get(code))
 
 
 def history(item_id: int) -> list[dict]:
