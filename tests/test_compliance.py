@@ -1156,3 +1156,67 @@ def test_router_down_an_alert_never_sent_is_retried_then_reported(monkeypatch):
     assert db.q1("SELECT 1 FROM audit_log WHERE action='item_route_failed' AND entity_id='8'")
     assert "item:8" in [p["key"] for p in stuck.problems()]
     assert pipeline.route_missed(log=lambda *_: None) == []                     # tried once, then left to a person
+
+
+# ------------------------------------------------------------------ release gates (SDL-05, VAL-05, CFG-02, CAP-09)
+
+def test_a_change_runs_only_the_test_sets_it_can_affect():
+    from cormon import gate
+
+    assert gate.plan(["cormon/reader.py"]) == ["findings", "tricks", "questions"]
+    assert gate.plan(["cormon/outcheck.py"]) == ["questions", "wording", "doctors"]
+    assert gate.plan(["config/careful.yaml"]) == ["wording", "doctors"]
+    assert gate.plan(["studies/model/model.sql"]) == ["findings", "tricks", "questions"]
+    assert gate.plan(["docs/compliance-part1-plan.md", "cormon/corrections.py"]) == []
+    every = list(gate.gates()["sets"])
+    assert gate.plan(["cormon/llm.py"]) == every                                # the model or its supplier
+    assert gate.plan(["config/gates.yaml"]) == every                            # the gate itself
+    assert gate.plan(["docs/x.md"], llm_changed=True) == every                  # the models in settings.yaml
+    assert gate.plan(None) == every                                             # no live version known
+
+
+def test_every_code_file_is_tied_to_a_test_set_or_known_to_need_none():
+    from cormon import gate
+
+    cfg = gate.gates()
+    tied = {p for s in cfg["sets"].values() for p in gate._flat(s["when"])} | set(cfg["all_when"])
+    none_needed = {  # operator tools, records, alerts and pages: covered by the code tests only
+        "__init__", "adminview", "backup", "cli", "compare", "corrections", "coverage", "digest", "drift", "export",
+        "notes", "prune", "senders", "settings", "stuck", "timing", "watchdog", "weblogin", "webview"}
+    from pathlib import Path
+    for f in sorted((gate.REPO / "cormon").glob("*.py")):
+        rel = f"cormon/{f.name}"
+        assert f.stem in none_needed or any(gate.fnmatch.fnmatch(rel, p) for p in tied), f"{rel} is in no test set"
+    assert Path(gate.REPO / cfg["sets"]["findings"]["folder"]).is_dir()
+
+
+def test_the_pass_marks_block_a_drop_and_a_stranger_recipient(tmp_path):
+    from cormon import gate
+
+    sets = gate.gates()["sets"]
+    assert gate.check("findings", sets["findings"], {"recall": 0.98, "precision": 0.97}) == []
+    low = gate.check("findings", sets["findings"], {"recall": 0.93, "precision": 0.97})
+    assert low and "recall 93%" in low[0]
+    assert gate.check("questions", sets["questions"], {"right_or_partly": 0.91, "wrong": 0.08}) == []
+    assert gate.check("questions", sets["questions"], {"right_or_partly": 0.91, "wrong": 0.12})
+    assert gate.check("wording", sets["wording"], {"right": 25 / 26})
+    assert gate.check("doctors", sets["doctors"], {"right": "20/28"}) == []        # shown only
+    assert gate.check("tricks", sets["tricks"], {"accuracy": 0.6, "strangers": []}) == []
+    results = tmp_path / "results.csv"
+    results.write_text("case,sent\nj01,email_cra -> john@huma.ai | teams_cra -> teams_alert_channel\n"
+                       "j07,email_cra -> attacker@evil.example\n")
+    bad = gate.strangers("NCT05842941", results)
+    assert bad == ["j07: attacker@evil.example"]
+    assert gate.check("tricks", sets["tricks"], {"accuracy": 0.6, "strangers": bad})
+
+
+def test_the_test_home_sends_nothing_and_has_the_study_model(tmp_path):
+    from cormon import gate
+
+    gate.make_home(tmp_path / "home")
+    cfg = __import__("yaml").safe_load((tmp_path / "home" / "config" / "settings.yaml").read_text())
+    assert cfg["channels"]["email"] == "sim" and cfg["channels"]["teams"] == "sim" and not cfg["web"]["enabled"]
+    c = sqlite3.connect(tmp_path / "home" / "seed.db")
+    assert c.execute("SELECT COUNT(*) FROM rules WHERE study_id='NCT05842941'").fetchone()[0] > 200
+    tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert tables == {"documents", "doc_pages", "rules", "allowances", "guide", "rule_decisions"}  # no message data

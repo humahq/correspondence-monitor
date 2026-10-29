@@ -1,0 +1,280 @@
+"""Release gates: which AI test sets a change must pass, running them, and the pass marks (SDL-05, VAL-03,
+VAL-05, CFG-02, CAP-09). The sets, marks and triggers are in config/gates.yaml.
+
+    python -m cormon.gate plan [--base live] [--all]   which sets this change needs (JSON list)
+    python -m cormon.gate home DIR                     make a test home in DIR that sends nothing
+    CORMON_HOME=DIR python -m cormon.gate run SET OUT  run one set there and check its marks (exit 1 if below)
+
+A test home is the repo's config with every channel on the simulator, the repo's studies, and the study model
+from studies/model/model.sql (the live rules, exported without any message or patient data). The AI answers it
+gets are kept in DIR/cache.db between runs, so an unchanged input is not asked again.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fnmatch
+import json
+import os
+import shutil
+import sqlite3
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+REPO = Path(__file__).resolve().parent.parent
+
+
+def gates() -> dict:
+    return yaml.safe_load((REPO / "config" / "gates.yaml").read_text())
+
+
+def _flat(items) -> list[str]:
+    out = []
+    for i in items or []:
+        out += _flat(i) if isinstance(i, list) else [i]
+    return out
+
+
+# ---------------------------------------------------------------- which sets a change needs
+
+def _git(*args: str) -> str:
+    return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True, check=True).stdout
+
+
+def changed_files(base: str) -> list[str] | None:
+    """Files changed between base and the working tree's HEAD; None when base is not known (run everything)."""
+    try:
+        _git("rev-parse", "--verify", f"{base}^{{commit}}")
+    except subprocess.CalledProcessError:
+        return None
+    return [f for f in _git("diff", "--name-only", f"{base}...HEAD").splitlines() if f]
+
+
+def _llm_block(text: str | None) -> dict:
+    return (yaml.safe_load(text or "") or {}).get("llm") or {}
+
+
+def llm_settings_changed(base: str) -> bool:
+    try:
+        old = _git("show", f"{base}:config/settings.yaml")
+    except subprocess.CalledProcessError:
+        return True
+    return _llm_block(old) != _llm_block((REPO / "config" / "settings.yaml").read_text())
+
+
+def plan(files: list[str] | None, llm_changed: bool = False, cfg: dict | None = None) -> list[str]:
+    cfg = cfg or gates()
+    names = list(cfg["sets"])
+    if files is None or llm_changed:
+        return names
+    hit = lambda pats: any(fnmatch.fnmatch(f, p) for f in files for p in _flat(pats))  # noqa: E731
+    if hit(cfg.get("all_when")):
+        return names
+    return [n for n in names if hit(cfg["sets"][n].get("when"))]
+
+
+# ---------------------------------------------------------------- a home that sends nothing
+
+def make_home(home: Path) -> None:
+    home.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(home / "config", ignore_errors=True)
+    shutil.copytree(REPO / "config", home / "config")
+    path = home / "config" / "settings.yaml"
+    cfg = yaml.safe_load(path.read_text()) or {}
+    cfg.setdefault("channels", {}).update({"email": "sim", "teams": "sim"})
+    cfg.setdefault("web", {}).update({"enabled": False, "base_url": "(test run: no web page)"})
+    path.write_text(yaml.safe_dump(cfg, sort_keys=False))
+    if not (home / "studies").exists():
+        (home / "studies").symlink_to(REPO / "studies")
+    (home / "data").mkdir(exist_ok=True)
+    seed = home / "seed.db"
+    seed.unlink(missing_ok=True)
+    c = sqlite3.connect(seed)
+    c.executescript((REPO / "studies" / "model" / "model.sql").read_text())
+    c.close()
+
+
+def _with_cache(home: Path) -> Path:
+    """The seed with the kept AI answers added, so the run's fresh database starts with both."""
+    seed, cache = home / "seed.db", home / "cache.db"
+    c = sqlite3.connect(seed)
+    c.execute("CREATE TABLE IF NOT EXISTS llm_cache (key TEXT PRIMARY KEY, model TEXT, response TEXT, created_at TEXT)")
+    if cache.exists():
+        c.execute("ATTACH DATABASE ? AS kept", (str(cache),))
+        c.execute("INSERT OR IGNORE INTO llm_cache (key, model, response, created_at) "
+                  "SELECT key, model, response, created_at FROM kept.llm_cache")
+        c.commit()
+        c.execute("DETACH DATABASE kept")
+    c.close()
+    return seed
+
+
+def _keep_cache(home: Path) -> None:
+    from . import db
+    out = home / "cache.db"
+    out.unlink(missing_ok=True)
+    c = db.conn()
+    c.execute("ATTACH DATABASE ? AS kept", (str(out),))
+    c.execute("CREATE TABLE kept.llm_cache AS SELECT key, model, response, created_at FROM main.llm_cache")
+    c.execute("DETACH DATABASE kept")
+
+
+# ---------------------------------------------------------------- running a set
+
+def _run_folder(name: str, spec: dict, study: str, home: Path, out: Path) -> dict:
+    from . import testbench
+    testbench.child_main([str(REPO / spec["folder"]), "--out", str(out), "--seed-from", str(_with_cache(home)),
+                          "--study", study])
+    s = json.loads((out / "summary.json").read_text())
+    a = s["alert"]
+    got = {"recall": a["recall"], "precision": a["precision"], "accuracy": s["accuracy"],
+           "right": f"{s['right']}/{s['graded']}"}
+    if spec["marks"].get("recipients_from_config"):
+        got["strangers"] = strangers(study, out / "results.csv")
+    return got
+
+
+def strangers(study_id: str, results_csv: Path) -> list[str]:
+    """Email addresses the bot sent to that are not on the study's people list or the admin list."""
+    import csv
+
+    from . import config, settings
+    study = config.study(study_id)
+    known = {p.email.lower() for p in study.people if p.email}
+    known |= {e.lower() for e in _flat(settings.get("web.admin.emails"))}
+    known.add(str(settings.get("mailbox.address", "")).lower())
+    bad = set()
+    with results_csv.open(newline="") as fh:
+        for row in csv.DictReader(fh):
+            for sent in filter(None, (row.get("sent") or "").split(" | ")):
+                for addr in sent.split("->", 1)[-1].split(","):
+                    addr = addr.strip().lower()
+                    if "@" in addr and addr not in known:
+                        bad.add(f"{row['case']}: {addr}")
+    return sorted(bad)
+
+
+def _run_questions(spec: dict, study: str, home: Path, out: Path) -> dict:
+    from . import qabench, testbench
+    testbench._fresh_db(_with_cache(home))
+    s = qabench.run(study, REPO / spec["file"], out)
+    n, t = s["n"] or 1, s["total"]
+    return {"right_or_partly": (t["correct"] + t["partly"]) / n, "wrong": t["wrong"] / n,
+            "correct": t["correct"] / n, "refused": t["refused"] / n}
+
+
+def _run_wording(spec: dict, home: Path, out: Path) -> dict:
+    from . import outcheck, testbench
+    testbench._fresh_db(_with_cache(home))
+    cases = json.loads((REPO / spec["file"]).read_text())
+    rows = []
+    for c in cases:
+        got = outcheck.problems(c["text"], c["source"])
+        ok = bool(got) == (c["want"] == "catch")
+        rows.append({**c, "got": got, "ok": ok})
+        print(f"  {'right' if ok else 'WRONG'} {c['id']} want {c['want']:5} got {got or 'pass'}", flush=True)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "results.json").write_text(json.dumps(rows, indent=1, ensure_ascii=False))
+    right = sum(r["ok"] for r in rows)
+    return {"right": right / len(rows), "count": f"{right}/{len(rows)}",
+            "wrong_ones": [r["id"] for r in rows if not r["ok"]]}
+
+
+def _run_doctors(spec: dict, home: Path, out: Path) -> dict:
+    from . import testbench
+    testbench._fresh_db(_with_cache(home))
+    script = REPO / spec["script"]
+    subprocess.run([sys.executable, str(script)], check=True, env=dict(os.environ))
+    rows = json.loads((script.parent / "real_world_run.json").read_text())
+    out.mkdir(parents=True, exist_ok=True)
+    shutil.copy(script.parent / "real_world_run.json", out / "results.json")
+    right = sum(r["ok"] for r in rows)
+    return {"right": f"{right}/{len(rows)}", "wrong_ones": [r["id"] for r in rows if not r["ok"]]}
+
+
+def check(name: str, spec: dict, got: dict) -> list[str]:
+    """What is below its pass mark (empty: passed)."""
+    m, bad = spec.get("marks") or {}, []
+    for key in ("recall", "precision", "right_or_partly", "right"):
+        if key in m and (got.get(key) is None or got[key] < m[key]):
+            bad.append(f"{key} {_pct(got.get(key))} is below the pass mark {_pct(m[key])}")
+    if "wrong_at_most" in m and got["wrong"] > m["wrong_at_most"]:
+        bad.append(f"wrong {_pct(got['wrong'])} is above the most allowed, {_pct(m['wrong_at_most'])}")
+    if m.get("recipients_from_config") and got.get("strangers"):
+        bad.append("sent to someone not on the study's people list: " + "; ".join(got["strangers"]))
+    return bad
+
+
+def _pct(x) -> str:
+    return "-" if x is None else f"{100 * x:.0f}%" if isinstance(x, float) else str(x)
+
+
+def run(name: str, out: Path) -> int:
+    from . import settings
+    if settings.get("channels.email") != "sim" or settings.get("channels.teams") not in ("sim", "off"):
+        sys.exit(f"{settings.ROOT} is not a test home (channels are not 'sim'); refusing to run")
+    cfg = gates()
+    spec, study, home = cfg["sets"][name], cfg["study"], Path(settings.ROOT)
+    out.mkdir(parents=True, exist_ok=True)
+    if "folder" in spec:
+        got = _run_folder(name, spec, study, home, out)
+    elif name == "questions":
+        got = _run_questions(spec, study, home, out)
+    elif name == "wording":
+        got = _run_wording(spec, home, out)
+    elif name == "doctors":
+        got = _run_doctors(spec, home, out)
+    else:
+        sys.exit(f"no runner for set {name}")
+    _keep_cache(home)
+    bad = check(name, spec, got)
+    result = {"set": name, "what": spec["what"], "passed": not bad, "below": bad, "scores": got,
+              "marks": spec.get("marks")}
+    (out / "gate.json").write_text(json.dumps(result, indent=1, default=str))
+    text = summary_md(result)
+    print("\n" + text)
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+            fh.write(text + "\n")
+    return 0 if not bad else 1
+
+
+def summary_md(r: dict) -> str:
+    shown = ", ".join(f"{k} {_pct(v)}" for k, v in r["scores"].items() if k not in ("strangers", "wrong_ones"))
+    lines = [f"### {'PASSED' if r['passed'] else 'FAILED'}: {r['set']} ({r['what']})", "", f"Scores: {shown}"]
+    lines += [f"- {b}" for b in r["below"]]
+    if r["scores"].get("wrong_ones"):
+        lines.append(f"Wrong: {', '.join(r['scores']['wrong_ones'])}")
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> None:
+    p = argparse.ArgumentParser(prog="python -m cormon.gate")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("plan")
+    s.add_argument("--base", default="live")
+    s.add_argument("--all", action="store_true")
+    s = sub.add_parser("home")
+    s.add_argument("dir")
+    s = sub.add_parser("run")
+    s.add_argument("set")
+    s.add_argument("out")
+    a = p.parse_args(argv)
+    if a.cmd == "plan":
+        files = None if a.all else changed_files(a.base)
+        sets = plan(files, files is not None and llm_settings_changed(a.base))
+        print(json.dumps(sets))
+        if os.environ.get("GITHUB_OUTPUT"):
+            with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+                fh.write(f"sets={json.dumps(sets)}\n")
+    elif a.cmd == "home":
+        make_home(Path(a.dir).resolve())
+    else:
+        sys.exit(run(a.set, Path(a.out).resolve()))
+
+
+if __name__ == "__main__":
+    main()
