@@ -366,6 +366,19 @@ def test_compare_scores_safety_and_problems_together():
     assert testbench.verdict(case) is False
 
 
+def test_a_test_message_without_a_date_always_gets_the_same_one():
+    import email as email_lib
+    from types import SimpleNamespace
+    from cormon import testbench
+
+    study = SimpleNamespace(alias="bot+S@x.org", people_with_role=lambda role: [])
+    case = testbench.Case(name="x", subject="s", body="MAP-0301 randomized", sender="a@x.org")
+    dates = {email_lib.message_from_bytes(testbench._build(study, case))["Date"] for _ in range(2)}
+    raw = testbench.Case(name="y", subject="", raw=b"From: a@x.org\nTo: bot+S@x.org\nSubject: s\n\nhi\n")
+    dates.add(email_lib.message_from_bytes(testbench._build(study, raw))["Date"])
+    assert dates == {"Thu, 29 Oct 2026 09:00:00 -0400"}
+
+
 def test_stitched_quote_is_accepted_only_when_every_piece_is_in_the_message():
     text = "Plan for MAP-2073: we'll randomize him tomorrow morning. His screening ECG is booked for Friday."
     stitched = "His screening ECG is booked for Friday. Plan for MAP-2073: we'll randomize him tomorrow morning."
