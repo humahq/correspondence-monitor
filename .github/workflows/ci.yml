@@ -55,8 +55,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      # The live packages, plus the laptop-only ones for building and exporting rules (Word and Excel files).
       - run: |
-          pip install -r deploy/requirements-live.txt pytest
+          pip install -r deploy/requirements-live.txt pytest==9.1.1 python-docx==1.2.0 openpyxl==3.1.5
           pip install --no-deps -e .
       - run: python -m pytest -q tests
 
