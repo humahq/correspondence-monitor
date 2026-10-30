@@ -771,7 +771,10 @@ def cmd_config(args):
         with open(path, encoding="utf-8") as fh:
             data = rt.load(fh)
         value = yaml.safe_load(args.value)
-        old = config.get_path(data, args.path) if args.path else None
+        try:
+            old = config.get_path(data, args.path) if args.path else None
+        except (KeyError, IndexError):
+            old = None
         config.set_path(data, args.path, value)
         out = io.StringIO()
         rt.dump(data, out)
