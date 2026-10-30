@@ -1131,6 +1131,17 @@ def test_on_the_live_bot_a_change_the_gate_tests_cannot_be_approved_there(tmp_pa
         config.approve_version(config.waiting()[-1]["id"], "bob")
 
 
+def test_config_set_can_add_a_setting_the_file_does_not_have_yet(tmp_path, monkeypatch, capsys):
+    from cormon import cli, config
+
+    home = _live_home(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "actor", lambda args: "ann")
+    cli.main(["config", "set", "settings", "system.backup_bucket", "my-bucket"])
+    assert "changed from None to 'my-bucket'" in capsys.readouterr().out
+    assert "my-bucket" not in (home / "config" / "settings.yaml").read_text()
+    assert config.waiting()[-1]["path"] == "config/settings.yaml"
+
+
 def test_the_release_puts_the_tested_config_in_place_and_keeps_the_servers_own(tmp_path, monkeypatch):
     from cormon import config
 
