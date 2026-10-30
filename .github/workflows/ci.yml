@@ -30,6 +30,12 @@ env:
 jobs:
   plan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
       sets: ${{ steps.plan.outputs.sets }}
     steps:
@@ -44,6 +50,9 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = schedule ] || [ "${{ inputs.all }}" = true ]; then
             python -m cormon.gate plan --all
+          elif [ "${{ github.event_name }}" = push ]; then
+            # merging a pull request whose run passed on exactly this code does not run its AI sets again
+            python -m cormon.gate plan --base live --reuse-pr
           else
             python -m cormon.gate plan --base live
           fi

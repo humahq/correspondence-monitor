@@ -258,6 +258,39 @@ def summary_md(r: dict) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------- a merge of a passed pull request
+
+def _github(path: str) -> dict | list:
+    import urllib.request
+    req = urllib.request.Request(f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/{path}",
+                                 headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+                                          "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.load(r)
+
+
+def same_code_passed(sha: str = "HEAD") -> int | None:
+    """The pull request run whose gate passed on exactly this code, or None. This commit (a merge of the pull
+    request into main) holds the same files as the pull request's head, and the head already held everything
+    main had before, so the pull request's run tested these very files: its AI sets need not run again."""
+    tree, parent = _git("rev-parse", f"{sha}^{{tree}}").strip(), _git("rev-parse", f"{sha}^").strip()
+    for pr in _github(f"commits/{_git('rev-parse', sha).strip()}/pulls"):
+        head = pr["head"]["sha"]
+        try:
+            _git("fetch", "-q", "origin", head)
+            if _git("rev-parse", f"{head}^{{tree}}").strip() != tree:
+                continue
+            _git("merge-base", "--is-ancestor", parent, head)
+        except subprocess.CalledProcessError:
+            continue
+        runs = _github(f"actions/runs?head_sha={head}&event=pull_request&status=completed")["workflow_runs"]
+        for run in sorted(runs, key=lambda r: r["run_number"], reverse=True)[:1]:
+            jobs = _github(f"actions/runs/{run['id']}/jobs?per_page=100")["jobs"]
+            if any(j["name"] == "gate" and j["conclusion"] == "success" for j in jobs):
+                return run["id"]
+    return None
+
+
 # ---------------------------------------------------------------- every change names its task (SDL-02)
 
 TASK_REF = re.compile(r"(?<![\w/&])#(\d+)\b")
@@ -319,6 +352,8 @@ def main(argv: list[str] | None = None) -> None:
     s = sub.add_parser("plan")
     s.add_argument("--base", default="live")
     s.add_argument("--all", action="store_true")
+    s.add_argument("--reuse-pr", action="store_true",
+                   help="no AI sets when a pull request's run already passed on exactly this code")
     s = sub.add_parser("home")
     s.add_argument("dir")
     s = sub.add_parser("run")
@@ -328,6 +363,16 @@ def main(argv: list[str] | None = None) -> None:
     if a.cmd == "plan":
         files = None if a.all else changed_files(a.base)
         sets = plan(files, files is not None and llm_settings_changed(a.base))
+        reused = None
+        if a.reuse_pr and sets:
+            try:
+                reused = same_code_passed()
+            except Exception as e:  # GitHub not reachable: the sets run
+                print(f"could not look for a passed pull request run ({e}); running the sets", file=sys.stderr)
+        if reused:
+            print(f"the AI sets {sets} passed on exactly this code in pull request run {reused}; not run again",
+                  file=sys.stderr)
+            sets = []
         print(json.dumps(sets))
         if os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a") as fh:

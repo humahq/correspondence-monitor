@@ -1162,6 +1162,41 @@ def test_the_live_study_model_is_not_rebuilt_on_the_server(monkeypatch):
             fn(SimpleNamespace(**args))
 
 
+def test_a_merge_reuses_the_pull_requests_pass_only_for_the_same_code(tmp_path, monkeypatch):
+    import subprocess
+
+    from cormon import gate
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True,  # noqa: E731
+                                    check=True).stdout.strip()
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@x"), git("config", "user.name", "t")
+    (repo / "f").write_text("1")
+    git("add", "f"), git("commit", "-qm", "base")
+    git("switch", "-qc", "pr")
+    (repo / "f").write_text("2")
+    git("commit", "-qam", "change")
+    head = git("rev-parse", "HEAD")
+    git("switch", "-q", "main"), git("merge", "-q", "--squash", "pr"), git("commit", "-qm", "change (#2)")
+    real = gate._git
+    monkeypatch.setattr(gate, "REPO", repo)
+    monkeypatch.setattr(gate, "_git", lambda *a: "" if a[0] == "fetch" else real(*a))
+    gate_ok = {"jobs": [{"name": "gate", "conclusion": "success"}]}
+    answers = {"pulls": [{"head": {"sha": head}}], "runs": {"workflow_runs": [{"id": 7, "run_number": 3}]},
+               "jobs": gate_ok}
+    monkeypatch.setattr(gate, "_github", lambda path: answers["pulls" if "/pulls" in path else
+                                                      "jobs" if "/jobs" in path else "runs"])
+    assert gate.same_code_passed() == 7
+    answers["jobs"] = {"jobs": [{"name": "gate", "conclusion": "failure"}]}
+    assert gate.same_code_passed() is None, "the pull request's gate failed"
+    answers["jobs"] = gate_ok
+    (repo / "f").write_text("3")
+    git("commit", "-qam", "another change on main")
+    assert gate.same_code_passed() is None, "different code from what the pull request tested"
+
+
 def test_every_commit_must_name_a_task_that_exists():
     from cormon import gate
 
