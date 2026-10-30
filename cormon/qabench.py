@@ -152,16 +152,24 @@ def make(study_id: str, out: Path, seed: int = 7) -> None:
 # ---------------------------------------------------------------- answering and grading
 
 GRADE_SYSTEM = """You grade a clinical-trial monitor bot's reply to a site message against the expected answer.
+The expected answer was written from one section only. SOURCES holds that section and every study-document section
+the bot read; a fact any of them states is true, even when the expected answer leaves it out.
 Verdicts:
 - correct: the reply gives the expected answer's facts (every MUST fact, in any wording or date format); extra
-  true detail is fine.
-- partly: on the right lines but misses a MUST fact, or is vague where the expected answer is specific.
-- wrong: it states something that contradicts the expected answer or the source, or gives a wrong number or date.
+  detail that SOURCES support is fine.
+- partly: on the right lines but misses a MUST fact, is vague where the expected answer is specific, adds detail
+  that does not answer the question, or follows one section where SOURCES disagree with each other without saying
+  so.
+- wrong: its answer to the question is the opposite of the expected one (a yes for a no), or it states a rule,
+  number or date that contradicts SOURCES or that no section in SOURCES supports.
 - refused: it says it could not find or could not work out an answer, or gives only protocol quotes with no
   answer.
 For a question the documents do not answer (expected says so), a refusal or "not stated" is correct, and any
 invented rule is wrong. For a serious event, the reply must tell the site to contact the PI and the medical monitor
-promptly and give the reporting time; missing that is partly at best. Write reasons first."""
+promptly and give the reporting time; missing that is partly at best. Write reasons first, naming the section
+that supports or contradicts each fact you judge."""
+
+SOURCE_CHARS, SOURCES_CHARS = 6000, 40000
 
 GRADE_SCHEMA = llm.obj({"reasons": {"type": "string"},
                         "verdict": {"type": "string", "enum": ["correct", "partly", "wrong", "refused"]}})
@@ -182,6 +190,20 @@ def _answer(study, case: dict, n: int) -> dict:
             "seconds": round(time.time() - t0, 1)}
 
 
+def _sources_text(case: dict, res: dict, sources: dict) -> str:
+    """The expected answer's section first, then each section the bot read, each cut to SOURCE_CHARS."""
+    ids = [case["expect"].get("source") or ""] + [i for a in res.get("answers") or [] for i in a.get("picked") or []]
+    parts, total = [], 0
+    for i in dict.fromkeys(i for i in ids if i in sources):
+        s = sources[i]
+        part = f"[{i}] {s.get('title') or ''}\n{(s.get('text') or '')[:SOURCE_CHARS]}"
+        if total + len(part) > SOURCES_CHARS:
+            break
+        parts.append(part)
+        total += len(part)
+    return "\n\n".join(parts) or "(none)"
+
+
 def _grade(case: dict, res: dict, sources: dict) -> dict:
     exp = case["expect"]
     if not exp["reply"]:
@@ -189,9 +211,8 @@ def _grade(case: dict, res: dict, sources: dict) -> dict:
                 "reasons": "no reply expected" + ("" if not res["reply"] else ", but it replied")}
     if not res["reply"]:  # staying quiet on a question the documents do not cover is fine
         return {"verdict": "correct" if case["kind"] == "absent" else "refused", "reasons": "no reply"}
-    src = sources.get(exp.get("source") or "")
     user = (f"SITE MESSAGE:\n{case['message']}\n\nEXPECTED ANSWER:\n{exp['answer']}\nMUST: {exp.get('must')}\n\n"
-            + (f"SOURCE SECTION:\n{src['text'][:6000]}\n\n" if src else "") + f"BOT REPLY:\n{res['reply']}")
+            f"SOURCES:\n{_sources_text(case, res, sources)}\n\nBOT REPLY:\n{res['reply']}")
     g = llm.structured("qa_grade", GRADE_SYSTEM, user, GRADE_SCHEMA, "grade", model=_strong())
     if case["kind"] == "absent" and g["verdict"] == "refused":  # saying the documents do not cover it is right
         g = dict(g, verdict="correct")
@@ -203,7 +224,7 @@ def run(study_id: str, path: Path, out: Path | None, only: str | None = None, wo
     cases = json.loads(path.read_text())
     if only:
         cases = [c for c in cases if re.search(only, c["id"])]
-    sources = {s["id"]: s for s in guide.load(study_id) if s["kind"] == "section"}
+    sources = {s["id"]: s for s in guide.load(study_id)}
 
     def one(nc):
         n, c = nc
@@ -215,6 +236,19 @@ def run(study_id: str, path: Path, out: Path | None, only: str | None = None, wo
 
     with ThreadPoolExecutor(workers) as pool:
         done = list(pool.map(one, enumerate(cases)))
+    return _finish(done, out)
+
+
+def regrade(study_id: str, results: Path, out: Path | None, workers: int = 4) -> dict:
+    """Grade saved replies again (after a grader change), without asking the bot again."""
+    sources = {s["id"]: s for s in guide.load(study_id)}
+    done = json.loads(results.read_text())
+    with ThreadPoolExecutor(workers) as pool:
+        graded = list(pool.map(lambda c: dict(c, grade=_grade(c, c["result"], sources)), done))
+    return _finish(graded, out)
+
+
+def _finish(done: list[dict], out: Path | None) -> dict:
     summary = score(done)
     print(report(done, summary))
     if out:
@@ -256,7 +290,7 @@ def report(done: list[dict], summary: dict) -> str:
 
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="python -m cormon.qabench")
-    p.add_argument("action", choices=["make", "run"])
+    p.add_argument("action", choices=["make", "run", "regrade"], help="regrade: path is a saved results.json")
     p.add_argument("path")
     p.add_argument("--study", required=True)
     p.add_argument("--out")
@@ -266,6 +300,8 @@ def main(argv: list[str] | None = None) -> None:
     a = p.parse_args(argv)
     if a.action == "make":
         make(a.study, Path(a.path), a.seed)
+    elif a.action == "regrade":
+        regrade(a.study, Path(a.path), Path(a.out) if a.out else None, a.workers)
     else:
         run(a.study, Path(a.path), Path(a.out) if a.out else None, a.only, a.workers)
 

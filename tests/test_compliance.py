@@ -1210,6 +1210,19 @@ def test_the_pass_marks_block_a_drop_and_a_stranger_recipient(tmp_path):
     assert gate.check("tricks", sets["tricks"], {"accuracy": 0.6, "strangers": bad})
 
 
+def test_the_question_grader_sees_every_section_the_bot_read():
+    from cormon import qabench
+
+    sources = {"a:1": {"title": "Expected", "text": "28 + 3 days"}, "b:2": {"title": "Read", "text": "28 ± 3 days"},
+               "c:3": {"title": "Big", "text": "x" * 50000}}
+    case = {"expect": {"source": "a:1"}}
+    res = {"answers": [{"picked": ["b:2", "a:1", "gone:9", "c:3"]}]}
+    text = qabench._sources_text(case, res, sources)
+    assert text.index("[a:1]") < text.index("[b:2]") and "28 ± 3" in text      # expected section first, no repeats
+    assert text.count("[a:1]") == 1 and "gone:9" not in text
+    assert len(text) <= qabench.SOURCES_CHARS                                    # each cut, and the whole capped
+
+
 def test_the_test_home_sends_nothing_and_has_the_study_model(tmp_path):
     from cormon import gate
 
