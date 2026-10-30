@@ -19,7 +19,7 @@ SSH=(gcloud compute ssh "$VM" --project "$PROJECT" --zone "$ZONE" --tunnel-throu
 LIVE=/opt/cormon
 cd "$(dirname "$0")/.."
 
-remote() { "${SSH[@]}" --command "$1" 2>/dev/null; }
+remote() { "${SSH[@]}" --command "$1" 2>/dev/null </dev/null; }
 stop() { echo "STOPPED: $*" >&2; exit 1; }
 
 git fetch -q origin main --tags --force
@@ -61,7 +61,7 @@ diff -q <(git show "$SHA:studies/model/model.sql") <(remote "sudo sqlite3 'file:
   || stop "the live study model differs from studies/model/model.sql: export it, commit it and let the gate test it"
 echo "live study model matches studies/model/model.sql"
 
-read -r -p "Deploy $(git rev-parse --short "$SHA") to the live bot? Type yes: " ok
+read -r -p "Deploy $(git rev-parse --short "$SHA") to the live bot? Type yes: " ok || ok=""
 [ "$ok" = yes ] || stop "not confirmed"
 
 # 5. Back up, put the code in place, restart, check.
