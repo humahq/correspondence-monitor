@@ -40,7 +40,7 @@ def build(since: datetime, until: datetime, study_ids: list[str] | None = None) 
         if study_ids and r["study_id"] not in study_ids:
             continue
         s = all_studies.get(r["study_id"])
-        if s is None:
+        if s is None or senders.item_off_roster(dict(r), s):
             continue
         entry = per_study.setdefault(r["study_id"], {
             "study_id": s.study_id, "short_name": s.short_name,

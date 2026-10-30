@@ -3,6 +3,7 @@
 import http.client
 import sqlite3
 import threading
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer
 from types import SimpleNamespace
@@ -1334,7 +1335,8 @@ def test_no_monitor_listed_a_safety_message_goes_to_nobody_and_cannot_be_cleared
 
     study = config.study("NCT04098666")
     assert not any(p.email for p in study.people_with_role("medical_monitor"))
-    mid = capture.capture(_chat(text="Participant 001 was admitted to hospital"))
+    mid = capture.capture(replace(_chat(text="Participant 001 was admitted to hospital"),
+                                  from_addr="johnrohit94@gmail.com"))
     iid, _ = items.upsert(study=study, thread_key="teams:t1", message_id=mid, dedup_key="s1", kind="out_of_scope",
                           pattern_class=None, rule_id=None, participant_id="001", site=None, polarity="problem",
                           title="safety", tier="low", tier_reason="safety", evidence={}, reasoning=None,
@@ -1370,6 +1372,86 @@ def test_a_message_with_a_safety_part_sends_no_notice_back_to_the_site(monkeypat
     assert "email_crc" not in sent and "email_cra" in sent                     # the alert itself still goes out
     assert db.q1("SELECT 1 FROM audit_log WHERE action='site_notice_withheld_safety' AND entity_id=?", (str(iid),))
     assert "email_crc" in urgent(2, "none")[1]                                  # no harm: the notice goes as before
+
+
+def test_a_message_from_someone_not_on_the_people_list_reaches_only_the_admins(monkeypatch):
+    from datetime import timedelta as td
+
+    from cormon import careful, cli, config, digest, items, outbox, routing
+
+    monkeypatch.setattr(careful, "check_post", lambda **k: None)
+    monkeypatch.setattr(outbox, "dispatch", lambda **k: {"sent": 0, "failed": 0})
+    _set(monkeypatch, web__admin__emails=["ops@huma.ai"], web__base_url="https://bot.example")
+    study = config.study("NCT05842941")
+
+    def alert(n, sender):
+        mid = capture.capture(Inbound(channel="email", external_id=f"<r{n}@x.org>", thread_ref=f"r{n}",
+                                      from_addr=sender, from_name="S", subject="DNL-1012", sent_at=_ago(5),
+                                      body_text="DNL-1012 randomized with eGFR 25.", rfc_message_id=f"<r{n}@x.org>",
+                                      study_id=study.study_id))
+        iid, _ = items.upsert(study=study, thread_key=f"email:r{n}", message_id=mid, dedup_key=f"r{n}",
+                              kind="finding", pattern_class="eligibility", rule_id=None, participant_id="DNL-1012",
+                              site="site-01", polarity="problem", title="eGFR below the minimum", tier="immediate",
+                              tier_reason="test", evidence={}, reasoning="r")
+        return mid, iid
+
+    mid, iid = alert(1, "someone@other-study.org")
+    assert routing.route_item(iid) == []
+    sent = db.q("SELECT purpose, to_addrs, body FROM outbox")
+    assert [(o["purpose"], db.unjs(o["to_addrs"])) for o in sent] == [("ops_alert", ["ops@huma.ai"])]
+    assert "someone@other-study.org" in sent[0]["body"] and f"cormon draft {iid} --force" in sent[0]["body"]
+    assert items.get(iid)["routed"] and db.q1("SELECT 1 FROM audit_log WHERE action='item_held_off_roster'")
+    assert routing.route_item(iid) == [] and len(db.q("SELECT 1 FROM outbox")) == 1   # not tried again
+    assert not cli._sponsor_sees(iid)
+    now = datetime.now(timezone.utc)
+    assert digest.build(now - td(hours=1), now + td(minutes=1))["total"] == 0
+
+    _, ok = alert(2, study.people_with_role("crc")[0].email)
+    assert routing.route_item(ok) and cli._sponsor_sees(ok)
+    assert digest.build(now - td(hours=1), now + td(minutes=1))["total"] == 1
+
+
+def test_only_the_live_bot_reads_and_sends_real_correspondence(monkeypatch):
+    from cormon import channels, config, service
+
+    monkeypatch.setattr(channels, "_cache", {})
+    monkeypatch.setattr(config, "live", lambda: False)
+    _set(monkeypatch, channels__email="imap", channels__teams="sim")
+    with pytest.raises(channels.NotTheLiveBot, match="only the live bot"):
+        channels.email_channel()
+    with pytest.raises(channels.NotTheLiveBot):
+        service.run(once=True)
+    assert channels.teams_channel() is not None                     # the simulator is fine anywhere
+    _set(monkeypatch, channels__email="sim", channels__teams="gchat")
+    with pytest.raises(channels.NotTheLiveBot, match="channels.teams"):
+        channels.teams_channel()
+
+
+def test_a_copy_that_is_not_the_live_bot_will_not_open_the_live_database(monkeypatch, tmp_path):
+    from cormon import config
+
+    monkeypatch.setattr(config, "live", lambda: True)
+    db.q1("SELECT 1")
+    assert db.get_state(db.LIVE_MARK)                               # the live bot marks its database
+    db._local.conn.close()
+    db._local.conn = None
+    monkeypatch.setattr(config, "live", lambda: False)
+    with pytest.raises(db.LiveDataElsewhere, match="not the live bot"):
+        db.q1("SELECT 1")
+    db._local.conn = None
+    for ext in ("", "-wal", "-shm"):
+        (tmp_path / f"cormon.db{ext}").unlink(missing_ok=True)
+    db.q1("SELECT 1")                                               # an unmarked practice database opens
+    assert db.get_state(db.LIVE_MARK) is None
+
+
+def test_off_server_backups_are_not_downloaded_by_a_copy_that_is_not_the_live_bot(monkeypatch, capsys):
+    from cormon import cli, config
+
+    monkeypatch.setattr(config, "live", lambda: False)
+    for args in (["backup", "--fetch"], ["backup", "--drill"]):
+        with pytest.raises(SystemExit, match="only on the live server"):
+            cli.main(args)
 
 
 def test_no_cra_or_lead_listed_is_said_and_flagged():

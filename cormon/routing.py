@@ -6,7 +6,7 @@ import hashlib
 import re
 from email.utils import make_msgid
 
-from . import capture, careful, config, db, drafting, items, phi, settings
+from . import capture, careful, config, db, drafting, items, phi, senders, settings
 from .compliance import records
 from .config import Person, Study
 
@@ -251,6 +251,9 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
     entries = _one_post_per_room(study, _entries(rconf, item))
 
     msg = capture.message(item["last_message_id"] if force else item["first_message_id"])
+    if stranger := senders.off_roster(msg, study):
+        _hold_off_roster(study, item, others, msg, stranger, actor)
+        return []
     entries = _in_group(msg, _chat_posts(item, capture.turn(msg), entries))
     routed_to = ", ".join(dict.fromkeys(
         n for it in [item] + others
@@ -323,6 +326,26 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
                  tier=it["tier"], routed_to=routed_to, outbox_ids=created, forced=force or None,
                  sent_with=[x["id"] for x in [item] + others if x["id"] != it["id"]] or None)
     return created
+
+
+def _hold_off_roster(study: Study, item: dict, others: list[dict], msg: dict, stranger: str, actor: str) -> None:
+    """CAP-06: a message from someone not on the study's people list goes to no one on the study (no alert, no
+    chat post, no reply to the sender), only to the admins. Marked routed so it is not tried again."""
+    from .compliance import alerts
+    ids = [item["id"]] + [it["id"] for it in others]
+    for i in ids:
+        db.ex("UPDATE items SET routed=1, updated_at=? WHERE id=?", (db.now(), i))
+        db.audit("item_held_off_roster", entity_type="item", entity_id=i, study_id=study.study_id, actor=actor,
+                 message_id=msg["id"], sender=stranger)
+    base = (settings.get("web.base_url") or "").rstrip("/")
+    alerts.notify(f"off_roster:{msg['id']}:{item['id']}", f"Held: a message to {study.study_id} from someone not on its people list",
+                  f"Message {msg['id']} came to study {study.study_id} from {stranger}, who is not on the study's "
+                  f"people list. The bot kept it and read it, but sent nothing about it to anyone on the study: "
+                  f"alert(s) {', '.join(f'#{i}' for i in ids)} are held.\n\n"
+                  + (f"See it: {base}/admin/messages/{msg['id']}\n\n" if base else "")
+                  + "If the sender belongs on this study, add them to its people list (through GitHub), deploy, then "
+                    f"run `cormon draft {item['id']} --force` to send the alert. If not (for example the wrong study), "
+                    "nothing more is needed.", every_minutes=10 ** 7)
 
 
 def copy_nudge(study: Study, msg: dict, first_writer: str) -> int | None:

@@ -445,6 +445,7 @@ def conn() -> sqlite3.Connection:
         c.execute("PRAGMA busy_timeout=30000")
         c.executescript(SCHEMA)
         _migrate(c)
+        _mark_or_refuse(c)
         from .compliance import trail
         trail.track_changes(c)
         _local.conn = c
@@ -499,6 +500,27 @@ BACKFILL = {
 }
 INDEXES = ["CREATE INDEX IF NOT EXISTS ix_outbox_idem ON outbox(idem_key)",
            "CREATE INDEX IF NOT EXISTS ix_outbox_study_sent ON outbox(study_id, sent_at)"]
+
+
+LIVE_MARK = "live_correspondence"
+
+
+class LiveDataElsewhere(PermissionError):
+    """The live bot's database (or a backup of it) opened by a copy that is not the live bot (SDL-03, PRV-04)."""
+
+
+def _mark_or_refuse(c: sqlite3.Connection) -> None:
+    """The live bot marks its database as holding real correspondence; every backup carries the mark. A copy that
+    is not the live bot (a laptop, a practice copy, the test sandbox) refuses to open a marked database."""
+    from . import config
+    if config.live():
+        c.execute("INSERT OR IGNORE INTO state(key, value) VALUES(?,?)", (LIVE_MARK, now()))
+    elif c.execute("SELECT 1 FROM state WHERE key=?", (LIVE_MARK,)).fetchone():
+        c.close()
+        raise LiveDataElsewhere(
+            f"{db_path()} holds the live bot's correspondence, and this copy ({settings.ROOT}) is not the live bot "
+            "(SDL-03, PRV-04). Real messages stay on the live server: delete this file, and work on the live bot "
+            "with ./bin/cormon-cloud")
 
 
 def _migrate(c: sqlite3.Connection) -> None:
