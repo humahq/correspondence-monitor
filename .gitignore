@@ -6,6 +6,7 @@ data/
 secrets/
 .pytest_cache/
 .ruff_cache/
+.coverage
 *.egg-info/
 practice/
 sandbox/
