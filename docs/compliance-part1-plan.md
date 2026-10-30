@@ -9,7 +9,7 @@ tested and deployed to the live bot on 27 Oct; the rest is not built yet.
 - Part I has 71 requirement IDs. Before this work: 7 done, 41 partly done, 21 not done, 2 are V2 (later).
   After the 27 Oct deploy: 12 done, 40 partly done, 17 not done, 2 V2. After the second 27 Oct deploy: 24 done,
   32 partly done, 13 not done, 2 V2. After the 28 Oct build (since deployed): 30 done, 29 partly done, 10 not
-  done, 2 V2.
+  done, 2 V2. With the 29 Oct release gate: 32 done, 30 partly done, 7 not done, 2 V2.
 - Nothing we found needs a rewrite. Most gaps are missing records (hashes, versions, full AI logs) or missing
   workflow (safety routing, clearing grammar, bounces, recall).
 - Approach, as Eliot asked: a thin wrapper (facade) in front of each compliance function. Each wrapper has a
@@ -111,7 +111,7 @@ The existing code already has natural chokepoints to put these in front of, so t
 Status from reading the code on 2026-10-27, updated after the 27 Oct deploy. "Partly" means part of the
 requirement is in place; the gap is the note.
 
-### Done (30)
+### Done (32)
 
 Built, tested and deployed on the evening of 27 Oct (with pypdf 6.21.2 and certifi 2026.10.23, which fix
 the known problems the first scan found):
@@ -161,7 +161,13 @@ Done before:
 - GOV-02 Weekly drift email with grounding rates and a sample of quiet messages to mark (28 Oct). It only
   finds misses if a person marks the sample.
 
-### Not done (10)
+- SDL-05 GitHub Actions gate (29 Oct): code tests plus the AI test sets a change can affect, with pass marks
+  in `config/gates.yaml`; `deploy/release.sh` refuses a commit whose gate did not pass, and stops if the
+  server's packages, code or study model are not what the gate tested.
+- VAL-05 A change to the model, prompts, rules, study model or packages runs the relevant sets; every set runs
+  weekly with no kept AI answers, to catch a change on the supplier's side (29 Oct).
+
+### Not done (7)
 
 | ID | What is missing |
 |---|---|
@@ -169,17 +175,15 @@ Done before:
 | SAF-04 | No safety acknowledgment by the medical monitor |
 | SAF-05 | No escalation chain (PV backup, ClinOps lead, then a human by phone) |
 | DSP-02 | No "reply CONFIRM" step before a clear takes effect |
-| CFG-02 | Changing rules or prompts does not run the test sets |
 | EXP-01 | `export.py` exports the rules, not a study's records package |
 | SDL-02 | Commits are not linked to tickets |
-| SDL-05 | No CI; nothing blocks a deploy when tests fail |
 | VAL-04 | No protocol version by site and date |
-| VAL-05 | Model, prompt or rule changes do not trigger test runs |
 
-### Partly done (29)
+### Partly done (30)
 
 | ID | In place | Gap |
 |---|---|---|
+| CFG-02 | Rules, prompts, the study model (`studies/model/model.sql`) and repo config run the gate before release (29 Oct) | A `cormon config set` or a rule rebuild on the server itself does not; the release script only refuses while the live model differs |
 | CAP-06 | Plus-address picks the study; untagged mail never matched; senders not on the people list are flagged on the page and in the digest (built 27 Oct) | Not kept from sponsor-facing posts |
 | CAP-09 | Recipients come from config, not the AI; a 20-message trick test set (built 27 Oct), run on the live DNL rules (12 of 20 right; the same emails without the tricks 13 of 17) | Two tricks worked: an invented "standing exception" hid an old consent form (j19), and an order inside an admin email made the bot report a made-up eGFR deviation (j11). The set is small (20) |
 | CAP-10 | Hourly check that the mailbox and our store agree (built 27 Oct) | No mailbox retention procedure |
@@ -285,7 +289,8 @@ Scope checks (Phase 1 items we have not started):
 
 A. Records export package (EXP-01, item 8): a study's originals, the hash manifest, audit trail, AI log, config
    history and a PDF/CSV of alerts and dispositions. It is a sizeable job. Do it now, or later?
-B. Automatic tests before deploy (SDL-05, item 10): GitHub Actions (free, but a new service for us), or a gate
+B. (Decided 29 Oct: GitHub Actions, built; deploys still from the laptop, gated on GitHub's result.)
+   Automatic tests before deploy (SDL-05, item 10): GitHub Actions (free, but a new service for us), or a gate
    in our own deploy script that refuses to deploy when tests fail?
 
 Product decisions (Phase 2):
