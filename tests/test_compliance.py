@@ -1176,8 +1176,9 @@ def test_every_commit_must_name_a_task_that_exists():
 
 
 def test_the_gate_runs_every_set_when_matching_settings_change():
-    from cormon import gate
+    from cormon import config, gate
 
+    assert gate.TESTED_SETTINGS == config.TESTED_SETTINGS
     assert gate._llm_block("matching:\n  sweep: true\n") != gate._llm_block("matching:\n  sweep: false\n")
     assert gate._llm_block("web:\n  host: a\n") == gate._llm_block("web:\n  host: b\n")
 
