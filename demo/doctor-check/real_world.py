@@ -9,6 +9,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE.parent.parent))
 from cormon import config, db, service, settings  # noqa: E402
+from cormon.testbench import TEST_SENT  # noqa: E402
 
 STUDY = config.study("NCT05842941")
 ROOM = [p.email for p in STUDY.people if p.email]
@@ -25,7 +26,7 @@ for c in CASES:
     ext = f"real-world:{c['id']}:{time.time_ns()}"
     (sim / "teams_inbox" / f"{c['id']}.json").write_text(json.dumps({
         "id": ext, "study_id": STUDY.study_id, "channel": "room", "from_email": c["from"], "from_name": who.name,
-        "text": c["text"]}))
+        "text": c["text"], "sent_at": TEST_SENT.isoformat()}))
     t0 = time.time()
     service.tick(log=lambda *_: None)
     m = db.q1("SELECT id, status FROM messages WHERE channel='teams' AND external_id=?", (ext,))

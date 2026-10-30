@@ -39,13 +39,16 @@ import sys
 import time
 from dataclasses import dataclass, field
 from email.message import EmailMessage
-from datetime import datetime
-from email.utils import formatdate, getaddresses, make_msgid
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime, getaddresses, make_msgid
 from pathlib import Path
 
 import yaml
 
 SEED_TABLES = ("documents", "doc_pages", "rules", "allowances", "guide", "rule_decisions", "llm_cache")
+# The date a test message without its own date was sent. The date is part of what the AI is asked, so a fixed
+# one lets a run reuse the kept AI answers of the last run; a change to the code or prompts still asks afresh.
+TEST_SENT = datetime(2026, 10, 29, 9, 0, tzinfo=timezone(timedelta(hours=-4)))
 
 
 @dataclass
@@ -58,7 +61,7 @@ class Case:
     participant: str | None = None
     raw: bytes | None = None
     chat: str | None = None          # room | direct, for a chat message instead of an email
-    date: str | None = None          # when the message was sent ("Mon, 21 Sep 2026"); default now
+    date: str | None = None          # when the message was sent ("Mon, 21 Sep 2026"); default TEST_SENT
     result: dict = field(default_factory=dict)
 
 
@@ -203,9 +206,8 @@ def _sender(study, who: str) -> tuple[str, str]:
 
 def _date(when: str | None) -> str:
     if not when:
-        return formatdate(localtime=True)
+        return format_datetime(TEST_SENT)
     from dateutil import parser as dtparser
-    from email.utils import format_datetime
     dt = dtparser.parse(when, default=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0))
     return format_datetime(dt.astimezone() if dt.tzinfo is None else dt)
 
@@ -221,7 +223,7 @@ def _build(study, case: Case) -> bytes:
         if not msg.get("Message-ID"):
             msg["Message-ID"] = make_msgid(domain="test.example")
         if not msg.get("Date"):
-            msg["Date"] = formatdate(localtime=True)
+            msg["Date"] = format_datetime(TEST_SENT)
         return bytes(msg)
     frm, to = _sender(study, case.sender)
     msg = EmailMessage()
@@ -239,7 +241,7 @@ def _post_chat(study, case: Case, inbox: Path) -> str:
     ext = f"test-chat:{time.time_ns()}"
     (inbox / f"case-{time.time_ns()}.json").write_text(json.dumps({
         "id": ext, "study_id": study.study_id, "channel": case.chat, "from_email": addr, "from_name": name,
-        "text": case.body}))
+        "text": case.body, "sent_at": TEST_SENT.isoformat()}))
     return ext
 
 
