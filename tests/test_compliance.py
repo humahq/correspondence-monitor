@@ -1044,6 +1044,232 @@ def test_a_config_version_is_approved_by_someone_else():
     assert config.unapproved() == [] and db.q1("SELECT 1 FROM audit_log WHERE action='config_approved'")
 
 
+def test_a_config_change_is_not_used_until_someone_else_approves_it(tmp_path, monkeypatch):
+    from cormon import config
+
+    f = tmp_path / "triage.yaml"
+    f.write_text("hours: 4\n")
+    monkeypatch.setattr(config, "tracked_files", lambda: [f])
+    monkeypatch.setattr(config, "live", lambda: True)
+    config.record_config_changes("ann", "first")  # the first version of a file is in use at once
+    assert config.in_force(str(f))["content"] == "hours: 4\n" and config.waiting() == []
+
+    f.write_text("hours: 48\n")  # edited on the server, or by `cormon config set`
+    assert config.record_config_changes("ann") == []
+    assert f.read_text() == "hours: 4\n", "the file goes back to the version in use"
+    [w] = config.waiting()
+    assert w["actor"] == "ann" and db.q1("SELECT 1 FROM audit_log WHERE action='config_change_waiting'")
+    f.write_text("hours: 48\n")  # the same change again is the same waiting version
+    config.record_config_changes()
+    assert [x["id"] for x in config.waiting()] == [w["id"]] and f.read_text() == "hours: 4\n"
+
+    with pytest.raises(config.ConfigApprovalRefused, match="different person"):
+        config.approve_version(w["id"], "ann")
+    assert f.read_text() == "hours: 4\n"
+    config.approve_version(w["id"], "bob")
+    assert f.read_text() == "hours: 48\n" and config.waiting() == [] and config.unapproved() == []
+    assert config.record_config_changes() == [] and f.read_text() == "hours: 48\n"
+
+    f.write_text("hours: [\n")
+    config.record_config_changes("ann")
+    [bad] = config.waiting()
+    with pytest.raises(config.ConfigApprovalRefused, match="not valid YAML"):
+        config.approve_version(bad["id"], "bob")
+    f.write_text("hours: 24\n")
+    config.record_config_changes("cy")
+    newer = config.waiting()[-1]
+    config.approve_version(newer["id"], "ann")
+    with pytest.raises(config.ConfigApprovalRefused, match="older than"):
+        config.approve_version(bad["id"], "bob")
+
+
+def test_a_laptop_copy_never_puts_its_files_back(tmp_path, monkeypatch):
+    from cormon import config
+
+    f = tmp_path / "triage.yaml"
+    f.write_text("hours: 4\n")
+    monkeypatch.setattr(config, "tracked_files", lambda: [f])
+    monkeypatch.setattr(config, "live", lambda: False)
+    config.record_config_changes()
+    f.write_text("hours: 48\n")
+    assert config.record_config_changes() == [str(f)] and f.read_text() == "hours: 48\n"
+
+
+def _live_home(tmp_path, monkeypatch):
+    from cormon import config
+
+    home = tmp_path / "live"
+    (home / "config").mkdir(parents=True)
+    (home / "config" / "triage.yaml").write_text("hours: 4\n")
+    (home / "config" / "settings.yaml").write_text(
+        "llm:\n  model: a\nweb:\n  host: 127.0.0.1  # server only\n")
+    monkeypatch.setattr(config, "live", lambda: True)
+    monkeypatch.setattr(config, "tracked_files", lambda: sorted((home / "config").glob("*.yaml")))
+    real = config._rel
+    monkeypatch.setattr(config, "_rel", lambda p: str(p.relative_to(home)) if p.is_relative_to(home) else real(p))
+    monkeypatch.setattr(settings, "resolve", lambda rel: home / rel)
+    config.record_config_changes("ann", "first")
+    return home
+
+
+def test_on_the_live_bot_a_change_the_gate_tests_cannot_be_approved_there(tmp_path, monkeypatch):
+    from cormon import config
+
+    home = _live_home(tmp_path, monkeypatch)
+    (home / "config" / "triage.yaml").write_text("hours: 48\n")
+    s = home / "config" / "settings.yaml"
+    s.write_text(s.read_text().replace("127.0.0.1", "0.0.0.0"))
+    config.record_config_changes("ann")
+    tri, sett = sorted(config.waiting(), key=lambda w: w["path"], reverse=True)
+    with pytest.raises(config.ConfigApprovalRefused, match="only through GitHub"):
+        config.approve_version(tri["id"], "bob")
+    config.approve_version(sett["id"], "bob")  # a server-only part of the settings: two people are enough
+    assert "0.0.0.0" in s.read_text() and (home / "config" / "triage.yaml").read_text() == "hours: 4\n"
+    s.write_text(s.read_text().replace("model: a", "model: b"))
+    config.record_config_changes("ann")
+    with pytest.raises(config.ConfigApprovalRefused, match="only through GitHub"):
+        config.approve_version(config.waiting()[-1]["id"], "bob")
+
+
+def test_the_release_puts_the_tested_config_in_place_and_keeps_the_servers_own(tmp_path, monkeypatch):
+    from cormon import config
+
+    home = _live_home(tmp_path, monkeypatch)
+    commit = tmp_path / "commit"
+    (commit / "config").mkdir(parents=True)
+    (commit / "config" / "triage.yaml").write_text("hours: 24\n")
+    (commit / "config" / "settings.yaml").write_text("llm:\n  model: b\nweb:\n  host: 0.0.0.0\n")
+    (home / "config" / "triage.yaml").write_text("hours: 99\n")  # a hand edit just before: it waits
+    assert sorted(config.release(commit, "john_huma_ai", "run 7")) == ["config/settings.yaml", "config/triage.yaml"]
+    assert (home / "config" / "triage.yaml").read_text() == "hours: 24\n"
+    s = (home / "config" / "settings.yaml").read_text()
+    assert "model: b" in s and "host: 127.0.0.1  # server only" in s
+    assert config.waiting() == [] and config.unapproved() == []
+    assert config.in_force("config/triage.yaml")["approved_by"] == "release gate (run 7)"
+    assert config.record_config_changes() == [] and db.q1("SELECT 1 FROM audit_log WHERE action='config_released'")
+    assert config.release(commit, "john_huma_ai", "run 8") == []
+
+
+def test_the_live_study_model_is_not_rebuilt_on_the_server(monkeypatch):
+    from cormon import cli, config
+
+    monkeypatch.setattr(config, "live", lambda: True)
+    for fn, args in ((cli.cmd_ingest, {"study": None, "force": False}), (cli.cmd_checks, {"study": "x"}),
+                     (cli.cmd_guide, {"study": "x"}), (cli.cmd_rules_decide, {"study": "x"}),
+                     (cli.cmd_coverage, {"study": "x", "no_ai": False}),
+                     (cli.cmd_duties, {"study": "x", "rebuild": True})):
+        with pytest.raises(SystemExit, match="without the release gate"):
+            fn(SimpleNamespace(**args))
+
+
+def test_a_merge_reuses_the_pull_requests_pass_only_for_the_same_code(tmp_path, monkeypatch):
+    import subprocess
+
+    from cormon import gate
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True,  # noqa: E731
+                                    check=True).stdout.strip()
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@x"), git("config", "user.name", "t")
+    (repo / "f").write_text("1")
+    git("add", "f"), git("commit", "-qm", "base")
+    git("switch", "-qc", "pr")
+    (repo / "f").write_text("2")
+    git("commit", "-qam", "change")
+    head = git("rev-parse", "HEAD")
+    git("switch", "-q", "main"), git("merge", "-q", "--squash", "pr"), git("commit", "-qm", "change (#2)")
+    real = gate._git
+    monkeypatch.setattr(gate, "REPO", repo)
+    monkeypatch.setattr(gate, "_git", lambda *a: "" if a[0] == "fetch" else real(*a))
+    gate_ok = {"jobs": [{"name": "gate", "conclusion": "success"}]}
+    answers = {"pulls": [{"head": {"sha": head}}], "runs": {"workflow_runs": [{"id": 7, "run_number": 3}]},
+               "jobs": gate_ok}
+    monkeypatch.setattr(gate, "_github", lambda path: answers["pulls" if "/pulls" in path else
+                                                      "jobs" if "/jobs" in path else "runs"])
+    assert gate.same_code_passed() == 7
+    answers["jobs"] = {"jobs": [{"name": "gate", "conclusion": "failure"}]}
+    assert gate.same_code_passed() is None, "the pull request's gate failed"
+    answers["jobs"] = gate_ok
+    (repo / "f").write_text("3")
+    git("commit", "-qam", "another change on main")
+    assert gate.same_code_passed() is None, "different code from what the pull request tested"
+
+
+def test_every_commit_must_name_a_task_that_exists():
+    from cormon import gate
+
+    found = [{"sha": "a" * 40, "subject": "Hourly backups (#14)", "body": "Hourly backups (#14)\n"},
+             {"sha": "b" * 40, "subject": "Fix typo", "body": "Fix typo\n\nsee https://x/y#3 and &#9;\n"},
+             {"sha": "c" * 40, "subject": "Names checked", "body": "Names checked\n\nRefs #99\n"}]
+    problems = gate.task_problems(found, exists=lambda n: n == 14)
+    assert len(problems) == 2 and "bbbbbbbb" in problems[0] and "names no task" in problems[0]
+    assert "cccccccc" in problems[1] and "#99" in problems[1]
+    assert gate.task_problems(found[1:2], pr=14, exists=lambda n: n == 14) == [], "a pull request's own number"
+    assert len(gate.task_problems(found)) == 1, "offline only the form is checked"
+
+
+def test_the_gate_runs_every_set_when_matching_settings_change():
+    from cormon import config, gate
+
+    assert gate.TESTED_SETTINGS == config.TESTED_SETTINGS
+    assert gate._llm_block("matching:\n  sweep: true\n") != gate._llm_block("matching:\n  sweep: false\n")
+    assert gate._llm_block("web:\n  host: a\n") == gate._llm_block("web:\n  host: b\n")
+
+
+def test_on_the_server_the_name_is_the_admins_own_sign_in(monkeypatch):
+    from cormon import cli
+
+    _set(monkeypatch, web__admin__emails=["peter@huma.ai", "john@huma.ai"])
+    monkeypatch.setenv("CORMON_OPERATOR", "peter")
+    monkeypatch.delenv("SUDO_USER", raising=False)
+    assert cli.actor(SimpleNamespace(as_="anyone")) == "anyone", "a laptop copy keeps --as"
+    assert cli.actor(SimpleNamespace(as_=None)) == "peter"
+
+    monkeypatch.setenv("SUDO_USER", "john_huma_ai")  # set by sudo from the Google sign-in
+    assert settings.login_name("John@Huma.ai") == "john_huma_ai"
+    assert cli.actor(SimpleNamespace(as_=None)) == "john_huma_ai", "CORMON_OPERATOR cannot change it"
+    assert cli.actor(SimpleNamespace(as_="JOHN_HUMA_AI")) == "john_huma_ai"
+    with pytest.raises(SystemExit, match="signed in as john_huma_ai"):
+        cli.actor(SimpleNamespace(as_="peter_huma_ai"))
+    for login in ("mallory_huma_ai", "root"):
+        monkeypatch.setenv("SUDO_USER", login)
+        with pytest.raises(SystemExit, match="not one of the admins"):
+            cli.actor(SimpleNamespace(as_=None))
+
+    _set(monkeypatch, compliance__checked_names=True, web__admin__emails=["john@huma.ai"])
+    monkeypatch.delenv("SUDO_USER")
+    with pytest.raises(SystemExit, match="not one of the admins"):
+        cli.actor(SimpleNamespace(as_="john_huma_ai"))
+
+
+def test_one_admin_cannot_approve_their_own_request_by_another_name(monkeypatch):
+    from cormon import cli
+    from cormon.compliance import approvals
+
+    _set(monkeypatch, web__admin__emails=["peter@huma.ai", "john@huma.ai"])
+    monkeypatch.setenv("SUDO_USER", "john_huma_ai")
+    rid = approvals.request("reset", "db", cli.actor(SimpleNamespace(as_=None)), "test")
+    monkeypatch.setenv("CORMON_OPERATOR", "peter_huma_ai")
+    with pytest.raises(approvals.Refused, match="different person"):
+        approvals.approve(rid, cli.actor(SimpleNamespace(as_=None)))
+    monkeypatch.setenv("SUDO_USER", "peter_huma_ai")
+    assert approvals.approve(rid, cli.actor(SimpleNamespace(as_=None)))["approved_by"] == "peter_huma_ai"
+
+
+def test_config_approvals_can_be_turned_off_only_with_approval(monkeypatch):
+    from cormon import config
+
+    db.ex("INSERT INTO config_versions(path, sha256, content, actor, recorded_at) VALUES (?,?,?,?,?)",
+          ("config/settings.yaml", "a", "system: {config_needs_approval: true}\n", "ann", db.now()))
+    db.ex("INSERT INTO config_versions(path, sha256, content, actor, recorded_at, waiting) VALUES (?,?,?,?,?,1)",
+          ("config/settings.yaml", "b", "system: {config_needs_approval: false}\n", "ann", db.now()))
+    assert config.needs_approval()
+    db.ex("UPDATE config_versions SET approved_by='bob' WHERE sha256='b'")
+    assert not config.needs_approval()
+
+
 # ------------------------------------------------------------------ quality in use (GOV-02)
 
 def test_drift_counts_grounding_from_the_reader_trace():
@@ -1107,6 +1333,34 @@ def test_no_monitor_listed_a_safety_message_goes_to_nobody_and_cannot_be_cleared
         items.set_state(iid, "cleared", "ops", "operator", study_id=study.study_id, code="fixed")
 
 
+def test_a_message_with_a_safety_part_sends_no_notice_back_to_the_site(monkeypatch):
+    from cormon import careful, config, events, items, llm, routing
+
+    monkeypatch.setattr(careful, "check_post", lambda **k: None)                 # the chat posts are not the point
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: pytest.fail("no AI call expected"))
+    study = config.study("NCT05842941")
+    crc = study.people_with_role("crc")[0].email
+
+    def urgent(n, harm):
+        mid = capture.capture(Inbound(channel="email", external_id=f"<m{n}@site.org>", thread_ref=f"t{n}",
+                                      from_addr=crc, from_name="C", subject="DNL-1012", sent_at=_ago(5),
+                                      body_text="DNL-1012 randomized with eGFR 25. She also fell and broke her wrist.",
+                                      rfc_message_id=f"<m{n}@site.org>", study_id=study.study_id))
+        events.store(mid, {"events": [{"description": "randomized", "harm": "none"},
+                                      {"description": "fell, broke her wrist", "harm": harm}]})
+        iid, _ = items.upsert(study=study, thread_key=f"email:t{n}", message_id=mid, dedup_key=f"k{n}",
+                              kind="finding", pattern_class="eligibility", rule_id=None, participant_id="DNL-1012",
+                              site="site-01", polarity="problem", title="eGFR below the minimum", tier="immediate",
+                              tier_reason="test", evidence={}, reasoning="r")
+        routing.route_item(iid)
+        return iid, {r["purpose"] for r in db.q("SELECT purpose FROM outbox WHERE item_id=?", (iid,))}
+
+    iid, sent = urgent(1, "injury_or_hospitalization")
+    assert "email_crc" not in sent and "email_cra" in sent                     # the alert itself still goes out
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='site_notice_withheld_safety' AND entity_id=?", (str(iid),))
+    assert "email_crc" in urgent(2, "none")[1]                                  # no harm: the notice goes as before
+
+
 def test_no_cra_or_lead_listed_is_said_and_flagged():
     from cormon import items
 
@@ -1163,10 +1417,10 @@ def test_router_down_an_alert_never_sent_is_retried_then_reported(monkeypatch):
 def test_a_change_runs_only_the_test_sets_it_can_affect():
     from cormon import gate
 
-    assert gate.plan(["cormon/reader.py"]) == ["findings", "tricks", "questions"]
+    assert gate.plan(["cormon/reader.py"]) == ["findings", "questions"]
     assert gate.plan(["cormon/outcheck.py"]) == ["questions", "wording", "doctors"]
     assert gate.plan(["config/careful.yaml"]) == ["wording", "doctors"]
-    assert gate.plan(["studies/model/model.sql"]) == ["findings", "tricks", "questions"]
+    assert gate.plan(["studies/model/model.sql"]) == ["findings", "questions"]
     assert gate.plan(["docs/compliance-part1-plan.md", "cormon/corrections.py"]) == []
     every = list(gate.gates()["sets"])
     assert gate.plan(["cormon/llm.py"]) == every                                # the model or its supplier
@@ -1182,7 +1436,8 @@ def test_every_code_file_is_tied_to_a_test_set_or_known_to_need_none():
     tied = {p for s in cfg["sets"].values() for p in gate._flat(s["when"])} | set(cfg["all_when"])
     none_needed = {  # operator tools, records, alerts and pages: covered by the code tests only
         "__init__", "adminview", "backup", "cli", "compare", "corrections", "coverage", "digest", "drift", "export",
-        "notes", "prune", "senders", "settings", "stuck", "timing", "watchdog", "weblogin", "webview"}
+        "notes", "prune", "senders", "settings", "stuck", "timing", "watchdog", "weblogin", "webview",
+        "outbox"}  # its AI set (the trick emails) is left out for now
     from pathlib import Path
     for f in sorted((gate.REPO / "cormon").glob("*.py")):
         rel = f"cormon/{f.name}"
@@ -1201,13 +1456,14 @@ def test_the_pass_marks_block_a_drop_and_a_stranger_recipient(tmp_path):
     assert gate.check("questions", sets["questions"], {"right_or_partly": 0.98, "wrong": 0.04})
     assert gate.check("wording", sets["wording"], {"right": 25 / 26})
     assert gate.check("doctors", sets["doctors"], {"right": "20/28"}) == []        # shown only
-    assert gate.check("tricks", sets["tricks"], {"accuracy": 0.6, "strangers": []}) == []
+    tricks = {"marks": {"recipients_from_config": True, "show": ["accuracy"]}}  # the trick set, when it returns
+    assert gate.check("tricks", tricks, {"accuracy": 0.6, "strangers": []}) == []
     results = tmp_path / "results.csv"
     results.write_text("case,sent\nj01,email_cra -> john@huma.ai | teams_cra -> teams_alert_channel\n"
                        "j07,email_cra -> attacker@evil.example\n")
     bad = gate.strangers("NCT05842941", results)
     assert bad == ["j07: attacker@evil.example"]
-    assert gate.check("tricks", sets["tricks"], {"accuracy": 0.6, "strangers": bad})
+    assert gate.check("tricks", tricks, {"accuracy": 0.6, "strangers": bad})
 
 
 def test_the_question_grader_sees_every_section_the_bot_read():

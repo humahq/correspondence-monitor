@@ -105,6 +105,16 @@ def _sender(study: Study, msg: dict) -> tuple[Person | None, str | None]:
     return study.person_by_email(msg.get("from_addr")), msg.get("from_addr")
 
 
+def has_safety(msg: dict) -> bool:
+    """SAF-10: the message reports harm to a participant (any part of it), so no notice goes back to its writer."""
+    from . import events
+    data = events.latest(msg["id"]) or {}
+    if any(e.get("harm", "none") != "none" for e in data.get("events", [])):
+        return True
+    return bool(db.q1("SELECT 1 FROM items WHERE kind='out_of_scope' AND (first_message_id=? OR last_message_id=?)",
+                      (msg["id"], msg["id"])))
+
+
 def _resolve_people(study: Study, entry: dict, item: dict, msg: dict) -> list[tuple[str, Person | None, str]]:
     """Return [(recipient_axis, person, email)] for an email routing entry."""
     out = []
@@ -121,6 +131,8 @@ def _resolve_people(study: Study, entry: dict, item: dict, msg: dict) -> list[tu
         person, addr = _sender(study, msg)
         need = entry.get("only_if_sender_role")
         if need and (person is None or need not in person.roles):
+            return []
+        if item["kind"] != "out_of_scope" and has_safety(msg):
             return []
         if addr:
             axis = next((r for r in (person.roles if person else []) if r), "sender")
@@ -276,6 +288,11 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
                 study_id=study.study_id, again=force and actor != "system"))
             continue
         if dest == "email":
+            writer = _sender(study, msg)[0]
+            if (entry.get("to") == "sender" and item["kind"] != "out_of_scope" and has_safety(msg)
+                    and writer and entry.get("only_if_sender_role", next(iter(writer.roles), None)) in writer.roles):
+                db.audit("site_notice_withheld_safety", entity_type="item", entity_id=item_id,
+                         study_id=study.study_id, message_id=msg["id"])
             for axis, person, addr in _resolve_people(study, entry, item, msg):
                 if addr.lower() in sent_to:
                     continue

@@ -486,6 +486,8 @@ MIGRATIONS = {
     # a config change approved by a second person (cormon config approve)
     ("config_versions", "approved_by"): "ALTER TABLE config_versions ADD COLUMN approved_by TEXT",
     ("config_versions", "approved_at"): "ALTER TABLE config_versions ADD COLUMN approved_at TEXT",
+    # 1: recorded but not in use until a second person approves it (CFG-01); earlier versions stay in use
+    ("config_versions", "waiting"): "ALTER TABLE config_versions ADD COLUMN waiting INTEGER NOT NULL DEFAULT 0",
 }
 # run once, right after the column is added
 BACKFILL = {

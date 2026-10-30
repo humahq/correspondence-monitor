@@ -394,7 +394,7 @@ and the admins are emailed once an hour while it lasts. Alerts about the bot's o
 - If the service stops mid-send, the bot asks the channel whether the message went out (each chat post carries its own id; each email's id is looked up in Sent Mail). Sent: marked sent. Not sent: sent again. Can't tell: marked failed for a person to decide, never sent twice.
 - A site message left half-read is read once more; a second stop marks it an error. An alert made but never sent goes out 10 minutes later.
 - Anything that fails for good is emailed once to `system.ops_emails` (or each study's clinops lead), with the command that fixes it.
-- The database is backed up daily to `data/backups/` (last `system.backup_keep`, default 7). A backup counts only after the copy passes an integrity check and holds the same rows as the live database.
+- The database is backed up every hour to `data/backups/` (last `system.backup_keep`, default 24). A backup counts only after the copy passes an integrity check and holds the same rows as the live database. With `system.backup_bucket` set, each one is also gzipped to that Cloud Storage bucket, and once a week a restore drill downloads the newest copy, checks it and times it. A failure emails the admins. To restore from the bucket: `cormon backup --fetch` (the newest, or give its name), then `cormon restore <file> --yes`.
 
 ### Who can do what
 - **Email sender check.** Gmail checks SPF, DKIM and DMARC on each email. Only the topmost result from Google counts. An email that fails is still checked for problems, but it can't clear or hide an alert; the attempt is logged and the alert's details page warns that the sender check failed.
@@ -466,6 +466,9 @@ What this sets up:
 - **Item pages:** served over HTTPS by Caddy at `https://<ip-with-dashes>.sslip.io`. The app itself only listens on localhost.
 - **SSH:** open only to Google's IAP range, and people log in with their own Google account (OS Login).
 - **First install:** the server starts with an empty database containing the laptop's study model. Updates keep the server's data.
+- **Backups off the server:** `./deploy/create_backup_bucket.sh` makes the bucket the hourly backups are copied to; then set `system.backup_bucket` on the server (two people).
+
+**Every change names its task (SDL-02).** Each commit message names the GitHub issue (or pull request) it is for, for example `Hourly backups off the server (#14)`. The gate on GitHub fails a change with a commit that names none, or names a number that is not an issue or pull request here, and `deploy/release.sh` deploys only a passed commit. Make the issue first (`gh issue create`), and turn on the local reminder once per clone: `git config core.hooksPath .githooks`.
 
 ## Switching to Peter's study
 

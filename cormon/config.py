@@ -178,38 +178,101 @@ def _rel(p: Path) -> str:
         return str(p)
 
 
+# What the release gate tests (CFG-02): on the live copy these change only through GitHub and deploy/release.sh.
+TESTED_FILES = ("config/triage.yaml", "config/routing.yaml", "config/templates.yaml", "config/careful.yaml")
+TESTED_SETTINGS = ("llm", "matching")
+GATED = ("{} changes what the release gate tests (CFG-02), so on the live bot it changes only through GitHub: "
+         "commit it, let the gate pass, then deploy/release.sh puts it in place")
+
+
+def live() -> bool:
+    """The live bot's copy (not a laptop copy or the server's sandbox): compliance.live, default /opt/cormon."""
+    return bool(settings.get("compliance.live", settings.ROOT == Path("/opt/cormon")))
+
+
+def tested_part(rel: str, content: str) -> Any:
+    """The part of a config file the gate tests; None for a file it does not test."""
+    if rel in TESTED_FILES or (rel.startswith("studies/") and rel.endswith("/study.yaml")):
+        return content
+    if rel == "config/settings.yaml":
+        import yaml
+        try:
+            data = yaml.safe_load(content) or {}
+        except yaml.YAMLError:
+            return content
+        return {k: data.get(k) for k in TESTED_SETTINGS}
+    return None
+
+
+def changes_tested(rel: str, old: str, new: str) -> bool:
+    return tested_part(rel, old) != tested_part(rel, new)
+
+
+def in_force(rel: str) -> dict | None:
+    """The version of a config file in use: the newest one that is approved or was never made to wait."""
+    row = db.q1("SELECT * FROM config_versions WHERE path=? AND (waiting=0 OR approved_by IS NOT NULL)"
+                " ORDER BY id DESC LIMIT 1", (rel,))
+    return dict(row) if row else None
+
+
+def needs_approval() -> bool:
+    """system.config_needs_approval, read from the settings in use, so turning it off waits for approval too.
+    Default: on for the live copy only, so a laptop copy's files (edited in git) are never put back."""
+    on = live()
+    current = in_force(_rel(settings.SETTINGS_FILE))
+    if current:
+        import yaml
+        return bool(((yaml.safe_load(current["content"]) or {}).get("system") or {}).get("config_needs_approval", on))
+    return bool(settings.get("system.config_needs_approval", on))
+
+
 def record_config_changes(actor: str | None = None, reason: str | None = None) -> list[str]:
-    """Compare config files with their last recorded version; log any change."""
+    """Compare config files with their last recorded version; log any change. With approvals on (CFG-01) a change
+    to a file that already has a version in use is kept as a waiting version and the file is put back to the
+    version in use, until a second person approves it (approve_version). Returns the files whose use changed."""
     changed: list[str] = []
+    wait_on = needs_approval()
     for path in tracked_files():
         content = path.read_text(encoding="utf-8")
         sha = hashlib.sha256(content.encode()).hexdigest()
         rel = _rel(path)
-        last = db.q1(
-            "SELECT sha256, content FROM config_versions WHERE path=? ORDER BY id DESC LIMIT 1", (rel,)
-        )
-        if last and last["sha256"] == sha:
+        live = in_force(rel)
+        if live and live["sha256"] == sha:
             continue
-        who = actor or "unknown (file edited directly)"
-        db.ex(
-            "INSERT INTO config_versions(path, sha256, content, actor, recorded_at) VALUES (?,?,?,?,?)",
-            (rel, sha, content, who, db.now()),
-        )
-        diff = ""
-        if last:
-            diff = "".join(difflib.unified_diff(
-                last["content"].splitlines(True), content.splitlines(True), "before", "after", n=1
-            ))[:8000]
-        db.audit(
-            "config_changed" if last else "config_recorded",
-            entity_type="config", entity_id=rel,
-            actor=who, actor_type="operator" if actor else "system",
-            diff=diff, reason=reason,
-        )
-        changed.append(rel)
-    if changed:
-        settings.reload()
+        wait = bool(live) and wait_on
+        same = db.q1("SELECT id FROM config_versions WHERE path=? AND sha256=? AND waiting=1 AND approved_by IS NULL"
+                     " AND id>?", (rel, sha, live["id"])) if wait else None
+        if not same:
+            who = actor or "unknown (file edited directly)"
+            vid = db.ex(
+                "INSERT INTO config_versions(path, sha256, content, actor, recorded_at, waiting) VALUES (?,?,?,?,?,?)",
+                (rel, sha, content, who, db.now(), int(wait)),
+            )
+            diff = ""
+            if live:
+                diff = "".join(difflib.unified_diff(
+                    live["content"].splitlines(True), content.splitlines(True), "before", "after", n=1
+                ))[:8000]
+            db.audit(
+                "config_change_waiting" if wait else "config_changed" if live else "config_recorded",
+                entity_type="config", entity_id=rel,
+                actor=who, actor_type="operator" if actor else "system",
+                diff=diff, reason=reason, version=vid,
+            )
+        if wait:  # the file goes back to the version in use
+            path.write_text(live["content"], encoding="utf-8")
+        else:
+            changed.append(rel)
+    settings.reload()  # also picks up a version another process (cormon config approve) put in use
     return changed
+
+
+def waiting() -> list[dict]:
+    """Config versions recorded but not in use until a second person approves them."""
+    return [dict(r) for r in db.q(
+        "SELECT v.id, v.path, v.actor, v.recorded_at FROM config_versions v WHERE v.waiting=1"
+        " AND v.approved_by IS NULL AND v.id > COALESCE((SELECT MAX(id) FROM config_versions w WHERE w.path=v.path"
+        " AND (w.waiting=0 OR w.approved_by IS NOT NULL)), 0) ORDER BY v.id")]
 
 
 class ConfigApprovalRefused(ValueError):
@@ -217,11 +280,12 @@ class ConfigApprovalRefused(ValueError):
 
 
 def unapproved() -> list[dict]:
-    """Each config file whose version in use has no second person's approval (CFG-01). A version applies from
-    the moment it is recorded (recorded_at is its effective date); the approval is the second look."""
+    """Each config file whose version in use has no second person's approval: one recorded before approvals
+    were required, or the first version of a file."""
     return [dict(r) for r in db.q(
         "SELECT v.id, v.path, v.actor, v.recorded_at FROM config_versions v WHERE v.approved_by IS NULL"
-        " AND v.id=(SELECT MAX(id) FROM config_versions w WHERE w.path=v.path) ORDER BY v.id")]
+        " AND v.waiting=0 AND v.id=(SELECT MAX(id) FROM config_versions w WHERE w.path=v.path"
+        " AND (w.waiting=0 OR w.approved_by IS NOT NULL)) ORDER BY v.id")]
 
 
 def approve_version(version_id: int, who: str) -> dict:
@@ -232,11 +296,80 @@ def approve_version(version_id: int, who: str) -> dict:
         raise ConfigApprovalRefused(f"config version {version_id} was already approved by {row['approved_by']}")
     if who.lower() == (row["actor"] or "").lower():
         raise ConfigApprovalRefused(f"config version {version_id} was made by {who}; a different person must approve it")
+    current = in_force(row["path"])
+    if row["waiting"] and current and current["id"] > row["id"]:
+        raise ConfigApprovalRefused(f"config version {version_id} is older than version {current['id']}, which is "
+                                    "in use; make the change again")
+    if row["waiting"] and current and live() and changes_tested(row["path"], current["content"], row["content"]):
+        raise ConfigApprovalRefused(GATED.format(row["path"]))
+    if row["waiting"]:
+        import yaml
+        try:
+            yaml.safe_load(row["content"])
+        except yaml.YAMLError as e:
+            raise ConfigApprovalRefused(f"config version {version_id} is not valid YAML: {e}") from None
+    now = db.now()
     db.ex("UPDATE config_versions SET approved_by=?, approved_at=? WHERE id=? AND approved_by IS NULL",
-          (who, db.now(), version_id))
+          (who, now, version_id))
     db.audit("config_approved", entity_type="config", entity_id=row["path"], actor=who, actor_type="operator",
-             version=version_id, sha256=row["sha256"], made_by=row["actor"], effective_from=row["recorded_at"])
+             version=version_id, sha256=row["sha256"], made_by=row["actor"],
+             effective_from=now if row["waiting"] else row["recorded_at"])
+    if row["waiting"]:  # it applies from now: the file gets its content
+        settings.resolve(row["path"]).write_text(row["content"], encoding="utf-8")
+        settings.reload()
     return dict(db.q1("SELECT id, path, approved_by, approved_at FROM config_versions WHERE id=?", (version_id,)))
+
+
+def _merge_tested_settings(server: str, repo: str) -> str:
+    """The server's settings with the gate-tested sections (llm, matching) taken from the repo's."""
+    import io
+
+    from ruamel.yaml import YAML
+    rt = YAML()
+    rt.preserve_quotes = True
+    rt.width = 4096
+    rt.indent(mapping=2, sequence=4, offset=2)
+    data, new = rt.load(server), rt.load(repo) or {}
+    for k in TESTED_SETTINGS:
+        if k in new:
+            data[k] = new[k]
+        elif k in data:
+            del data[k]
+    out = io.StringIO()
+    rt.dump(data, out)
+    return out.getvalue()
+
+
+def release(folder: Path, who: str, gate: str) -> list[str]:
+    """CFG-02: deploy/release.sh puts the gate-tested config of a commit in place (folder holds the commit's
+    config/ and studies/*/study.yaml). Each change is in use at once, approved by the gate; the server-only
+    parts of settings.yaml stay. Returns the files changed."""
+    record_config_changes()  # a direct edit made before this is kept as its own (waiting) version
+    changed = []
+    sources = [(rel, folder / rel) for rel in TESTED_FILES + ("config/settings.yaml",)]
+    sources += [(str(p.relative_to(folder)), p) for p in sorted(folder.glob("studies/*/study.yaml"))]
+    for rel, src in sources:
+        dest = settings.resolve(rel)
+        if not src.exists() or not dest.exists():
+            continue
+        content = src.read_text(encoding="utf-8")
+        old = dest.read_text(encoding="utf-8")
+        if rel == "config/settings.yaml":
+            content = _merge_tested_settings(old, content)
+        if not changes_tested(rel, old, content):
+            continue
+        dest.write_text(content, encoding="utf-8")
+        now = db.now()
+        vid = db.ex("INSERT INTO config_versions(path, sha256, content, actor, recorded_at, approved_by, approved_at,"
+                    " waiting) VALUES (?,?,?,?,?,?,?,0)",
+                    (rel, hashlib.sha256(content.encode()).hexdigest(), content, who, now, f"release gate ({gate})",
+                     now))
+        db.audit("config_released", entity_type="config", entity_id=rel, actor=who, actor_type="operator",
+                 version=vid, gate=gate, diff="".join(difflib.unified_diff(
+                     old.splitlines(True), content.splitlines(True), "before", "after", n=1))[:8000])
+        changed.append(rel)
+    settings.reload()
+    return changed
 
 
 def get_path(data: Any, dotted: str) -> Any:

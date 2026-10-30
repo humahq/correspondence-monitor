@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import subprocess
@@ -18,7 +19,16 @@ from .triage import TIERS
 
 
 def actor(args) -> str:
-    return getattr(args, "as_", None) or settings.actor()
+    asked = getattr(args, "as_", None)
+    try:
+        who = settings.signed_in()
+    except settings.NotAnAdmin as e:
+        sys.exit(f"refused: {e}")
+    if who is None:
+        return asked or settings.actor()
+    if asked and asked.lower() != who:
+        sys.exit(f"refused: you are signed in as {who}, so --as {asked} cannot be used")
+    return who
 
 
 def second_person(args, action: str, target: str) -> bool:
@@ -99,7 +109,16 @@ def cmd_reset(args):
     print(f"archived to {dest}; fresh database ready (study model kept)")
 
 
+def _not_on_live(what: str) -> None:
+    """CFG-02: the live bot's study model changes only through the gate, never by a rebuild on the server."""
+    if config.live():
+        sys.exit(f"refused: {what} changes the live bot's study model without the release gate. Do it on a laptop "
+                 "copy, commit studies/model/model.sql, let the gate pass, then import it (cormon import-model, "
+                 "two people)")
+
+
 def cmd_ingest(args):
+    _not_on_live("ingest")
     targets = [config.study(args.study)] if args.study else list(config.studies().values())
     for s in targets:
         print(f"{s.study_id}: building study model")
@@ -108,6 +127,7 @@ def cmd_ingest(args):
 
 
 def cmd_guide(args):
+    _not_on_live("guide")
     from . import guide
     s = config.study(args.study)
     if not args.packs_only:
@@ -124,6 +144,7 @@ def cmd_guide(args):
 
 
 def cmd_checks(args):
+    _not_on_live("checks")
     from . import checks, coverage
     s = config.study(args.study)
     checks.build(s, use_cache=not args.fresh, reuse=not args.fresh)
@@ -131,12 +152,16 @@ def cmd_checks(args):
 
 
 def cmd_coverage(args):
+    if not args.no_ai:
+        _not_on_live("coverage (it adds lines to the briefs; --no-ai only reports)")
     from . import coverage
     coverage.gate(config.study(args.study), use_cache=not args.fresh, ai=not args.no_ai)
 
 
 def cmd_duties(args):
     """Print the follow-up table (or rebuild it) so a person can check it against the protocol once."""
+    if args.rebuild:
+        _not_on_live("duties --rebuild")
     from . import duties
     s = config.study(args.study)
     events = duties.build(s, reuse=False) if args.rebuild else duties.table(s)
@@ -159,6 +184,7 @@ def cmd_rules_suggest(args):
 
 
 def cmd_rules_decide(args):
+    _not_on_live("rules-decide")
     from . import prune
 
     study = config.study(args.study)
@@ -232,6 +258,10 @@ def cmd_status(args):
     if waiting:
         print("config in use without a second person's approval (cormon config approve <file> <id>): "
               + ", ".join(f"{w['path']} #{w['id']}" for w in waiting))
+    changes = config.waiting()
+    if changes:
+        print("config changes NOT IN USE until a second person approves (cormon config approve <file> <id>): "
+              + ", ".join(f"{w['path']} #{w['id']} by {w['actor']}" for w in changes))
     pending_notes = [r["id"] for r in db.q("SELECT id FROM notes WHERE active=1 AND approved_by IS NULL")]
     if pending_notes:
         print("notes waiting for approval (cormon note approve --target ID): "
@@ -252,10 +282,27 @@ def cmd_status(args):
 
 def cmd_backup(args):
     from . import backup
-    if args.check:
+    if (args.fetch or args.drill) and not backup.bucket():
+        sys.exit("no off-server bucket: set system.backup_bucket")
+    if args.drill:
+        res = backup.drill()
+        print(f"restore drill {'PASSED' if res['ok'] else 'FAILED'}: {res['object']} downloaded and checked in "
+              f"{res['seconds']} s (limit {backup.RTO_HOURS} hours)  rows: {res['counts']}")
+        for p in res["problems"]:
+            print(f"  - {p}")
+        if not res["ok"]:
+            sys.exit(1)
+        return
+    if args.fetch:
+        path = backup.fetch(None if args.fetch == "newest" else args.fetch)
+        res = backup.check(path)
+        print(f"downloaded {path}; to put it in use: stop the service, then cormon restore {path} --yes")
+    elif args.check:
         res = backup.check(Path(args.check))
     else:
         res = backup.make()
+        if res["ok"] and backup.bucket():
+            res["path"] += f"  (copied to {backup.upload(Path(res['path']))['object']})"
     print(f"{'OK' if res['ok'] else 'FAILED'}: {res['path']}  rows: {res['counts']}")
     for p in res["problems"]:
         print(f"  - {p}")
@@ -695,6 +742,18 @@ def _config_file(name: str) -> Path:
     return settings.resolve(name)
 
 
+def _say_waiting(path: Path) -> None:
+    current = config.in_force(config._rel(path))
+    for w in config.waiting():
+        if settings.resolve(w["path"]) == path:
+            content = db.q1("SELECT content FROM config_versions WHERE id=?", (w["id"],))["content"]
+            if config.live() and current and config.changes_tested(w["path"], current["content"], content):
+                print(f"NOT IN USE: version {w['id']} cannot be approved here. " + config.GATED.format(w["path"]))
+            else:
+                print(f"NOT IN USE YET: version {w['id']} waits for a second person: "
+                      f"cormon config approve {w['path']} {w['id']}")
+
+
 def cmd_config(args):
     path = _config_file(args.file)
     if args.action == "show":
@@ -714,10 +773,16 @@ def cmd_config(args):
         value = yaml.safe_load(args.value)
         old = config.get_path(data, args.path) if args.path else None
         config.set_path(data, args.path, value)
-        with open(path, "w", encoding="utf-8") as fh:
-            rt.dump(data, fh)
-        config.record_config_changes(actor(args), args.reason or f"set {args.path}")
-        print(f"{args.file}: {args.path} changed from {old!r} to {value!r} (recorded)")
+        out = io.StringIO()
+        rt.dump(data, out)
+        before = path.read_text(encoding="utf-8")
+        if config.live() and config.changes_tested(config._rel(path), before, out.getvalue()):
+            sys.exit("refused: " + config.GATED.format(f"{args.file} {args.path}"))
+        path.write_text(out.getvalue(), encoding="utf-8")
+        changed = config.record_config_changes(actor(args), args.reason or f"set {args.path}")
+        print(f"{args.file}: {args.path} changed from {old!r} to {value!r} "
+              + ("(recorded, in use now)" if changed else ""))
+        _say_waiting(path)
     elif args.action == "edit":
         config.record_config_changes()
         editor = os.environ.get("EDITOR", "nano")
@@ -727,17 +792,24 @@ def cmd_config(args):
         except yaml.YAMLError as e:
             print(f"WARNING: {path} is not valid YAML now: {e}")
         changed = config.record_config_changes(actor(args), args.reason or "edited")
-        print(f"recorded: {changed or 'no change'}")
+        print(f"in use now: {changed or 'no change'}")
+        _say_waiting(path)
     elif args.action == "history":
-        table([dict(r) for r in db.q("SELECT id, path, actor, recorded_at, approved_by, substr(sha256,1,10) sha"
-                                     " FROM config_versions ORDER BY id DESC LIMIT 30")],
-              [("id", "id", 4), ("path", "file", 36), ("actor", "who", 24), ("recorded_at", "in use from", 26),
-               ("approved_by", "approved by", 16), ("sha", "sha", 10)])
+        table([dict(r, state="waiting" if r["waiting"] and not r["approved_by"] else "") for r in db.q(
+                  "SELECT id, path, actor, recorded_at, approved_by, waiting, substr(sha256,1,10) sha"
+                  " FROM config_versions ORDER BY id DESC LIMIT 30")],
+              [("id", "id", 4), ("path", "file", 36), ("actor", "who", 24), ("recorded_at", "recorded", 26),
+               ("approved_by", "approved by", 16), ("state", "state", 8), ("sha", "sha", 10)])
     elif args.action == "approve":
         if not (args.path or "").isdigit():
             sys.exit("give the version id from `cormon config history`: cormon config approve <file> <id>")
         v = config.approve_version(int(args.path), actor(args))
-        print(f"config version {v['id']} ({v['path']}) approved by {v['approved_by']}")
+        print(f"config version {v['id']} ({v['path']}) approved by {v['approved_by']}; in use now")
+    elif args.action == "release":
+        if not args.path:
+            sys.exit("usage: cormon config release <folder with the commit's config/ and studies/> <gate run>")
+        changed = config.release(Path(args.file), actor(args), args.path)
+        print(f"put in place from gate run {args.path}: {', '.join(changed) or 'no change'}")
 
 
 def cmd_test(args):
@@ -856,7 +928,8 @@ def build_parser() -> argparse.ArgumentParser:
                                       cormon note add --scope person --target crc@site.org --kind fact "Uses MAP-0xxx IDs"
                                       cormon digest --hours 24 --send
                                     """))
-    p.add_argument("--as", dest="as_", help="operator identity recorded in the log (default: $CORMON_OPERATOR or OS user)")
+    p.add_argument("--as", dest="as_", help="operator identity recorded in the log (default: $CORMON_OPERATOR or OS user); "
+                        "on the server it is always your own sign-in")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("init", help="create the database and record the current config").set_defaults(fn=cmd_init)
@@ -929,7 +1002,12 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("status", help="state, queue and recent activity"); s.add_argument("--limit", type=int, default=15)
     s.set_defaults(fn=cmd_status)
     s = sub.add_parser("backup", help="back up the database now and check the copy")
-    s.add_argument("--check", metavar="FILE", help="only check an existing backup"); s.set_defaults(fn=cmd_backup)
+    s.add_argument("--check", metavar="FILE", help="only check an existing backup")
+    s.add_argument("--fetch", nargs="?", const="newest", metavar="NAME",
+                   help="download a backup from the off-server bucket (default the newest) and check it")
+    s.add_argument("--drill", action="store_true",
+                   help="the restore drill now: download the newest off-server copy, check it, time it")
+    s.set_defaults(fn=cmd_backup)
     s = sub.add_parser("verify", help="check the audit trail's hash chain and every original's fingerprint")
     s.add_argument("--backfill", action="store_true", help="first fingerprint messages captured before fingerprints")
     s.add_argument("--anchor", action="store_true", help="write today's anchor after a clean check")
@@ -1029,7 +1107,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--kind", choices=["fact", "instruction"], default="fact"); s.set_defaults(fn=cmd_note)
 
     s = sub.add_parser("config", help="show, set or edit routing rules, thresholds, templates (changes recorded)")
-    s.add_argument("action", choices=["show", "set", "edit", "history", "approve"])
+    s.add_argument("action", choices=["show", "set", "edit", "history", "approve", "release"])
     s.add_argument("file", nargs="?", default="triage", help="triage | routing | templates | settings | study:<id>")
     s.add_argument("path", nargs="?", help="dotted path, e.g. rules.0.tier"); s.add_argument("value", nargs="?")
     s.add_argument("--reason"); s.set_defaults(fn=cmd_config)
