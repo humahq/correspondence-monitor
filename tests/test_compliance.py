@@ -1197,8 +1197,8 @@ def test_the_pass_marks_block_a_drop_and_a_stranger_recipient(tmp_path):
     assert gate.check("findings", sets["findings"], {"recall": 0.98, "precision": 0.97}) == []
     low = gate.check("findings", sets["findings"], {"recall": 0.93, "precision": 0.97})
     assert low and "recall 93%" in low[0]
-    assert gate.check("questions", sets["questions"], {"right_or_partly": 0.91, "wrong": 0.08}) == []
-    assert gate.check("questions", sets["questions"], {"right_or_partly": 0.91, "wrong": 0.12})
+    assert gate.check("questions", sets["questions"], {"right_or_partly": 0.98, "wrong": 0.01}) == []
+    assert gate.check("questions", sets["questions"], {"right_or_partly": 0.98, "wrong": 0.04})
     assert gate.check("wording", sets["wording"], {"right": 25 / 26})
     assert gate.check("doctors", sets["doctors"], {"right": "20/28"}) == []        # shown only
     assert gate.check("tricks", sets["tricks"], {"accuracy": 0.6, "strangers": []}) == []

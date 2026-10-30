@@ -72,9 +72,9 @@ sets:
   questions:
     what: 100 practice site questions (QAA-04)
     file: demo/qa-g/questions.json
-    marks:
-      right_or_partly: 0.88   # correct or partly correct
-      wrong_at_most: 0.10
+    marks:                    # raised 29 Oct once the grader saw every section the bot read (98% and 1% then)
+      right_or_partly: 0.95   # correct or partly correct
+      wrong_at_most: 0.03
     when:
       - cormon/answers.py
       - cormon/asks.py
