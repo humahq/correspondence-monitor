@@ -1,5 +1,8 @@
 # 21 CFR Part 11, Part I: where we stand and how we build it
 
+> Current status of each requirement: see [compliance-checklist.md](compliance-checklist.md). This plan is
+> the history and the design; the checklist is the one place that is kept up to date.
+
 For Eliot, 2026-10-27. Covers Part I of the compliance PRD (the developer's list). Part II (policies,
 contracts, programs) is Eliot's and is not covered here. The free groundwork (Phase 1, first part) was built,
 tested and deployed to the live bot on 27 Oct; the rest is not built yet.
