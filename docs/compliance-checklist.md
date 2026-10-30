@@ -5,15 +5,16 @@ Part I is the developer's part. It has 71 requirements. Part II (policies, contr
 
 This list is fixed: the same 71 IDs, in the document's order. Only the boxes change.
 
-Status on 30 Oct 2026: **42 done, 21 partly done, 6 not done, 2 later (V2).**
+Status on 30 Oct 2026: **45 done, 18 partly done, 6 not done, 2 later (V2).**
 
-## Done (42)
+## Done (45)
 
 - [x] CAP-01 Original bytes preserved
 - [x] CAP-02 Hash-linked derivations
 - [x] CAP-03 Teams mutability
 - [x] CAP-04 Authoritative timestamps
 - [x] CAP-05 Inbound source integrity
+- [x] CAP-06 Study authorization at ingestion (a message from someone not on the study's people list is kept and read, but goes only to the admins: no alert, chat post, reply or digest line. Built 30 Oct, not deployed yet)
 - [x] CAP-07 Ingestion completeness
 - [x] CAP-08 Coverage statements
 - [x] OUT-04 Template and content guardrails
@@ -44,19 +45,20 @@ Status on 30 Oct 2026: **42 done, 21 partly done, 6 not done, 2 later (V2).**
 - [x] ARC-02 Open-system controls (11.30)
 - [x] ARC-03 Operational sequence checks
 - [x] SDL-02 Change linking
+- [x] SDL-03 Environment isolation (only the live bot may read or send real mail and chat; a copy that is not the live bot will not open the live database or a backup of it, and will not download the off-server backups. Built 30 Oct, not deployed yet)
 - [x] SDL-05 Regression blocking
 - [x] SEC-02 Dependency and SBOM scanning in CI
 - [x] SEC-04 Two-person rule for destructive actions
+- [x] PRV-04 Non-production isolation (the same checks as SDL-03. Built 30 Oct, not deployed yet)
 - [x] BCK-01 Backup automation and recovery targets (built and deployed; copies to Google Cloud Storage start once Eliot approves the bucket setting)
 - [x] SUP-02 Model lifecycle controls
 - [x] VAL-05 Revalidation triggers
 - [x] GOV-02 Drift monitoring
 
-## Partly done (21)
+## Partly done (18)
 
 | ID | Name | What is left |
 |---|---|---|
-| CAP-06 | Study authorization at ingestion | Mail from unknown senders is flagged, but not yet kept out of what the sponsor sees |
 | CAP-09 | Prompt-injection defense | 2 tricks still fool the bot; the trick test set is small (20). Parked |
 | CAP-10 | Second-copy governance | No written rule for how long the mailbox keeps mail |
 | OUT-01 | Sent-message records | Sent messages are stored and checked, but not in write-once storage (Phase 3) |
@@ -72,12 +74,9 @@ Status on 30 Oct 2026: **42 done, 21 partly done, 6 not done, 2 later (V2).**
 | AUD-02 | Immutability via compensating controls | No separate write-once store (Phase 3) |
 | ARC-04 | Availability controls | Alerts go by email, not by pager (Phase 3) |
 | SDL-01 | Version control and peer review | GitHub does not force a review before merge (main branch is not protected) |
-| SDL-03 | Environment isolation | Live and practice copies are separate, but no setting enforces it |
 | SEC-01 | Encryption | No app-level encryption or customer-owned key |
 | SEC-03 | Secrets and credentials | Some secrets still in env vars and files; no rotation |
 | PRV-01 | PHI handling | No consent-form coverage check when a study starts |
-| PRV-04 | Non-production isolation | Same as SDL-03 |
-
 ## Not done (6)
 
 | ID | Name | What is missing |

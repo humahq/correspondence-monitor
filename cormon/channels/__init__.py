@@ -5,10 +5,31 @@ from __future__ import annotations
 from .. import settings
 
 _cache: dict = {}
+REAL = {"email": ("gmail", "imap"), "teams": ("graph", "gchat")}
+
+
+class NotTheLiveBot(PermissionError):
+    """A copy that is not the live bot tried to read or send real correspondence (SDL-03, PRV-04)."""
+
+
+def _only_live(kind: str, mode: str) -> None:
+    from .. import config
+    if mode in REAL[kind] and not config.live():
+        raise NotTheLiveBot(
+            f"channels.{kind} is '{mode}', which reads and sends real correspondence, and only the live bot may do "
+            f"that (SDL-03, PRV-04). This copy ({settings.ROOT}) is not the live bot: set channels.{kind} to 'sim' "
+            "here, or work on the live bot with ./bin/cormon-cloud")
+
+
+def check_live_only() -> None:
+    """Before the listener starts: refuse if this copy would read real correspondence without being the live bot."""
+    _only_live("email", settings.get("channels.email", "sim"))
+    _only_live("teams", settings.get("channels.teams", "sim"))
 
 
 def email_channel():
     mode = settings.get("channels.email", "sim")
+    _only_live("email", mode)
     if ("email", mode) not in _cache:
         if mode == "gmail":
             from .gmail import GmailChannel
@@ -49,6 +70,7 @@ def study_for_person(addr: str | None, known_only: bool = False) -> str | None:
 def teams_channel():
     """The chat channel: Microsoft Teams (graph), Google Chat (gchat) or the simulator."""
     mode = settings.get("channels.teams", "sim")
+    _only_live("teams", mode)
     if ("teams", mode) not in _cache:
         if mode == "graph":
             from .teams import TeamsChannel

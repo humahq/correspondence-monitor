@@ -7,7 +7,7 @@ import time
 import traceback
 
 from . import backup, capture, config, db, digest, drift, llm, outbox, phi, pipeline, settings, stuck, webview
-from .channels import chat_events, email_channel, teams_channel
+from .channels import chat_events, check_live_only, email_channel, teams_channel
 from .compliance import deps, records, trail
 
 
@@ -123,6 +123,7 @@ def chat_push(log=print) -> None:
 
 
 def run(once: bool = False, log=print) -> None:
+    check_live_only()
     server = None if once else webview.start_background()
     if server:
         log(f"item pages on {settings.get('web.base_url')}")

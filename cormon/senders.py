@@ -50,16 +50,38 @@ def flags(msg: dict | None, study) -> list[str]:
     out = []
     if failed(msg):
         out.append(f"the email's sender check failed, so it may not really be from {msg.get('from_addr')}")
-    addr = msg.get("from_addr")
-    if addr and study is not None and study.person_by_email(addr) is None:
+    if addr := off_roster(msg, study):
         out.append(f"the sender ({addr}) is not on the study's people list")
     return out
 
 
-def item_flags(item: dict, study) -> list[str]:
+def off_roster(msg: dict | None, study) -> str | None:
+    """CAP-06: the sender's address when it is not on the study's people list. Such a message is kept and read,
+    but nothing from it goes to the study's people or the sponsor. A sender with no address is not counted."""
+    addr = (msg or {}).get("from_addr")
+    if not addr or study is None or study.person_by_email(addr) is not None:
+        return None
+    if any((p.teams_upn or "").lower() == addr.lower() for p in study.people):
+        return None
+    return addr
+
+
+def _first_message(item: dict) -> dict | None:
     from . import db
     m = db.q1("SELECT channel, from_addr, headers FROM messages WHERE id=?", (item.get("first_message_id"),))
-    return flags(dict(m, headers=db.unjs(m["headers"], {})) if m else None, study)
+    return dict(m, headers=db.unjs(m["headers"], {})) if m else None
+
+
+def item_flags(item: dict, study) -> list[str]:
+    return flags(_first_message(item), study)
+
+
+def item_off_roster(item: dict, study=None) -> str | None:
+    """The alert came from a sender not on the study's people list, so the sponsor does not see it (CAP-06)."""
+    from . import config
+    if study is None:
+        study = config.studies().get(item.get("study_id"))
+    return off_roster(_first_message(item), study)
 
 
 def failed(msg: dict) -> bool:

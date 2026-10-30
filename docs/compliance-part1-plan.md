@@ -16,7 +16,8 @@ tested and deployed to the live bot on 27 Oct; the rest is not built yet.
   33 done, 29 partly done, 7 not done, 2 V2. With CFG-01 (30 Oct): 34 done, 28 partly done, 7 not done, 2 V2.
   With checked names (30 Oct): 36 done, 26 partly done, 7 not done, 2 V2. With CFG-02 (30 Oct): 37 done,
   25 partly done, 7 not done, 2 V2. With BCK-01 (30 Oct): 38 done, 24 partly done, 7 not done, 2 V2.
-  With SDL-02 (30 Oct): 39 done, 24 partly done, 6 not done, 2 V2.
+  With SDL-02 (30 Oct): 39 done, 24 partly done, 6 not done, 2 V2. With CAP-06, SDL-03 and PRV-04 (30 Oct,
+  after the checklist's recount): 45 done, 18 partly done, 6 not done, 2 V2.
 - Nothing we found needs a rewrite. Most gaps are missing records (hashes, versions, full AI logs) or missing
   workflow (safety routing, clearing grammar, bounces, recall).
 - Approach, as Eliot asked: a thin wrapper (facade) in front of each compliance function. Each wrapper has a
@@ -209,6 +210,19 @@ Done before:
   that is not an issue or pull request in the repository, fails the gate, so `deploy/release.sh` will not
   deploy it. A local reminder refuses such a commit on the laptop (`git config core.hooksPath .githooks`)
   (30 Oct, not pushed yet).
+- CAP-06 A message from someone not on the study's people list is kept and read, but nothing from it goes to
+  anyone on the study: no alert email, chat post or reply to the sender, no line in the digest or the sponsor
+  view. The admins get one email naming the message, the sender and the held alerts, and the admin page lists
+  them; once the sender is added to the people list, `cormon draft ID --force` sends the alert. A sender with no
+  address (a chat user Google gives no email for) is not counted as off the list. On 30 Oct every alert on the
+  live bot came from someone on its study's people list, so no past alert would have been held (30 Oct, not
+  deployed yet).
+- SDL-03, PRV-04 Only the live bot may read or send real mail and chat: a copy that is not the live bot (a
+  laptop, a practice copy, the test sandbox) refuses a real channel, and `cormon run` there stops at once. The
+  live bot marks its database as holding real correspondence, and every backup carries the mark; a copy that is
+  not the live bot refuses to open a marked database, and `cormon backup --fetch` and `--drill` run only on the
+  live server. Limit: "the live bot" is the copy in /opt/cormon (or `compliance.live`), so a person who sets that
+  on a laptop can still get round it; the quarterly review (IAM-02) checks it (30 Oct, not deployed yet).
 
 ### Not done (6)
 
@@ -225,7 +239,6 @@ Done before:
 
 | ID | In place | Gap |
 |---|---|---|
-| CAP-06 | Plus-address picks the study; untagged mail never matched; senders not on the people list are flagged on the page and in the digest (built 27 Oct) | Not kept from sponsor-facing posts |
 | CAP-09 | Recipients come from config, not the AI; a 20-message trick test set (built 27 Oct), run on the live DNL rules (12 of 20 right; the same emails without the tricks 13 of 17) | Two tricks worked: an invented "standing exception" hid an old consent form (j19), and an order inside an admin email made the bot report a made-up eGFR deviation (j11). The set is small (20) |
 | CAP-10 | Hourly check that the mailbox and our store agree (built 27 Oct) | No mailbox retention procedure |
 | OUT-01 | Rendered text stored per sent message, hashed and re-checked nightly (27 Oct) | Not write-once (Phase 3) |
@@ -244,11 +257,9 @@ Done before:
 | AUD-02 | Append-only by trigger; never pruned; hash chain, daily anchor and verifier built and deployed 27 Oct | No separate write-once store (Phase 3) |
 | ARC-04 | Heartbeat every tick; `/health` and a separate watchdog email the admins after 15 minutes (27 Oct) | Email, not a pager with escalation (Phase 3) |
 | SDL-01 | Git, tests before deploy (by habit) | No enforced review before deploy |
-| SDL-03 | Live bot on its own server; practice copies on the laptop | Not enforced by a setting |
 | SEC-01 | TLS in transit; Google disk encryption | No app-level encryption or customer key |
 | SEC-03 | Credentials read through one wrapper (27 Oct); two in Secret Manager | Others in env vars and files; no rotation |
 | PRV-01 | Patient details masked in the audit log; retention purge | No ICF coverage check at study activation |
-| PRV-04 | Same as SDL-03 | Same |
 ### Later (V2): IAM-05 (sponsor SSO), EXP-02 (sponsor self-service export).
 
 ## 4. Build order

@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
-from . import capture, config, coverage, db, outbox, settings
+from . import capture, config, coverage, db, outbox, senders, settings
 from .drafting import local_time
 from .triage import TIER_LABELS
 
@@ -264,6 +264,13 @@ def _problems() -> list[dict]:
     for r in db.q("SELECT id, link_token FROM items WHERE routed=0 AND state!='suppressed' AND counts=1"
                   " AND created_at<?", (db.later(-15),)):
         out.append({"text": f"Alert #{r['id']} was made but not sent yet.", "link": f"/items/{r['link_token']}"})
+    for r in db.q("SELECT i.* FROM items i JOIN audit_log a ON a.entity_type='item'"
+                  " AND a.entity_id=CAST(i.id AS TEXT) AND a.action='item_held_off_roster'"
+                  " WHERE i.state='open' AND a.ts>=? GROUP BY i.id ORDER BY i.id DESC LIMIT 20", (db.later(-30 * 24 * 60),)):
+        if who := senders.item_off_roster(dict(r)):
+            out.append({"text": f"Alert #{r['id']} is held: the sender ({who}) is not on the study's people list. "
+                                f"Add them and run `cormon draft {r['id']} --force`, or leave it.",
+                        "link": f"/admin/messages/{r['first_message_id']}"})
     for st in _studies().values():
         g = coverage.last(st.study_id)
         if g and g["warnings"]:

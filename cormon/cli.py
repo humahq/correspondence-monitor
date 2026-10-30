@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from . import capture, config, db, digest, ingest, items, notes, outbox, pipeline, routing, settings
+from . import capture, config, db, digest, ingest, items, notes, outbox, pipeline, routing, senders, settings
 from .drafting import local_time
 from .triage import TIERS
 
@@ -282,6 +282,9 @@ def cmd_status(args):
 
 def cmd_backup(args):
     from . import backup
+    if (args.fetch or args.drill) and not config.live():
+        sys.exit("refused: the off-server backups hold the live bot's correspondence, so they are downloaded only on "
+                 "the live server (SDL-03, PRV-04): use ./bin/cormon-cloud backup --fetch")
     if (args.fetch or args.drill) and not backup.bucket():
         sys.exit("no off-server bucket: set system.backup_bucket")
     if args.drill:
@@ -453,6 +456,8 @@ def cmd_items(args):
     sql += " ORDER BY id DESC LIMIT ?"
     params.append(args.limit)
     rows = [dict(r) for r in db.q(sql, params)]
+    if args.sponsor_view:
+        rows = [r for r in rows if not senders.item_off_roster(r)]
     for r in rows:
         r["clr"] = "yes" if r["cleared"] else ""
         r["dest"] = ", ".join(sorted({o["destination"] for o in db.q(
@@ -570,7 +575,8 @@ def _study_of(item_id: int) -> str:
 
 def _sponsor_sees(item_id: int) -> bool:
     it = items.get(item_id)
-    return it["state"] == "open" and bool(it["counts"]) and it["kind"] != "out_of_scope"
+    return (it["state"] == "open" and bool(it["counts"]) and it["kind"] != "out_of_scope"
+            and not senders.item_off_roster(it))
 
 
 def _reason_ok(state: str, args) -> bool:
