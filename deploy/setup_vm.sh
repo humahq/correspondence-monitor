@@ -37,14 +37,14 @@ EOF
 # First install: an empty database holding the study model built on the laptop (rules, document pages).
 if [ ! -f "$APP/data/cormon.db" ] && [ -f /tmp/cormon-seed.db ]; then
   chown -R cormon:cormon "$APP"
-  sudo -u cormon CORMON_HOME="$APP" "$APP/.venv/bin/python" -c \
+  runuser -u cormon -- env -u SUDO_USER CORMON_HOME="$APP" "$APP/.venv/bin/python" -c \
     "from pathlib import Path; from cormon import testbench; testbench._fresh_db(Path('/tmp/cormon-seed.db'))"
 elif [ "${SYNC_MODEL:-0}" = 1 ] && [ -f /tmp/cormon-seed.db ]; then
   # Update with a rebuilt study model: messages, items and the log stay; the change is in the log.
   systemctl stop cormon || true
   chown -R cormon:cormon "$APP"
   chown cormon:cormon /tmp/cormon-seed.db
-  sudo -u cormon CORMON_HOME="$APP" "$APP/.venv/bin/cormon" --as deploy import-model /tmp/cormon-seed.db \
+  runuser -u cormon -- env -u SUDO_USER CORMON_HOME="$APP" "$APP/.venv/bin/cormon" --as deploy import-model /tmp/cormon-seed.db \
     --reason "study model rebuilt on the laptop and tested before deploy"
 fi
 rm -f /tmp/cormon-seed.db /tmp/cormon.tgz
@@ -75,7 +75,7 @@ systemctl reload-or-restart caddy
 
 cp "$APP/deploy/cormon.service" /etc/systemd/system/cormon.service
 systemctl daemon-reload
-sudo -u cormon CORMON_HOME="$APP" "$APP/.venv/bin/cormon" init >/dev/null
+runuser -u cormon -- env -u SUDO_USER CORMON_HOME="$APP" "$APP/.venv/bin/cormon" init >/dev/null
 systemctl enable cormon >/dev/null 2>&1
 systemctl restart cormon
 sleep 3

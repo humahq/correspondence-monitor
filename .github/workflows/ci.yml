@@ -1,4 +1,4 @@
-# Release gate (SDL-05, VAL-05, CFG-02, CAP-09). Every change runs the code tests and the AI test sets that
+# Release gate (SDL-02, SDL-05, VAL-05, CFG-02, CAP-09). Every change runs the code tests and the AI test sets that
 # config/gates.yaml ties to the files changed since the live version (tag `live`). Once a week every set runs
 # with no kept AI answers, to catch a change on the model supplier's side. deploy/release.sh deploys only a
 # commit whose "gate" job passed.
@@ -47,6 +47,28 @@ jobs:
           else
             python -m cormon.gate plan --base live
           fi
+
+  # SDL-02: every commit since the live version names the GitHub issue (or pull request) it is for, e.g. "#12".
+  tasks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install pyyaml
+      - run: |
+          python -m cormon.gate tasks --base live \
+            --head "${{ github.event.pull_request.head.sha || github.sha }}" \
+            ${{ github.event.pull_request.number && format('--pr {0}', github.event.pull_request.number) || '' }}
 
   code-tests:
     runs-on: ubuntu-latest
@@ -99,13 +121,14 @@ jobs:
           retention-days: 90
 
   gate:
-    needs: [plan, code-tests, ai-tests]
+    needs: [plan, tasks, code-tests, ai-tests]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Every required job passed
         run: |
           echo "sets: ${{ needs.plan.outputs.sets }}"
-          echo "plan ${{ needs.plan.result }}, code tests ${{ needs.code-tests.result }}, AI tests ${{ needs.ai-tests.result }}"
-          [ "${{ needs.plan.result }}" = success ] && [ "${{ needs.code-tests.result }}" = success ] || exit 1
+          echo "plan ${{ needs.plan.result }}, tasks ${{ needs.tasks.result }}, code tests ${{ needs.code-tests.result }}, AI tests ${{ needs.ai-tests.result }}"
+          [ "${{ needs.plan.result }}" = success ] && [ "${{ needs.tasks.result }}" = success ] || exit 1
+          [ "${{ needs.code-tests.result }}" = success ] || exit 1
           case "${{ needs.ai-tests.result }}" in success|skipped) ;; *) exit 1 ;; esac

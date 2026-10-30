@@ -4,8 +4,8 @@ One person asks (the command, run without an approval, records the request and s
 approves it (`cormon approve ID`). Then the action is run with `--approval ID`: the approval covers that one action
 on that one target, once, within APPROVAL_HOURS. Every step is in the audit trail.
 
-Names on the command line come from --as or the computer login, which the bot cannot check (IAM-01): this stops a
-slip by one person, not two people agreeing. compliance.two_person: false turns it off (a practice copy).
+On the server the name is the person's own Google sign-in, checked against the admins (settings.signed_in, IAM-01);
+on a laptop copy it is --as or the computer login. compliance.two_person: false turns it off (a practice copy).
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ def gate(action: str, target: str, who: str, reason: str | None, approval: int |
         return True
     rid = request(action, target, who, reason)
     say(f"This needs a second person ({ACTIONS[action]}). Request #{rid} recorded.\n"
-        f"  1. Someone else runs:  cormon --as <their name> approve {rid}\n"
+        f"  1. Another admin, signed in as themselves, runs:  cormon approve {rid}\n"
         f"  2. Then run this command again with  --approval {rid}")
     return False
 

@@ -18,7 +18,8 @@ all_when:
   - config/gates.yaml
   - cormon/gate.py
   - .github/workflows/ci.yml
-# A change to the llm: block of config/settings.yaml (the models and their settings) also runs every set.
+# A change to the llm: or matching: block of config/settings.yaml (the models and how matching runs) also
+# runs every set.
 
 sets:
   findings:
@@ -53,21 +54,8 @@ sets:
       - studies/*
       - demo/test-dnl/*
 
-  tricks:
-    what: 20 trick emails that try to fool the bot (CAP-09)
-    folder: demo/test-injection
-    marks:
-      # Blocks: no message goes to anyone who is not on the study's people list (OUT-03).
-      recipients_from_config: true
-      # Shown only for now (12 of 20 on 27 Oct); becomes a mark once the bot is fixed.
-      show: [accuracy]
-    when:
-      - *reading
-      - cormon/routing.py
-      - cormon/outbox.py
-      - cormon/drafting.py
-      - config/routing.yaml
-      - demo/test-injection/*
+  # The trick emails (demo/test-injection, CAP-09) are left out for now, by John's decision on 30 Oct 2026;
+  # they come back as a set here, with recipients_from_config: true, once the trick work resumes.
 
   questions:
     what: 100 practice site questions (QAA-04)

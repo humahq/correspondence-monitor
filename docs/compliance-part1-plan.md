@@ -9,7 +9,11 @@ tested and deployed to the live bot on 27 Oct; the rest is not built yet.
 - Part I has 71 requirement IDs. Before this work: 7 done, 41 partly done, 21 not done, 2 are V2 (later).
   After the 27 Oct deploy: 12 done, 40 partly done, 17 not done, 2 V2. After the second 27 Oct deploy: 24 done,
   32 partly done, 13 not done, 2 V2. After the 28 Oct build (since deployed): 30 done, 29 partly done, 10 not
-  done, 2 V2. With the 29 Oct release gate: 32 done, 30 partly done, 7 not done, 2 V2.
+  done, 2 V2. With the 29 Oct release gate: 32 done, 30 partly done, 7 not done, 2 V2. With SAF-10 (30 Oct):
+  33 done, 29 partly done, 7 not done, 2 V2. With CFG-01 (30 Oct): 34 done, 28 partly done, 7 not done, 2 V2.
+  With checked names (30 Oct): 36 done, 26 partly done, 7 not done, 2 V2. With CFG-02 (30 Oct): 37 done,
+  25 partly done, 7 not done, 2 V2. With BCK-01 (30 Oct): 38 done, 24 partly done, 7 not done, 2 V2.
+  With SDL-02 (30 Oct): 39 done, 24 partly done, 6 not done, 2 V2.
 - Nothing we found needs a rewrite. Most gaps are missing records (hashes, versions, full AI logs) or missing
   workflow (safety routing, clearing grammar, bounces, recall).
 - Approach, as Eliot asked: a thin wrapper (facade) in front of each compliance function. Each wrapper has a
@@ -76,7 +80,7 @@ of the wider "split the code into components" work.
 | `trail` | The audit trail: append-only, each entry hash-chained to the one before, a daily anchor, a verifier | SQLite `audit_log` (already append-only by trigger) plus the chain columns; daily anchor written to a separate file | Same entries mirrored to the locked bucket; anchor in a place the operator role cannot write | AUD-01, AUD-02, AUD-08, SAF-07 |
 | `ailog` | Full record of every AI call: prompt, answer, model and settings, rule-set and study-model version, source hash | SQLite table | Locked bucket (it holds patient text, so it is a PHI store with its own access) | AUD-05, QAA-01, PRV-01 |
 | `secrets` | One place every credential is read from | Environment variable, else Secret Manager | Secret Manager (already used for two secrets), per-person access, rotation | SEC-03, IAM-04 |
-| `backups` | Copy the database and records, check the copy, restore | Today's daily local copy (`cormon/backup.py`) | Hourly copy to a bucket (RPO 1 hour), timed restore test (RTO 4 hours) | BCK-01 |
+| `backups` | Copy the database and records, check the copy, restore | Hourly checked copy, also to a bucket in the same project, weekly timed restore drill (built 30 Oct) | The bucket in a separate project, locked | BCK-01 |
 | `alerts` | Tell a human the bot is unhealthy (no heartbeat, ingestion lag, failed sends) | Email to the admins | A paging service | ARC-04, OUT-06, SAF-05 |
 | `keys` | Encryption keys | Google's default disk encryption | Cloud KMS key held by a separate key-admin role | SEC-01, IAM-04 |
 
@@ -111,7 +115,7 @@ The existing code already has natural chokepoints to put these in front of, so t
 Status from reading the code on 2026-10-27, updated after the 27 Oct deploy. "Partly" means part of the
 requirement is in place; the gap is the note.
 
-### Done (32)
+### Done (39)
 
 Built, tested and deployed on the evening of 27 Oct (with pypdf 6.21.2 and certifi 2026.10.23, which fix
 the known problems the first scan found):
@@ -166,8 +170,44 @@ Done before:
   server's packages, code or study model are not what the gate tested.
 - VAL-05 A change to the model, prompts, rules, study model or packages runs the relevant sets; every set runs
   weekly with no kept AI answers, to catch a change on the supplier's side (29 Oct).
+- SAF-10 A message that reports harm to a participant, in any part of it, sends no notice back to the site
+  coordinator who wrote it; the alert to the CRA, lead and rooms still goes, and the withheld notice is logged
+  (30 Oct, not deployed yet).
+- CFG-01 A config change (by `cormon config set`/`edit` or a direct edit of the file on the server) is kept as
+  a waiting version and the file is put back; it is used only once a different person runs `cormon config
+  approve`, from that moment. Invalid YAML and versions older than the one in use cannot be approved; turning
+  approvals off (`system.config_needs_approval`) needs approval too; `cormon status` lists waiting changes.
+  Limit: a direct edit can be read for up to one bot cycle before it is put back (30 Oct, not deployed yet).
+- DSP-05, SEC-04 On the server, the name on every command is the person's own login (from their Google
+  sign-in, set by sudo, which they cannot choose), and it must be one of the admins (`web.admin.emails`);
+  `--as` and `CORMON_OPERATOR` cannot change it. So one admin cannot ask for and approve the same action under
+  two names. A laptop copy keeps `--as`; `compliance.checked_names` turns the check on or off. Limit: a person
+  with root on the server can still get round it (30 Oct, not deployed yet).
+- CFG-02 On the live bot, what the gate tests changes only through GitHub: triage, routing, templates and
+  careful config, each study.yaml, and the `llm:` and `matching:` parts of settings.yaml. `cormon config set`
+  refuses such a change there, and a hand edit is put back and cannot be approved. `deploy/release.sh` puts the
+  commit's tested config in place once the bot is healthy (`cormon config release`, recorded as approved by
+  the gate run); the server's own settings (web address, chat, system) stay and still change with two people.
+  Rule-building commands (ingest, guide, checks, coverage with AI, duties --rebuild, rules-decide) are refused
+  on the live bot; the study model comes in by `import-model` (two people) and the release refuses a live
+  model that differs from `studies/model/model.sql`. A change to `matching:` now runs every AI set, like
+  `llm:`. A laptop copy and the server's sandbox are not limited, and on a laptop config files are never put
+  back (30 Oct, not deployed yet).
+- BCK-01 A checked backup every hour (24 kept on the server), each also gzipped to the Cloud Storage bucket
+  `optical-depth-506808-t0-cormon-backups` (made 30 Oct by `deploy/create_backup_bucket.sh`: same region,
+  never public, a copy cannot be deleted for 7 days and is deleted after 30; the bot's account may only add and
+  read copies), so at most an hour is lost. Once a week a restore drill downloads the newest copy, checks it and
+  times it against the 4-hour limit; `cormon backup --drill` runs it now and `cormon backup --fetch` gets a copy
+  for `cormon restore`. A failed backup, copy or drill emails the admins. Tested from the server with a test
+  database on 30 Oct. It starts once deployed and `system.backup_bucket` is set on the server (two people).
+  Later (Phase 3): the bucket in a separate project, locked (30 Oct, not deployed yet).
+- SDL-02 Every commit names the GitHub issue or pull request it is for (e.g. "#14"). The gate on GitHub has a
+  `tasks` job (`python -m cormon.gate tasks`): a commit since the live version that names no task, or a number
+  that is not an issue or pull request in the repository, fails the gate, so `deploy/release.sh` will not
+  deploy it. A local reminder refuses such a commit on the laptop (`git config core.hooksPath .githooks`)
+  (30 Oct, not pushed yet).
 
-### Not done (7)
+### Not done (6)
 
 | ID | What is missing |
 |---|---|
@@ -176,14 +216,12 @@ Done before:
 | SAF-05 | No escalation chain (PV backup, ClinOps lead, then a human by phone) |
 | DSP-02 | No "reply CONFIRM" step before a clear takes effect |
 | EXP-01 | `export.py` exports the rules, not a study's records package |
-| SDL-02 | Commits are not linked to tickets |
 | VAL-04 | No protocol version by site and date |
 
-### Partly done (30)
+### Partly done (24)
 
 | ID | In place | Gap |
 |---|---|---|
-| CFG-02 | Rules, prompts, the study model (`studies/model/model.sql`) and repo config run the gate before release (29 Oct) | A `cormon config set` or a rule rebuild on the server itself does not; the release script only refuses while the live model differs |
 | CAP-06 | Plus-address picks the study; untagged mail never matched; senders not on the people list are flagged on the page and in the digest (built 27 Oct) | Not kept from sponsor-facing posts |
 | CAP-09 | Recipients come from config, not the AI; a 20-message trick test set (built 27 Oct), run on the live DNL rules (12 of 20 right; the same emails without the tricks 13 of 17) | Two tricks worked: an invented "standing exception" hid an old consent form (j19), and an order inside an admin email made the bot report a made-up eGFR deviation (j11). The set is small (20) |
 | CAP-10 | Hourly check that the mailbox and our store agree (built 27 Oct) | No mailbox retention procedure |
@@ -195,16 +233,12 @@ Done before:
 | QAA-06 | Prompts forbid clinical judgment; a rewording that adds a judgment is refused (28 Oct) | A judgment in the final Q&A answer is only recorded, not blocked: no real answers yet to measure the check on |
 | SAF-02 | Safety messages are kept out of normal checks | Routed to nobody today; the medical monitor's email is still missing |
 | SAF-07 | Safety detection is in the audit log, which is hash-chained (27 Oct); the message is fingerprinted | Not in an export |
-| SAF-10 | Site notice only fires on immediate findings from a coordinator | A message with both a safety part and a finding could still trigger it |
 | DSP-01 | Clear and disregard by reply or command | No token + action + reason-code grammar; the AI reads the intent |
 | DSP-03 | Only CRA, ClinOps lead or tester roles can clear by email | Token's study is not matched to the sender's study; commands not roster-checked |
 | DSP-04 | Fixed reason codes for clear and suppress by command (28 Oct) | A clear by reply gets the code "by_reply"; the code comes from the reply grammar (DSP-01) |
-| DSP-05 | Overrides are marked and survive later passes; a suppression the sponsor would see needs a second person (28 Oct) | Command-line names are the computer login or `--as`, not checked |
-| SEC-04 | Destructive commands need a second person's approval within 24 hours (28 Oct) | Same as DSP-05: names not checked |
-| IAM-01 | Admin pages need Google sign-in and an allow-list | MFA relies on Google settings; command-line operator name is the computer login |
+| IAM-01 | Admin pages need Google sign-in and an allow-list; on the server, command names are the person's own Google sign-in, checked against the admins (30 Oct) | MFA relies on Google Workspace settings |
 | IAM-04 | Two secrets already in Secret Manager | No separate key-admin role or rotation |
 | AUD-02 | Append-only by trigger; never pruned; hash chain, daily anchor and verifier built and deployed 27 Oct | No separate write-once store (Phase 3) |
-| CFG-01 | Config files snapshotted with hash and actor; rules carry their document's hash; a second person can approve a config version (28 Oct) | A config change takes effect before it is approved; a rebuild replaces the rules |
 | ARC-04 | Heartbeat every tick; `/health` and a separate watchdog email the admins after 15 minutes (27 Oct) | Email, not a pager with escalation (Phase 3) |
 | SDL-01 | Git, tests before deploy (by habit) | No enforced review before deploy |
 | SDL-03 | Live bot on its own server; practice copies on the laptop | Not enforced by a setting |
@@ -212,7 +246,6 @@ Done before:
 | SEC-03 | Credentials read through one wrapper (27 Oct); two in Secret Manager | Others in env vars and files; no rotation |
 | PRV-01 | Patient details masked in the audit log; retention purge | No ICF coverage check at study activation |
 | PRV-04 | Same as SDL-03 | Same |
-| BCK-01 | Daily backup, checked, 7 kept, restore command | Not hourly; not off the server; restore time not tested |
 ### Later (V2): IAM-05 (sponsor SSO), EXP-02 (sponsor self-service export).
 
 ## 4. Build order

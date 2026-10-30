@@ -1873,6 +1873,102 @@ def test_a_backup_is_checked_and_can_be_restored(tmp_path):
     assert [r["body"] for r in db.q("SELECT body FROM outbox")] == ["before"]
 
 
+class _FakeBucket:
+    """Cloud Storage's JSON API, as far as backup.py uses it."""
+
+    def __init__(self, corrupt=False):
+        self.objects, self.corrupt = {}, corrupt
+
+    class _R:
+        def __init__(self, data=None, body=b""):
+            self.data, self.body = data, body
+
+        def raise_for_status(self):
+            if self.data is None and not self.body:
+                raise RuntimeError("404")
+
+        def json(self):
+            return self.data
+
+        def iter_content(self, n):
+            yield self.body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def post(self, url, data, params, **kw):
+        import base64
+        import hashlib
+        body = data.read()
+        assert params["ifGenerationMatch"] == "0" and params["name"] not in self.objects
+        self.objects[params["name"]] = body
+        md5 = base64.b64encode(hashlib.md5(b"x" if self.corrupt else body).digest()).decode()
+        return self._R({"name": params["name"], "size": str(len(body)), "md5Hash": md5})
+
+    def get(self, url, params, **kw):
+        from urllib.parse import unquote
+        if params.get("alt") == "media":
+            return self._R(body=self.objects.get(unquote(url.rsplit("/o/", 1)[1]), b""))
+        return self._R({"items": [{"name": n, "size": str(len(b)), "timeCreated": db.now()}
+                                  for n, b in self.objects.items() if n.startswith(params["prefix"])]})
+
+
+def _bucket_on(monkeypatch, fake):
+    from cormon import backup, settings
+    real = settings.get
+    conf = {"system.backup_bucket": "b1", "channels.email": "imap"}
+    monkeypatch.setattr(settings, "get", lambda k, d=None: conf[k] if k in conf else real(k, d))
+    monkeypatch.setattr(backup, "_session", lambda: fake)
+    sent = []
+    from cormon.compliance import alerts
+    monkeypatch.setattr(alerts, "notify", lambda key, subject, body, **kw: sent.append((key, subject)))
+    monkeypatch.setattr(alerts, "clear", lambda *a, **kw: None)
+    return sent
+
+
+def test_hourly_backups_go_off_the_server_and_the_drill_restores_one(tmp_path, monkeypatch):
+    from cormon import backup
+    fake = _FakeBucket()
+    sent = _bucket_on(monkeypatch, fake)
+    _queued("kept")
+    made = backup.hourly(log=lambda *_: None)
+    assert made["ok"] and made["offsite"]["object"].startswith("gs://b1/cormon/cormon-")
+    assert backup.hourly(log=lambda *_: None) is None, "once an hour"
+    assert list((tmp_path / "backups").glob("*.gz")) == [], "the zipped copy is not left on the server"
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='backup_offsite'")
+
+    res = backup.drill()
+    assert res["ok"] and res["counts"]["outbox"] == 1 and res["seconds"] < backup.RTO_HOURS * 3600
+    assert not (tmp_path / "backups" / "drill").exists()
+    assert backup.weekly_drill(log=lambda *_: None)["ok"] and backup.weekly_drill(log=lambda *_: None) is None
+
+    got = backup.fetch()
+    assert backup.check(got)["counts"]["outbox"] == 1 and sent == []
+
+
+def test_a_failed_off_server_copy_or_drill_tells_the_admins(tmp_path, monkeypatch):
+    from cormon import backup
+    sent = _bucket_on(monkeypatch, _FakeBucket(corrupt=True))
+    made = backup.hourly(log=lambda *_: None)
+    assert made["ok"] and "offsite" not in made, "the local copy is still made"
+    assert [k for k, _ in sent] == ["backup_offsite"]
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='backup_offsite_failed'")
+
+    sent.clear()
+    monkeypatch.setattr(backup, "_session", lambda: _FakeBucket())  # an empty bucket
+    assert not backup.weekly_drill(log=lambda *_: None)["ok"] and [k for k, _ in sent] == ["restore_drill"]
+
+
+def test_no_backups_in_a_practice_copy(monkeypatch):
+    from cormon import backup, settings
+    real = settings.get
+    monkeypatch.setattr(settings, "get", lambda k, d=None: "sim" if k.startswith("channels.") else real(k, d))
+    assert backup.hourly(log=lambda *_: None) is None and backup.weekly_drill(log=lambda *_: None) is None
+
+
 def test_a_chat_post_carries_its_own_id_and_a_repeat_is_recognised():
     from cormon.channels.gchat import GoogleChatChannel
     posts, gets = [], []

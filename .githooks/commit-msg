@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# SDL-02: a commit names the GitHub issue it is for (e.g. "#12"); the gate on GitHub refuses one that does not.
+# Turn on once per clone: git config core.hooksPath .githooks
+grep -v '^#' "$1" | grep -qE '(^|[^[:alnum:]_/&])#[0-9]+' && exit 0
+echo "commit refused: name the GitHub issue this is for, e.g. '... (#12)' (gh issue create makes one)" >&2
+exit 1

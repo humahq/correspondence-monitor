@@ -9,7 +9,9 @@
 # deploy/requirements-live.txt; the live code is not the version tagged `live` (someone changed it by hand);
 # or the live study model differs from studies/model/model.sql (a rebuild the gate has not tested).
 # Otherwise it backs up the code and the database, puts the commit's cormon/ in place, restarts the bot and
-# checks its health; if the bot is not healthy it puts the old code back. Settings on the server are not touched.
+# checks its health; if the bot is not healthy it puts the old code back. Once healthy, the config the gate tested
+# (triage, routing, templates, careful, studies/*/study.yaml, and the llm: and matching: parts of settings.yaml)
+# is put in place from the commit (`cormon config release`, CFG-02); the rest of the server's settings stays.
 set -euo pipefail
 
 PROJECT="${CORMON_PROJECT:-optical-depth-506808-t0}"
@@ -66,20 +68,24 @@ read -r -p "Deploy $(git rev-parse --short "$SHA") to the live bot? Type yes: " 
 
 # 5. Back up, put the code in place, restart, check.
 TS=$(date -u +%Y%m%d-%H%M%S)
-git archive --format=tar.gz "$SHA" cormon | "${SSH[@]}" --command "set -e
+git archive --format=tar.gz "$SHA" cormon config $(git ls-tree -r --name-only "$SHA" studies | grep '/study.yaml$') \
+  | "${SSH[@]}" --command "set -e
   sudo tar -czf $LIVE/code-backup-$TS.tgz -C $LIVE cormon
   cd $LIVE && sudo -u cormon env CORMON_HOME=$LIVE $LIVE/.venv/bin/python -c 'import sys; from cormon.cli import main; main([\"backup\"])'
   rm -rf /tmp/release-$TS && mkdir /tmp/release-$TS && tar -xzf - -C /tmp/release-$TS
   sudo rsync -a --delete --exclude __pycache__ --chown=cormon:cormon /tmp/release-$TS/cormon/ $LIVE/cormon/
-  rm -rf /tmp/release-$TS
   sudo systemctl restart cormon; sleep 10
   if systemctl is-active -q cormon && curl -fsS 127.0.0.1:8091/health >/dev/null; then
     echo healthy
   else
     echo 'NOT HEALTHY: putting the old code back'
     sudo rm -rf $LIVE/cormon && sudo tar -xzf $LIVE/code-backup-$TS.tgz -C $LIVE && sudo systemctl restart cormon
+    rm -rf /tmp/release-$TS
     exit 1
   fi
+  chmod -R a+rX /tmp/release-$TS
+  cd $LIVE && sudo -u cormon env CORMON_HOME=$LIVE $LIVE/.venv/bin/cormon config release /tmp/release-$TS $RUN_ID
+  rm -rf /tmp/release-$TS
   sudo journalctl -u cormon --since '-1 min' --no-pager | grep -iE 'error|traceback' | head -5 || true" 2>/dev/null
 
 git tag -f live "$SHA"

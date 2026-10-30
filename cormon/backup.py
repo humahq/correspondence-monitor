@@ -1,18 +1,31 @@
-"""Daily database backups, each checked by opening the copy, and a restore that keeps the old database aside.
+"""Hourly database backups, each checked by opening the copy, kept off the server too, and a restore that keeps
+the old database aside (BCK-01).
 
 A backup is a full SQLite copy (the online backup API, safe while the service runs) in data/backups/.
 It counts as made only after the copy passes an integrity check and holds the same rows as the live
-database at that moment. Restore needs the service stopped."""
+database at that moment. When system.backup_bucket is set, each one is also gzipped to that Cloud Storage
+bucket (never overwritten; the bucket's own rules keep and delete them), so at most an hour is lost (RPO 1 hour).
+Once a week a restore drill downloads the newest off-server copy, checks it and times it (RTO 4 hours).
+A failure emails the admins. Restore needs the service stopped."""
 
 from __future__ import annotations
 
+import base64
+import gzip
+import hashlib
 import secrets
 import shutil
 import sqlite3
+import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from . import db, settings
+
+RPO_HOURS = 1
+RTO_HOURS = 4
+GCS = "https://storage.googleapis.com"
 
 TABLES = ("messages", "items", "outbox", "audit_log", "rules", "documents")
 
@@ -41,7 +54,7 @@ def check(path: Path, expect: dict[str, int] | None = None) -> dict:
 
 
 def make(keep: int | None = None) -> dict:
-    keep = keep or int(settings.get("system.backup_keep", 7))
+    keep = keep or int(settings.get("system.backup_keep", 24))
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     path = folder() / f"cormon-{stamp}.db"
     live = db.conn()
@@ -68,18 +81,179 @@ def make(keep: int | None = None) -> dict:
     return result
 
 
+def _rehearsal() -> bool:
+    return {settings.get("channels.email"), settings.get("channels.teams")} <= {"sim", "off"}
+
+
 def due() -> bool:
-    rehearsal = {settings.get("channels.email"), settings.get("channels.teams")} <= {"sim", "off"}
-    return not rehearsal and db.get_state("backup_day") != datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return not _rehearsal() and db.get_state("backup_hour") != datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
 
 
-def daily(log=print) -> dict | None:
+def hourly(log=print) -> dict | None:
     if not due():
         return None
+    from .compliance import alerts
+    db.set_state("backup_hour", datetime.now(timezone.utc).strftime("%Y-%m-%dT%H"))
     result = make()
-    db.set_state("backup_day", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     log(f"backup {'made' if result['ok'] else 'FAILED'}: {Path(result['path']).name}")
+    if not result["ok"]:
+        alerts.notify("backup", "cormon: a backup FAILED its check",
+                      f"The backup {Path(result['path']).name} failed its check: {result['problems']}. "
+                      "The last good copy is still kept. See `cormon log`.")
+        return result
+    if bucket():
+        try:
+            result["offsite"] = upload(Path(result["path"]))
+        except Exception as e:
+            db.audit("backup_offsite_failed", entity_type="service", entity_id="backup",
+                     path=Path(result["path"]).name, error=str(e)[:500])
+            log(f"backup copy to the bucket FAILED: {e}")
+            alerts.notify("backup_offsite", "cormon: the off-server backup copy FAILED",
+                          f"The hourly backup could not be copied to gs://{bucket()}: {str(e)[:300]}. "
+                          "Copies on the server are still made. This is sent again every 6 hours while it lasts.",
+                          every_minutes=360)
+            return result
+        alerts.clear("backup_offsite", "cormon: off-server backups work again",
+                     f"The hourly backup reached gs://{bucket()} again.")
+    alerts.clear("backup", "cormon: backups pass their check again", "The hourly backup passed its check.")
     return result
+
+
+# ---------------------------------------------------------------- off the server (Cloud Storage)
+
+def bucket() -> str | None:
+    return settings.get("system.backup_bucket") or None
+
+
+def _prefix() -> str:
+    return settings.get("system.backup_prefix", "cormon/")
+
+
+def _session():
+    """The machine's own Cloud account (the VM's service account), allowed to add and read the bucket's objects."""
+    import google.auth
+    from google.auth.transport.requests import AuthorizedSession
+
+    creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/devstorage.read_write"])
+    return AuthorizedSession(creds)
+
+
+def upload(path: Path, session=None) -> dict:
+    """Gzip one checked backup to the bucket under a new name; the bucket's MD5 must match ours."""
+    gz = path.with_name(path.name + ".gz")
+    with open(path, "rb") as src, gzip.open(gz, "wb", compresslevel=6) as dst:
+        shutil.copyfileobj(src, dst, 1 << 20)
+    try:
+        md5 = base64.b64encode(hashlib.md5(gz.read_bytes()).digest()).decode()
+        name = f"{_prefix()}{gz.name}"
+        with open(gz, "rb") as fh:
+            r = (session or _session()).post(
+                f"{GCS}/upload/storage/v1/b/{bucket()}/o", data=fh, timeout=180,
+                params={"uploadType": "media", "name": name, "ifGenerationMatch": "0"},
+                headers={"Content-Type": "application/gzip"})
+        r.raise_for_status()
+        obj = r.json()
+        if obj.get("md5Hash") != md5:
+            raise RuntimeError(f"the bucket's copy of {name} does not match (md5 {obj.get('md5Hash')}, ours {md5})")
+        sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        db.audit("backup_offsite", entity_type="service", entity_id="backup", object=f"gs://{bucket()}/{name}",
+                 bytes=int(obj.get("size", 0)), md5=md5, db_sha256=sha)
+        return {"object": f"gs://{bucket()}/{name}", "bytes": int(obj.get("size", 0))}
+    finally:
+        gz.unlink(missing_ok=True)
+
+
+def newest(session=None) -> dict | None:
+    """The newest backup in the bucket: name, size and time."""
+    s, best, token = session or _session(), None, None
+    while True:
+        params = {"prefix": _prefix(), "fields": "items(name,size,timeCreated),nextPageToken"}
+        if token:
+            params["pageToken"] = token
+        r = s.get(f"{GCS}/storage/v1/b/{bucket()}/o", params=params, timeout=60)
+        r.raise_for_status()
+        data = r.json()
+        for o in data.get("items", []):
+            if o["name"].endswith(".db.gz") and (best is None or o["name"] > best["name"]):
+                best = o
+        token = data.get("nextPageToken")
+        if not token:
+            return best
+
+
+def fetch(name: str | None = None, dest: Path | None = None, session=None) -> Path:
+    """Download one backup from the bucket (the newest when no name) and unzip it, ready for `cormon restore`."""
+    s = session or _session()
+    if not name:
+        o = newest(s)
+        if o is None:
+            raise RuntimeError(f"there are no backups in gs://{bucket()}/{_prefix()}")
+        name = o["name"]
+    dest = dest or folder() / Path(name).name.removesuffix(".gz")
+    gz = dest.with_name(dest.name + ".gz")
+    with s.get(f"{GCS}/storage/v1/b/{bucket()}/o/{quote(name, safe='')}", params={"alt": "media"},
+               stream=True, timeout=600) as r:
+        r.raise_for_status()
+        with open(gz, "wb") as fh:
+            for chunk in r.iter_content(1 << 20):
+                fh.write(chunk)
+    try:
+        with gzip.open(gz, "rb") as src, open(dest, "wb") as dst:
+            shutil.copyfileobj(src, dst, 1 << 20)
+    finally:
+        gz.unlink(missing_ok=True)
+    return dest
+
+
+def drill(session=None) -> dict:
+    """The restore drill: fetch the newest off-server copy into a scratch file, check it, time it. The live
+    database is not touched. It fails when the copy is older than the RPO or the whole took longer than the RTO."""
+    began = time.monotonic()
+    s = session or _session()
+    o = newest(s)
+    problems, counts, name = [], {}, o["name"] if o else None
+    if o is None:
+        problems.append(f"no backups in gs://{bucket()}/{_prefix()}")
+    else:
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(o["timeCreated"].replace("Z", "+00:00")))
+        if age.total_seconds() > (RPO_HOURS + 1) * 3600:  # an hour between copies, plus the hour being made
+            problems.append(f"the newest copy is {age.total_seconds() / 3600:.1f} hours old")
+        scratch = folder() / "drill"
+        scratch.mkdir(exist_ok=True)
+        try:
+            res = check(fetch(name, scratch / "drill.db", s))
+            problems += res["problems"]
+            counts = res["counts"]
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+    seconds = round(time.monotonic() - began, 1)
+    if seconds > RTO_HOURS * 3600:
+        problems.append(f"the restore took {seconds / 3600:.1f} hours, more than {RTO_HOURS}")
+    out = {"ok": not problems, "object": name, "seconds": seconds, "counts": counts, "problems": problems}
+    db.audit("restore_drill" if out["ok"] else "restore_drill_failed", entity_type="service", entity_id="backup",
+             **out)
+    return out
+
+
+def weekly_drill(log=print) -> dict | None:
+    week = datetime.now(timezone.utc).strftime("%G-W%V")
+    if _rehearsal() or not bucket() or db.get_state("restore_drill_week") == week:
+        return None
+    from .compliance import alerts
+    db.set_state("restore_drill_week", week)
+    try:
+        res = drill()
+    except Exception as e:
+        res = {"ok": False, "object": None, "seconds": None, "counts": {}, "problems": [str(e)[:300]]}
+        db.audit("restore_drill_failed", entity_type="service", entity_id="backup", **res)
+    log(f"restore drill {'passed' if res['ok'] else 'FAILED'}: {res['object']} in {res['seconds']}s")
+    if not res["ok"]:
+        alerts.notify("restore_drill", "cormon: the weekly restore drill FAILED",
+                      f"The newest off-server backup could not be restored and checked: {res['problems']}.")
+    else:
+        alerts.clear("restore_drill", "cormon: the restore drill passes again",
+                     f"{res['object']} restored and checked in {res['seconds']} seconds.")
+    return res
 
 
 def restore(path: Path) -> dict:

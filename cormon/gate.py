@@ -4,6 +4,7 @@ VAL-05, CFG-02, CAP-09). The sets, marks and triggers are in config/gates.yaml.
     python -m cormon.gate plan [--base live] [--all]   which sets this change needs (JSON list)
     python -m cormon.gate home DIR                     make a test home in DIR that sends nothing
     CORMON_HOME=DIR python -m cormon.gate run SET OUT  run one set there and check its marks (exit 1 if below)
+    python -m cormon.gate tasks [--base live]          every commit since base names its GitHub issue (SDL-02)
 
 A test home is the repo's config with every channel on the simulator, the repo's studies, and the study model
 from studies/model/model.sql (the live rules, exported without any message or patient data). The AI answers it
@@ -16,6 +17,7 @@ import argparse
 import fnmatch
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -54,7 +56,10 @@ def changed_files(base: str) -> list[str] | None:
 
 
 def _llm_block(text: str | None) -> dict:
-    return (yaml.safe_load(text or "") or {}).get("llm") or {}
+    """The settings the gate tests (config.TESTED_SETTINGS: the models and how matching runs)."""
+    from .config import TESTED_SETTINGS
+    data = yaml.safe_load(text or "") or {}
+    return {k: data.get(k) for k in TESTED_SETTINGS}
 
 
 def llm_settings_changed(base: str) -> bool:
@@ -251,9 +256,64 @@ def summary_md(r: dict) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------- every change names its task (SDL-02)
+
+TASK_REF = re.compile(r"(?<![\w/&])#(\d+)\b")
+
+
+def commits(base: str, head: str = "HEAD") -> list[dict] | None:
+    """The commits in base..head with their messages; None when base is not known."""
+    try:
+        _git("rev-parse", "--verify", f"{base}^{{commit}}")
+    except subprocess.CalledProcessError:
+        return None
+    out = _git("log", "--format=%H%x1f%s%x1f%B%x1e", f"{base}..{head}")
+    return [dict(zip(("sha", "subject", "body"), c.strip("\n").split("\x1f", 2))) for c in out.split("\x1e") if c.strip()]
+
+
+def _github_task(n: int) -> bool:
+    """The issue or pull request #n exists in this repository (GitHub's API, with the run's own token)."""
+    import urllib.error
+    import urllib.request
+    req = urllib.request.Request(f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/issues/{n}",
+                                 headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+                                          "Accept": "application/vnd.github+json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30):
+            return True
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        raise
+
+
+def task_problems(found: list[dict], exists=None, pr: int | None = None) -> list[str]:
+    """Each commit must name a GitHub issue or pull request (#12) that exists. A pull request's own number
+    counts for the commits in it (its squash or merge commit on main names it too)."""
+    known: dict[int, bool] = {}
+    problems = []
+    for c in found:
+        refs = sorted({int(n) for n in TASK_REF.findall(c["body"] or c["subject"])} | ({pr} if pr else set()))
+        if not refs:
+            problems.append(f"{c['sha'][:8]} {c['subject'][:70]!r} names no task (add e.g. '#12' for issue 12)")
+            continue
+        if exists:
+            for n in refs:
+                if n not in known:
+                    known[n] = exists(n)
+            if not any(known[n] for n in refs):
+                problems.append(f"{c['sha'][:8]} {c['subject'][:70]!r} names #{', #'.join(map(str, refs))}, "
+                                "which is not an issue or pull request here")
+    return problems
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="python -m cormon.gate")
     sub = p.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("tasks", help="every commit since base names a GitHub issue or pull request (SDL-02)")
+    s.add_argument("--base", default="live")
+    s.add_argument("--head", default="HEAD")
+    s.add_argument("--pr", type=int, help="the pull request being checked")
     s = sub.add_parser("plan")
     s.add_argument("--base", default="live")
     s.add_argument("--all", action="store_true")
@@ -270,6 +330,16 @@ def main(argv: list[str] | None = None) -> None:
         if os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
                 fh.write(f"sets={json.dumps(sets)}\n")
+    elif a.cmd == "tasks":
+        found = commits(a.base, a.head)
+        if found is None:
+            sys.exit(f"{a.base} is not known: fetch the tags (git fetch --tags)")
+        online = os.environ.get("GITHUB_TOKEN") and os.environ.get("GITHUB_REPOSITORY")
+        problems = task_problems(found, _github_task if online else None, a.pr)
+        print(f"{len(found)} commit(s) since {a.base}" + ("" if online else " (task numbers not looked up: no token)"))
+        for x in problems:
+            print(f"  - {x}")
+        sys.exit(1 if problems else 0)
     elif a.cmd == "home":
         make_home(Path(a.dir).resolve())
     else:
