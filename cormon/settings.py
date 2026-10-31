@@ -11,7 +11,8 @@ from typing import Any
 import yaml
 from dotenv import load_dotenv
 
-ROOT = Path(os.environ.get("CORMON_HOME", Path(__file__).resolve().parent.parent))
+CODE_ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(os.environ.get("CORMON_HOME", CODE_ROOT))
 load_dotenv(ROOT / ".env")
 
 CONFIG_DIR = ROOT / "config"
@@ -25,7 +26,14 @@ def load_yaml(path: Path) -> Any:
 
 @lru_cache(maxsize=1)
 def settings() -> dict:
-    return load_yaml(SETTINGS_FILE)
+    """A copy in another folder (CORMON_HOME) takes its llm: section (models, efforts) from the code's own
+    settings, so an old copy never runs on models the project has moved away from. CORMON_MODEL and the other
+    CORMON_* variables still override it for one run."""
+    data = load_yaml(SETTINGS_FILE)
+    main = CODE_ROOT / "config" / "settings.yaml"
+    if ROOT.resolve() != CODE_ROOT and main.exists():
+        data["llm"] = load_yaml(main).get("llm", {})
+    return data
 
 
 def reload() -> None:
