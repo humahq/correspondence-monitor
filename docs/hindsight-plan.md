@@ -59,6 +59,21 @@ through a settings change, which waits for Eliot to approve settings version 61.
 Each new message first makes a quick Hindsight search (28 Oct). Answers can link facts across threads and years,
 with the date of the earlier message (28 Oct, gout example). If the search is slow, the bot goes on without memory
 and logs it, never fails quietly (28 Oct: slow re-ranking "will time out").
+Built (31 Oct): before the bot answers a question about a participant, `hindsight.recall_lines` searches that
+participant's facts only (by tag; facts tagged to nobody or someone else never come back). Each fact is given to
+the answer with who reported it and when, and the answer must say both ("The study coordinator reported on 29 Oct
+2026 that she takes St. John's wort every day"). The message being answered is left out. A search over
+`memory.search_seconds` (5) or an error gives no facts, is logged (`memory_search_failed`) and the answer still goes
+out; every search is logged (`memory_searched`, with the number of facts and seconds). Checking for problems
+(reader, alerts) does not use memory yet.
+Made-up check (`demo/test-hindsight-answers`, 4 messages in two chats): a group-chat note that 1001-014 takes
+St. John's wort (no date); later, in a private chat, "is any medicine she is on now a problem?". With memory: "Yes.
+The study coordinator reported on 29 Oct 2026 that she takes St. John's wort every day ... a prohibited strong
+CYP3A4/5 inducer". Without memory: "what medicines is 1001-014 taking now?". The same question for 1001-022 saw
+only her amlodipine, never 014's facts. Searches took about 0.5 to 3 seconds.
+Not done: a question only about the past ("has she told us anything about her joints?") gets no answer, because an
+answer needs the protocol's words behind it. Whether the bot should answer those from memory alone is a question
+for Eliot.
 
 **5. Newest fact wins (half a day).**
 "Born 1967", later "born 1972": use 1972, keep both. The older one is replaced, not deleted. (28 Oct)
