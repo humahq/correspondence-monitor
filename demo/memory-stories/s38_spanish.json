@@ -1,0 +1,6 @@
+{"story": "A message in Spanish is kept in Spanish, with no other language mixed in",
+ "messages": [
+  {"text": "1001-142 refiere mareos desde el martes, sobre todo al levantarse. El PI está informado.",
+   "chat": "room", "date": "2026-10-12 10:00",
+   "memory": {"1001-142": {"has": ["mareo"]}}}
+ ]}

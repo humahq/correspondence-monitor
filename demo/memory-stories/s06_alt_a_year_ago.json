@@ -1,0 +1,9 @@
+{"story": "A high liver test a year ago, linked to a re-screening question",
+ "messages": [
+  {"text": "Screening labs back for 1001-106: ALT 140 U/L (ULN 40), AST normal. PI aware, she was not enrolled.",
+   "chat": "room", "date": "2025-11-03 10:00",
+   "memory": {"1001-106": {"has": ["alt", "140"]}}},
+  {"text": "1001-106 is re-screening. Her new ALT is 90 U/L (ULN 40). Is she eligible on liver tests, and how does this compare with her last screening?",
+   "chat": "direct", "date": "2026-10-20 09:00",
+   "answer_has": ["140", "3 nov|november 3|nov 2025"]}
+ ]}

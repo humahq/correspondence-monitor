@@ -1,0 +1,9 @@
+{"story": "A re-consent told in one thread, asked about after a new consent version",
+ "messages": [
+  {"text": "1001-136 re-consented today on ICF version 4.",
+   "chat": "room", "date": "2026-10-02 10:00",
+   "memory": {"1001-136": {"has": ["version 4|v4|icf 4|consent"]}}},
+  {"text": "ICF version 5 was approved on 15 Oct. Does 1001-136 need to re-consent before her next visit?",
+   "chat": "direct", "date": "2026-10-20 09:00",
+   "answer_has": ["version 4|v4", "2 oct|october 2"]}
+ ]}

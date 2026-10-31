@@ -1,0 +1,6 @@
+{"story": "A blood pressure typo fixed in the same message: only the right value is kept",
+ "messages": [
+  {"text": "1001-114 BP at today's visit 410/90, sorry typo, 140/90. Pulse 72.",
+   "chat": "room", "date": "2026-10-10 10:00",
+   "memory": {"1001-114": {"has": ["140/90"], "lacks": ["410", "typo"]}}}
+ ]}

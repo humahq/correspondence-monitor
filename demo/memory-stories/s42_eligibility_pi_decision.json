@@ -1,0 +1,12 @@
+{"story": "A low vital capacity at screening and the PI's decision, linked at the next question",
+ "messages": [
+  {"text": "1001-146 screening SVC came out at 46% of predicted.",
+   "chat": "room", "date": "2026-09-01 10:00",
+   "memory": {"1001-146": {"has": ["46"]}}},
+  {"text": "PI reviewed 1001-146's SVC of 46% and decided she is a screen failure; she was not randomized.",
+   "chat": "room", "date": "2026-09-02 10:00",
+   "memory": {"1001-146": {"has": ["screen fail|not randomized|not randomised"]}}},
+  {"text": "1001-146 wants to re-screen next month. What was her vital capacity last time and what is the cut-off?",
+   "chat": "direct", "date": "2026-10-15 09:00",
+   "answer_has": ["46", "50"]}
+ ]}

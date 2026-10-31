@@ -1,0 +1,15 @@
+{"story": "Four messages over a month about one participant's medicines; the answer uses all that still hold",
+ "messages": [
+  {"text": "1001-147 med list at baseline: riluzole 50 mg twice daily, vitamin D 1000 IU daily.",
+   "chat": "room", "date": "2026-08-01 10:00",
+   "memory": {"1001-147": {"has": ["riluzole"]}}},
+  {"text": "1001-147 started omeprazole 20 mg daily for reflux.",
+   "chat": "room", "date": "2026-08-15 10:00",
+   "memory": {"1001-147": {"has": ["omeprazole"]}}},
+  {"text": "1001-147 stopped the vitamin D, her levels are fine.",
+   "chat": "room", "date": "2026-08-25 10:00",
+   "memory": {"1001-147": {"has": ["stop"]}}},
+  {"text": "List the medicines 1001-147 takes now: is any of them a problem under the protocol?",
+   "chat": "direct", "date": "2026-09-01 09:00",
+   "answer_has": ["riluzole", "omeprazole"]}
+ ]}

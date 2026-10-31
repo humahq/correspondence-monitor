@@ -1,0 +1,9 @@
+{"story": "A fact the monitor reported is said to be from the monitor",
+ "messages": [
+  {"text": "During source review I found that 1001-145 has been taking grapefruit juice and clarithromycin since 20 Sep, per her pharmacy record.",
+   "chat": "email", "subject": "1001-145 con meds", "from": "cra", "date": "2026-10-01 10:00",
+   "memory": {"1001-145": {"has": ["clarithromycin"]}}},
+  {"text": "Is any medicine 1001-145 takes a problem under the protocol?",
+   "chat": "direct", "date": "2026-10-08 09:00",
+   "answer_has": ["clarithromycin", "clinical research associate|monitor|john ernest"]}
+ ]}

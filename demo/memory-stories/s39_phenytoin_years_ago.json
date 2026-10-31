@@ -1,0 +1,9 @@
+{"story": "A medicine told nearly three years ago, asked about at screening",
+ "messages": [
+  {"text": "Pre-screening note on 1001-143: had a seizure in 2023, now on phenytoin 100 mg three times a day.",
+   "chat": "room", "date": "2024-01-15 10:00",
+   "memory": {"1001-143": {"has": ["phenytoin"]}}},
+  {"text": "1001-143 is being screened for Regimen G next week. Is any medicine she takes a problem under the protocol?",
+   "chat": "direct", "date": "2026-10-29 09:00",
+   "answer_has": ["phenytoin", "15 jan|january 15|jan 2024|2024-01-15"]}
+ ]}

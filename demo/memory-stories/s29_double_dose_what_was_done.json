@@ -1,0 +1,12 @@
+{"story": "A double dose, what the site did about it, and the same mistake again two weeks later",
+ "messages": [
+  {"text": "1001-133 took two doses of study drug this morning because she forgot yesterday's dose.",
+   "chat": "email", "subject": "1001-133 dosing", "date": "2026-10-05 10:00",
+   "memory": {"1001-133": {"has": ["two doses|double|both|missed|forgot"]}}},
+  {"text": "Follow-up on 1001-133's double dose: PI informed, participant re-educated on dosing, deviation logged in EDC.",
+   "chat": "room", "date": "2026-10-06 15:00",
+   "memory": {"1001-133": {"has": ["re-educat|educat"]}}},
+  {"text": "1001-133 doubled up on her dose again today after missing yesterday. Has this happened before, what did we do about it then, and what does the protocol say about a missed dose?",
+   "chat": "direct", "date": "2026-10-20 09:00",
+   "answer_has": ["re-educat|educat|retrain", "5 oct|6 oct|october 5|october 6"]}
+ ]}

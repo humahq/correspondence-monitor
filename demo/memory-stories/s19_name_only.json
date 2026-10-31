@@ -1,0 +1,6 @@
+{"story": "A participant named but given no code: the fact is unlinked and the name is not kept",
+ "messages": [
+  {"text": "Mrs Alvarez called, she has had a dry cough for a week and wants to know if she should still come Thursday.",
+   "chat": "room", "date": "2026-10-12 10:00",
+   "memory": {"unlinked": {"has": ["cough"], "lacks": ["alvarez"]}}}
+ ]}

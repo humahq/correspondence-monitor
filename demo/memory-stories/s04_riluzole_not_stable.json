@@ -1,0 +1,9 @@
+{"story": "Riluzole started three weeks before screening, asked about later",
+ "messages": [
+  {"text": "1001-104 started riluzole 50 mg twice a day on 1 June, per her neurologist.",
+   "chat": "room", "date": "2026-06-10 14:00",
+   "memory": {"1001-104": {"has": ["riluzole"]}}},
+  {"text": "1001-104 is booked for Master Protocol screening on 22 June. Does her riluzole affect her eligibility?",
+   "chat": "direct", "date": "2026-06-18 09:00",
+   "answer_has": ["30 days", "1 jun|june 1|2026-06-01"]}
+ ]}

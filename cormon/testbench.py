@@ -22,6 +22,15 @@ Input formats (mix freely):
              {"text": "MAP-0301 randomized today, eGFR 41", "from": "crc", "chat": "room",
               "expect": "eligibility", "participant": "MAP-0301"}
          "chat" is "room" (the default) or "direct"; only "text" is required.
+         A story is one .json file with several messages in order, sharing patient memory (CORMON_TEST_MEMORY=1),
+         each with optional checks on the answer sent and on what memory holds once it is saved:
+             {"story": "gout across threads", "messages": [
+                 {"text": "...", "date": "2026-10-01 10:00", "memory": {"1001-014": {"has": ["gout"]}}},
+                 {"text": "...?", "chat": "direct", "answer_has": ["gout", "1 Oct|01 Oct"], "answer_lacks": ["1001-022"]}]}
+         A story message may be an email instead ("chat": "email", with an optional "subject").
+         "a|b" passes on either word; case does not matter. In "memory", a participant code (or "unlinked", the
+         facts with no participant) takes "has", "lacks" and "count" (how many current facts). The next story starts
+         from an empty memory.
 """
 
 from __future__ import annotations
@@ -62,6 +71,8 @@ class Case:
     raw: bytes | None = None
     chat: str | None = None          # room | direct, for a chat message instead of an email
     date: str | None = None          # when the message was sent ("Mon, 21 Sep 2026"); default TEST_SENT
+    story: str | None = None         # the story file this message is part of
+    checks: dict = field(default_factory=dict)   # answer_has, answer_lacks, memory (see the module docstring)
     result: dict = field(default_factory=dict)
 
 
@@ -108,13 +119,21 @@ def _read_csv(path: Path) -> list[Case]:
     return out
 
 
-def _read_json(path: Path) -> Case:
-    d = json.loads(path.read_text(encoding="utf-8"))
+def _chat_case(name: str, d: dict, story: str | None = None) -> Case:
     chat = (d.get("chat") or "room").strip().lower()
-    return Case(name=path.name, subject=d.get("subject") or d["text"][:60], body=d["text"].strip(),
+    return Case(name=name, subject=d.get("subject") or d["text"][:60], body=d["text"].strip(),
                 sender=d.get("from") or "crc", expect=_expect(d.get("expect")),
-                participant=d.get("participant") or None, chat="direct" if chat == "direct" else "room",
-                date=d.get("date") or None)
+                participant=d.get("participant") or None,
+                chat=None if chat == "email" else "direct" if chat == "direct" else "room",
+                date=d.get("date") or None, story=story,
+                checks={k: d[k] for k in ("answer_has", "answer_lacks", "memory") if k in d})
+
+
+def _read_json(path: Path) -> list[Case]:
+    d = json.loads(path.read_text(encoding="utf-8"))
+    if "messages" not in d:
+        return [_chat_case(path.name, d)]
+    return [_chat_case(f"{path.name}#{n}", m, story=path.name) for n, m in enumerate(d["messages"], 1)]
 
 
 def read_folder(folder: Path) -> list[Case]:
@@ -129,7 +148,7 @@ def read_folder(folder: Path) -> list[Case]:
         elif ext == ".csv":
             cases.extend(_read_csv(p))
         elif ext == ".json":
-            cases.append(_read_json(p))
+            cases.extend(_read_json(p))
     return cases
 
 
@@ -253,6 +272,19 @@ def _post_chat(study, case: Case, inbox: Path) -> str:
     return ext
 
 
+def _answers(message_id: int) -> tuple[str, str]:
+    """The answers written to a message, sent or not (a test chat message has no thread to post the reply into):
+    as said to the person, and the checked answer it was reworded from."""
+    from . import db
+    said, checked = [], []
+    for r in db.q("SELECT details FROM audit_log WHERE action='question_answered' AND entity_type='message' "
+                  "AND entity_id=? ORDER BY id", (str(message_id),)):
+        for a in db.unjs(r["details"], {}).get("answers") or []:
+            said.append(a.get("plain") or a.get("text") or "")
+            checked.append(a.get("text") or "")
+    return "\n".join(said), "\n".join(checked)
+
+
 def run_case(study, case: Case) -> None:
     from . import db, service, settings
     before_out = db.q1("SELECT COALESCE(MAX(id), 0) m FROM outbox")["m"]
@@ -278,15 +310,102 @@ def run_case(study, case: Case) -> None:
         classes.add("out_of_scope")
     sent = db.q("SELECT purpose, destination, to_addrs FROM outbox WHERE id>? AND purpose NOT IN ('digest','ops_warning')",
                 (before_out,))
+    said, checked = _answers(m["id"]) if m else ("", "")
     case.result = {
         "message_id": m["id"] if m else None,
         "status": (m["status"] if m else "not captured") + (f": {m['error']}" if m and m["error"] else ""),
         "got": classes,
         "items": found,
         "sent": [f"{o['purpose']} -> {', '.join(db.unjs(o['to_addrs']) or []) or o['destination']}" for o in sent],
+        "answer": said,
+        "answer_checked": checked,
         "pids": {i["participant_id"] for i in found if i["kind"] in ("finding", "out_of_scope")},
         "seconds": round(time.time() - t0, 1),
     }
+
+
+# ---------------------------------------------------------------- story checks
+
+def _norm(s: str) -> str:
+    return " ".join((s or "").replace("\u2019", "'").replace("\u2018", "'").lower().split())
+
+
+def _has(text: str, want: str) -> bool:
+    return any(_norm(w) in text for w in want.split("|") if w.strip())
+
+
+def run_checks(study, case: Case) -> list[dict]:
+    """The story checks of one message, after its memory saves are done: each {check, ok, saw}."""
+    from . import hindsight
+    out = []
+    if "answer_has" in case.checks or "answer_lacks" in case.checks:
+        ans = _norm(case.result.get("answer") or "")
+        saw = (case.result.get("answer") or "(no answer sent)")[:600]
+        for w in case.checks.get("answer_has") or []:
+            out.append({"check": f"answer has '{w}'", "ok": _has(ans, w), "saw": saw})
+        for w in case.checks.get("answer_lacks") or []:
+            out.append({"check": f"answer lacks '{w}'", "ok": bool(ans) and not _has(ans, w), "saw": saw})
+    for pid, want in (case.checks.get("memory") or {}).items():
+        try:
+            if pid == "unlinked":
+                facts = hindsight.overview(study.study_id)["unlinked"]
+            else:
+                facts = [f for f in hindsight.participant_facts(study.study_id, pid) if not f["retired"]]
+        except Exception as e:
+            out.append({"check": f"memory of {pid}", "ok": False, "saw": f"memory could not be read: {e}"})
+            continue
+        words = [f["text"] + (f" (happened: {f['happened']})" if f.get("happened") else "") for f in facts]
+        text = _norm(" || ".join(words))
+        saw = " || ".join(words)[:600] or "(no facts)"
+        for w in want.get("has") or []:
+            out.append({"check": f"memory of {pid} has '{w}'", "ok": _has(text, w), "saw": saw})
+        for w in want.get("lacks") or []:
+            out.append({"check": f"memory of {pid} lacks '{w}'", "ok": not _has(text, w), "saw": saw})
+        if "count" in want:
+            out.append({"check": f"memory of {pid} holds {want['count']} fact(s)", "ok": len(facts) == want["count"],
+                        "saw": f"{len(facts)}: {saw}"})
+    return out
+
+
+def story_summary(cases: list[Case]) -> dict:
+    checked = [c for c in cases if c.result.get("checks")]
+    if not checked:
+        return {}
+    stories: dict[str, bool] = {}
+    for c in cases:
+        if c.story:
+            stories[c.story] = stories.get(c.story, True) and all(k["ok"] for k in c.result.get("checks") or [])
+    every = [k for c in checked for k in c.result["checks"]]
+    return {"checks": len(every), "checks_passed": sum(k["ok"] for k in every),
+            "stories": len(stories), "stories_passed": sum(stories.values()),
+            "failed_stories": sorted(s for s, ok in stories.items() if not ok)}
+
+
+def memory_cost(messages: int) -> str:
+    """What patient memory cost in this run: Hindsight's saves (its own AI, from the audit trail) and the bot's
+    'which fact is newer' checks, in tokens, in total and per message read."""
+    from . import db
+    saves = [db.unjs(r["details"], {}).get("usage") or {} for r in
+             db.q("SELECT details FROM audit_log WHERE action='memory_saved'")]
+    newer = db.q1("SELECT COUNT(*) n, COALESCE(SUM(input_tokens),0) i, COALESCE(SUM(cached_input_tokens),0) ci, "
+                  "COALESCE(SUM(output_tokens),0) o FROM llm_calls WHERE task='memory_newer' AND cached=0")
+    tot = lambda k: sum(u.get(k) or 0 for u in saves)  # noqa: E731
+    per = max(messages, 1)
+    took = sorted(db.unjs(r["details"], {}).get("seconds") or 0 for r in
+                  db.q("SELECT details FROM audit_log WHERE action='memory_searched'"))
+    failed = db.q1("SELECT COUNT(*) n FROM audit_log WHERE action='memory_search_failed'")["n"]
+    fixed = db.q1("SELECT COUNT(*) n FROM audit_log WHERE action='memory_tag_fixed'")["n"]
+    unsure = db.q1("SELECT COUNT(*) n FROM audit_log WHERE action='memory_tag_unsure'")["n"]
+    return "\n".join([
+        f"Memory searches: {len(took)} done, {failed} failed or too slow"
+        + (f"; middle {took[len(took) // 2]:.1f}s, slowest {took[-1]:.1f}s" if took else "")
+        + f". Participant tags put right: {fixed}; left unsure: {unsure}",
+        f"Memory cost: {len(saves)} saves to Hindsight, {tot('input_tokens'):,} input tokens "
+        f"({tot('cached_tokens'):,} of them cached), {tot('output_tokens'):,} output; "
+        f"{newer['n']} newer-fact checks, {newer['i']:,} input ({newer['ci']:,} cached), {newer['o']:,} output",
+        f"  per message read: {(tot('input_tokens') + newer['i']) / per:,.0f} input "
+        f"({(tot('cached_tokens') + newer['ci']) / per:,.0f} cached), "
+        f"{(tot('output_tokens') + newer['o']) / per:,.0f} output tokens"])
 
 
 # ---------------------------------------------------------------- scoring
@@ -354,6 +473,15 @@ def report(cases: list[Case], summary: dict) -> str:
             lines.append(f"            #{i['id']} {i['kind']} · {i['participant_id'] or '-'} · {i['title']}")
         if not c.result["status"].startswith("processed"):
             lines.append(f"            status: {c.result['status']}")
+        for k in c.result.get("checks") or []:
+            if not k["ok"]:
+                lines.append(f"            FAILED check: {k['check']}; saw: {k['saw'][:300]}")
+    st = story_summary(cases)
+    if st:
+        lines += ["", f"Story checks: {st['checks_passed']}/{st['checks']} passed; whole stories right: "
+                      f"{st['stories_passed']}/{st['stories']}"]
+        if st["failed_stories"]:
+            lines.append("  stories with a failed check: " + ", ".join(st["failed_stories"]))
     if summary:
         a = summary["alert"]
         lines += ["", f"{summary['right']}/{summary['graded']} right ({100 * summary['accuracy']:.0f}%)",
@@ -385,7 +513,8 @@ def write_out(out: Path, cases: list[Case], summary: dict) -> None:
     with (out / "results.csv").open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["case", "subject", "expected", "got", "verdict", "tiers", "participants", "titles", "reasoning",
-                    "sent", "message_id", "item_ids", "seconds", "status"])
+                    "sent", "message_id", "item_ids", "seconds", "status", "failed_checks", "answer",
+                    "answer_checked"])
         for c in cases:
             v = verdict(c)
             w.writerow([c.name, c.subject, "" if c.expect is None else ",".join(sorted(c.expect)) or "none",
@@ -395,9 +524,13 @@ def write_out(out: Path, cases: list[Case], summary: dict) -> None:
                         " | ".join(i["title"] for i in c.result["items"]),
                         " | ".join(i.get("reasoning") or "" for i in c.result["items"]), " | ".join(c.result["sent"]),
                         c.result.get("message_id") or "", ",".join(str(i["id"]) for i in c.result["items"]),
-                        c.result["seconds"], c.result["status"]])
+                        c.result["seconds"], c.result["status"],
+                        " | ".join(k["check"] for k in c.result.get("checks") or [] if not k["ok"]),
+                        c.result.get("answer") or "", c.result.get("answer_checked") or ""])
     from . import llm, timing
     summary["llm_usage"] = llm.USAGE
+    summary["stories"] = story_summary(cases)
+    (out / "checks.json").write_text(json.dumps({c.name: c.result.get("checks") or [] for c in cases}, indent=2))
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=list))
     (out / "timings.json").write_text(json.dumps(timing.report(limit=len(cases) * 2), indent=2))
 
@@ -453,22 +586,30 @@ def child_main(argv: list[str]) -> None:
           f"{'; participant memory carries over between messages' if story else ''}\n", flush=True)
     from . import db, hindsight
     for n, c in enumerate(cases, 1):
-        if not story:
+        fresh = n == 1 or (c.story != cases[n - 2].story if c.story else not story)
+        if fresh:
             db.ex("DELETE FROM patient_facts")
-        if hindsight.enabled() and (n == 1 or not story):
-            hindsight.clear_test_bank(study.study_id)
+            if hindsight.enabled():
+                hindsight.clear_test_bank(study.study_id)
         try:
             run_case(study, c)
             hindsight.flush()
+            if c.checks:
+                c.result["checks"] = run_checks(study, c)
         except Exception as e:  # one broken case must not stop the run
             c.result = {"got": set(), "items": [], "sent": [], "pids": set(), "seconds": 0,
-                        "message_id": None, "status": f"error: {e}"}
+                        "message_id": None, "status": f"error: {e}",
+                        "checks": [{"check": "the message ran", "ok": False, "saw": str(e)}] if c.checks else []}
         v = verdict(c)
+        failed = sum(not k["ok"] for k in c.result.get("checks") or [])
         print(f"  {n:3d}/{len(cases)} {c.name[:50]:50s} {c.result['seconds']:5.1f}s "
-              f"{ {True: 'right', False: 'WRONG', None: ''}[v]}", flush=True)
+              f"{ {True: 'right', False: 'WRONG', None: ''}[v]}"
+              f"{f' {failed} check(s) FAILED' if failed else ''}", flush=True)
     summary = score(cases)
     print("\n" + report(cases, summary))
     print("\n" + time_report())
+    if hindsight.enabled():
+        print("\n" + memory_cost(len(cases)))
     if args.out:
         write_out(Path(args.out), cases, summary)
         print(f"\nwrote {Path(args.out) / 'results.csv'} and summary.json")

@@ -1,0 +1,12 @@
+{"story": "Born 1967, later corrected to 1972: the later one is used",
+ "messages": [
+  {"text": "Screening notes for 1001-109: born 1967, retired teacher, lives with her husband.",
+   "chat": "room", "date": "2025-03-03 10:00",
+   "memory": {"1001-109": {"has": ["1967"]}}},
+  {"text": "Correction for 1001-109: her ID card shows birth year 1972, not 1967.",
+   "chat": "room", "date": "2026-10-20 10:00",
+   "memory": {"1001-109": {"has": ["1972"]}}},
+  {"text": "What birth year do we have for 1001-109, and does she meet the age criterion?",
+   "chat": "direct", "date": "2026-10-29 09:00",
+   "answer_has": ["1972"]}
+ ]}

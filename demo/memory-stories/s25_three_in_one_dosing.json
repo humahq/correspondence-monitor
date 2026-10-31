@@ -1,0 +1,8 @@
+{"story": "Three participants' dosing in one message",
+ "messages": [
+  {"text": "Dosing check today: 1001-128 took both doses. 1001-129 missed the evening dose. 1001-130 vomited 30 minutes after the morning dose.",
+   "chat": "room", "date": "2026-10-14 16:00",
+   "memory": {"1001-128": {"lacks": ["vomit", "missed"]},
+              "1001-129": {"has": ["missed"], "lacks": ["vomit"]},
+              "1001-130": {"has": ["vomit"], "lacks": ["missed"]}}}
+ ]}

@@ -1,0 +1,9 @@
+{"story": "One participant's medicine never shows in another's answer",
+ "messages": [
+  {"text": "1001-125 started carbamazepine 200 mg twice daily for nerve pain last week.",
+   "chat": "room", "date": "2026-10-05 10:00",
+   "memory": {"1001-125": {"has": ["carbamazepine"]}, "1001-126": {"count": 0}}},
+  {"text": "Is any medicine 1001-126 takes a problem under the protocol?",
+   "chat": "direct", "date": "2026-10-07 09:00",
+   "answer_lacks": ["carbamazepine"]}
+ ]}

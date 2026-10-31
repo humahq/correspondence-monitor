@@ -133,6 +133,35 @@ Built (31 Oct):
 **8. Tests (1 day).**
 30 to 50 multi-message cases: gout, born 1967 then 1972, a corrected typo, no participant ID, a fact from another
 thread, what was done about a problem. Also measure cost per message. (30 Oct)
+Built (31 Oct): `demo/memory-stories/`, 44 made-up stories, 86 messages (chat and email, group and private, over
+days to nearly three years). `cormon test` now reads a story file: several messages in order sharing memory, each
+with checks on what memory holds for a participant afterwards (`memory`: has, lacks, count; `unlinked` for facts
+with no code) and on the answer as said to the person (`answer_has`, `answer_lacks`). Run with
+`CORMON_TEST_MEMORY=1 cormon test demo/memory-stories --study NCT05842941`.
+- First run: 103 of 123 checks passed, 29 of 44 stories fully right. Fixed from it:
+  - Hindsight's AI miscopied a code: '1001-111' tagged 100111, so her facts were in nobody's record and her
+    answer had none. After each save the bot now checks every participant tag against the codes the message
+    writes; a tag one character off exactly one of them gets the right code added (`memory_tag_fixed`), anything
+    else is logged (`memory_tag_unsure`). Its instructions also say to copy every digit.
+  - A name was kept ("Mrs Alvarez"), team logistics were kept as facts (a meeting time, a monitoring visit), and
+    an alert raised on a stranger's email went into the participant's memory. The instructions now say to write
+    'a participant' and to keep only facts about participants; an alert is saved only when its message came from
+    someone on the study's people list, as messages are.
+  - A study with nothing saved yet made the memory page and the checks fail; it now counts as no facts.
+- Second run: 113 of 123 checks (92%), 36 of 44 stories. Every memory check passed but one (a typo fixed in the
+  same message is kept as "replaces the misstated 500 mg"). What fails is how answers use memory:
+  - the answer uses the fact but does not say who reported it or when (gout, phenytoin);
+  - the answer is right but works out a number itself (an age, a gap in days), so the check on its numbers fails
+    and the person gets "I couldn't work out a sure answer" (1972, born; riluzole 30 days in the first run);
+  - the answer leaves out a fact it was given (re-consent on version 4; take the dose with food; the flu that
+    explains a missed visit);
+  - one asked back which regimen the participant is on, before using memory at all.
+- Searches: 28, none failed or too slow, middle 1.4 s, slowest 3.4 s on the laptop. One search in a first trial
+  run took over 5 s and was dropped, while Hindsight was busy saving the same message; not seen again.
+- Cost per message read (gpt-5.4-mini, $0.75 per million input, $0.075 cached, $4.50 output): about 5,400 input
+  tokens (3,900 of them cached) and 280 output, about $0.0027 (a quarter of a cent). Almost all is Hindsight's
+  saves: 123 for 86 messages, as the bot's alerts are saved too. The 'which fact is newer' checks add about 70
+  input and 20 output tokens a message. 1,000 messages a month: about $2.70.
 
 Total: about 7 to 8 days.
 

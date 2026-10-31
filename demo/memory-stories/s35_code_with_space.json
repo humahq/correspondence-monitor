@@ -1,0 +1,6 @@
+{"story": "A code written with a space is found under the usual code",
+ "messages": [
+  {"text": "Subject 1001 139 says she has been dizzy when standing up since Tuesday.",
+   "chat": "room", "date": "2026-10-12 10:00",
+   "memory": {"1001-139": {"has": ["dizz"]}}}
+ ]}

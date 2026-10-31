@@ -1,0 +1,6 @@
+{"story": "An impossible date fixed in the same message",
+ "messages": [
+  {"text": "1001-117 had a fall on 31 Sept, sorry, I mean 30 Sept. No injury.",
+   "chat": "room", "date": "2026-10-02 10:00",
+   "memory": {"1001-117": {"has": ["30 sep|september 30|2026-09-30|sept 30|30 sept"], "lacks": ["31"]}}}
+ ]}

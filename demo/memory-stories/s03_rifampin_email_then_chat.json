@@ -1,0 +1,9 @@
+{"story": "A new medicine told by email, asked about in a chat",
+ "messages": [
+  {"text": "Hi John, FYI 1001-103's infectious disease doctor started her on rifampin 600 mg daily on 1 Aug for latent TB. She is due for her week 4 visit next week.",
+   "chat": "email", "subject": "1001-103 new medication", "date": "2026-08-03 10:00",
+   "memory": {"1001-103": {"has": ["rifampin|rifampicin"]}}},
+  {"text": "Is there anything in 1001-103's current medicines that is a problem under the protocol?",
+   "chat": "direct", "date": "2026-08-20 09:00",
+   "answer_has": ["rifampin|rifampicin", "3 aug|august 3|1 aug|august 1"]}
+ ]}

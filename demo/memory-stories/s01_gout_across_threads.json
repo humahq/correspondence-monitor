@@ -1,0 +1,9 @@
+{"story": "A gout flare told in the group chat, linked to a medicine question in a private chat six weeks later",
+ "messages": [
+  {"text": "Quick update on 1001-101: at today's visit she said she had a gout flare in her left big toe last week. Her GP started colchicine 0.6 mg daily.",
+   "chat": "room", "date": "2026-09-14 10:00",
+   "memory": {"1001-101": {"has": ["gout", "colchicine"]}}},
+  {"text": "1001-101's toe is sore again. Before her next dose: is any medicine she is on a problem under the protocol?",
+   "chat": "direct", "date": "2026-10-28 09:00",
+   "answer_has": ["colchicine", "14 sep|september 14"]}
+ ]}

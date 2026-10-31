@@ -1,0 +1,9 @@
+{"story": "A supplement mentioned in the group chat, asked about privately three weeks later",
+ "messages": [
+  {"text": "Note on 1001-102: her son said she drinks St. John's wort tea every evening. Will check with the PI.",
+   "chat": "room", "date": "2026-10-05 11:00",
+   "memory": {"1001-102": {"has": ["john's wort|johns wort"]}}},
+  {"text": "Before 1001-102's week 8 visit: is any medicine or supplement she uses a problem under the protocol?",
+   "chat": "direct", "date": "2026-10-27 09:00",
+   "answer_has": ["john's wort|johns wort", "5 oct|october 5"]}
+ ]}
