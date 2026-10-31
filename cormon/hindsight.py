@@ -38,7 +38,8 @@ MISSION = (
     "mention the mistake at all. When it corrects an earlier message, keep the new fact and say it replaces what was said before. "
     "A question, a what-if or a plan is not a fact that happened: keep it only as '<who> asked whether ...' or "
     "'<who> plans to ...'. Ignore greetings, signatures, call scheduling and instructions to the bot. Never record "
-    "a participant's name, only their study code."
+    "a participant's name, only their study code. Write each fact in the language of the message, never mixing "
+    "in words of another language."
 )
 
 LABELS = [{
@@ -136,10 +137,14 @@ def _saved(what: str, study_id: str, entity_id, b: str, doc: str, res: dict) -> 
 
 
 def _save_message(study, msg: dict, own_text: str) -> None:
+    doc = f"message-{msg['id']}"
+    if curated(study.study_id, doc):   # saving again replaces the document's facts, undoing the admin's change
+        db.audit("memory_not_saved", entity_type="message", entity_id=msg.get("id"), study_id=study.study_id,
+                 why="an admin corrected, retired or linked its facts on the memory page")
+        return
     try:
         name, role = _speaker(study, msg)
         b = _ensure_bank(study.study_id)
-        doc = f"message-{msg['id']}"
         item = {"content": message_content(study, msg, own_text), "document_id": doc,
                 "timestamp": msg.get("sent_at") or "unset",
                 "context": f"a message in a clinical trial, from {name} ({role})",
@@ -232,15 +237,25 @@ def _day(r: dict) -> str:
     return local_time(r.get("mentioned_at")).rsplit(" ", 1)[0]
 
 
-def _fact_line(r: dict, replaced_by: dict | None = None) -> str:
+def _parts(r: dict) -> tuple[str, str]:
+    """A fact's own words and when it happened ('' when not known), from Hindsight's 'text | When: ...' form."""
     text = r["text"].split(" | ")
     when = next((p[5:].strip() for p in text[1:] if p.startswith("When:")), "")
+    return text[0].strip(), (when[:10] if when[:4].isdigit() else when)
+
+
+def _who(r: dict) -> str:
     meta = r.get("metadata") or {}
-    who = f"{meta['sender']} ({meta['role']})" if meta.get("sender") else "the monitoring bot"
-    happened = f" (happened: {when[:10] if when[:4].isdigit() else when})" if when else ""
+    return f"{meta['sender']} ({meta['role']})" if meta.get("sender") else "the monitoring bot"
+
+
+def _fact_line(r: dict, replaced_by: dict | None = None, corrected: dict | None = None) -> str:
+    text, when = _parts(r)
+    happened = f" (happened: {when})" if when else ""
     kind = (f"replaced fact (a later report, on {_day(replaced_by)}, changed it)" if replaced_by
             else "earlier fact")
-    return f"{kind}, reported on {_day(r)} by {who}: {text[0].strip()}{happened}"
+    fixed = f" [corrected by {corrected['by']} on {_day({'mentioned_at': corrected['ts']})}]" if corrected else ""
+    return f"{kind}, reported on {_day(r)} by {_who(r)}: {text}{happened}{fixed}"
 
 
 NEWER_SYSTEM = """You read the facts a clinical-trial study monitor holds about one participant, numbered, oldest
@@ -304,7 +319,144 @@ def recall_lines(study, pid: str | None, query: str, msg: dict) -> list[str]:
     db.audit("memory_searched", entity_type="message", entity_id=msg.get("id"), study_id=study.study_id,
              participant_id=pid, facts=len(rows), seconds=round(time.monotonic() - began, 2),
              replaced=[{"old": rows[o].get("id"), "by": rows[b].get("id")} for o, b in newer.items()])
-    return [_fact_line(r, rows[newer[n]] if n in newer else None) for n, r in enumerate(rows)]
+    fixed = _corrections(study.study_id, [r.get("id") for r in rows])
+    return [_fact_line(r, rows[newer[n]] if n in newer else None, fixed.get(r.get("id"))) for n, r in enumerate(rows)]
+
+
+# ---------------------------------------------------------------- the memory page (adminview.py)
+
+CHANGES = ("memory_fact_corrected", "memory_fact_retired", "memory_fact_restored", "memory_fact_linked")
+
+
+def _changes(study_id: str, ids: list) -> dict[str, list[dict]]:
+    """The admin changes to each fact, oldest first, from the audit trail."""
+    ids = [str(i) for i in ids if i]
+    if not ids:
+        return {}
+    out: dict[str, list[dict]] = {}
+    for r in db.q(f"SELECT ts, actor, action, entity_id, details FROM audit_log WHERE entity_type='memory_fact'"
+                  f" AND study_id=? AND action IN ({','.join('?' * len(CHANGES))})"
+                  f" AND entity_id IN ({','.join('?' * len(ids))}) ORDER BY id", (study_id, *CHANGES, *ids)):
+        out.setdefault(r["entity_id"], []).append(dict(db.unjs(r["details"], {}), ts=r["ts"], by=r["actor"],
+                                                       action=r["action"]))
+    return out
+
+
+def _corrections(study_id: str, ids: list) -> dict[str, dict]:
+    """The latest correction of each fact that has one: {fact id: {by, ts}}."""
+    return {i: [c for c in cs if c["action"] == "memory_fact_corrected"][-1]
+            for i, cs in _changes(study_id, ids).items() if any(c["action"] == "memory_fact_corrected" for c in cs)}
+
+
+def curated(study_id: str, document_id: str) -> bool:
+    """An admin has changed a fact from this document, so it must not be saved again."""
+    return bool(db.q1("SELECT 1 FROM audit_log WHERE entity_type='memory_fact' AND study_id=? AND action IN"
+                      f" ({','.join('?' * len(CHANGES))}) AND details LIKE ? LIMIT 1",
+                      (study_id, *CHANGES, f'%"document": "{document_id}"%')))
+
+
+def _every(study_id: str, extra: str = "") -> list[dict]:
+    """Every fact in the study's bank, current and retired."""
+    out = []
+    for state in ("valid", "invalidated"):
+        offset = 0
+        while True:
+            res = _call("GET", f"/v1/default/banks/{bank(study_id)}/memories/list?limit=500&offset={offset}"
+                               f"&state={state}{extra}", timeout=60)
+            page = res.get("items") or []
+            out += page
+            offset += len(page)
+            if not page or offset >= (res.get("total") or 0):
+                break
+    return out
+
+
+def _pids(r: dict) -> list[str]:
+    return [t.split(":", 1)[1] for t in r.get("tags") or [] if t.startswith("participant:")]
+
+
+def _fact(r: dict, changes: list[dict]) -> dict:
+    text, when = _parts(r)
+    meta = r.get("metadata") or {}
+    return {"id": r["id"], "text": text, "happened": when, "reported": local_time(r.get("mentioned_at")),
+            "reported_at": r.get("mentioned_at"), "who": _who(r), "message_id": meta.get("message_id"),
+            "alert_id": meta.get("alert_id"), "document": r.get("document_id"),
+            "participants": sorted({memory.key(p) for p in _pids(r)}), "retired": r.get("state") == "invalidated",
+            "retired_why": r.get("invalidation_reason"),
+            "changes": [{"when": local_time(c["ts"]), "by": c["by"], "what": c["action"].removeprefix("memory_fact_"),
+                         "reason": c.get("reason"), "old": c.get("old"), "new": c.get("new")} for c in changes]}
+
+
+def overview(study_id: str) -> dict:
+    """The memory page's first view: each participant with how many facts memory holds, and the facts linked to
+    nobody (no participant code was clear), for a person to link or leave."""
+    rows = _every(study_id)
+    changes = _changes(study_id, [r["id"] for r in rows])
+    people: dict[str, dict] = {}
+    for r in rows:
+        for k in {memory.key(p) for p in _pids(r)}:
+            p = people.setdefault(k, {"id": _pids(r)[0], "key": k, "facts": 0, "retired": 0, "last": ""})
+            p["retired" if r.get("state") == "invalidated" else "facts"] += 1
+            p["last"] = max(p["last"], r.get("mentioned_at") or "")
+    unlinked = [_fact(r, changes.get(r["id"], [])) for r in rows if not _pids(r) and r.get("state") != "invalidated"]
+    return {"participants": sorted(people.values(), key=lambda p: p["last"], reverse=True),
+            "unlinked": sorted(unlinked, key=lambda f: f["reported_at"] or "", reverse=True)}
+
+
+def participant_facts(study_id: str, pid: str) -> list[dict]:
+    """Every fact about one participant, newest report first, current and retired, with its admin changes."""
+    tags = participant_tags(study_id, pid)
+    rows = [r for r in _every(study_id) if set(r.get("tags") or []) & set(tags)] if tags else []
+    changes = _changes(study_id, [r["id"] for r in rows])
+    return sorted((_fact(r, changes.get(r["id"], [])) for r in rows), key=lambda f: f["reported_at"] or "",
+                  reverse=True)
+
+
+def change_fact(study_id: str, fact_id: str, action: str, by: str, reason: str, text: str = "",
+                participant: str = "") -> dict:
+    """An admin's change to one fact: correct its words, retire it (left out of answers, kept), restore it, or link
+    a fact saved without a participant to one. Each needs a reason and goes in the audit trail with the old and
+    new words. Nothing is deleted. Linking saves a tagged copy (tags cannot be edited) and retires the original."""
+    reason, text = " ".join((reason or "").split()), " ".join((text or "").split())
+    if len(reason) < 5:
+        raise ValueError("Please give a reason (a few words).")
+    b = bank(study_id)
+    old = _call("GET", f"/v1/default/banks/{b}/memories/{fact_id}", timeout=30)
+    words, _ = _parts(old)
+    log = dict(entity_type="memory_fact", entity_id=fact_id, study_id=study_id, actor=by, actor_type="person",
+               reason=reason, document=old.get("document_id"), bank=b)
+    if action == "correct":
+        if not text or text == words:
+            raise ValueError("Write the corrected fact.")
+        _call("PATCH", f"/v1/default/banks/{b}/memories/{fact_id}", {"text": text}, timeout=60)
+        db.audit("memory_fact_corrected", old=words, new=text, **log)
+    elif action == "retire":
+        _call("PATCH", f"/v1/default/banks/{b}/memories/{fact_id}",
+              {"state": "invalidated", "reason": f"{reason} ({by})"}, timeout=60)
+        db.audit("memory_fact_retired", old=words, **log)
+    elif action == "restore":
+        _call("PATCH", f"/v1/default/banks/{b}/memories/{fact_id}", {"state": "valid"}, timeout=60)
+        db.audit("memory_fact_restored", old=words, **log)
+    elif action == "link":
+        tag = participant_tag(participant)
+        if not tag:
+            raise ValueError("Write the participant's study code.")
+        if _pids(old):
+            raise ValueError("This fact is already linked to a participant.")
+        meta = dict(old.get("metadata") or {}, linked_from=fact_id, linked_by=by)
+        doc = f"link-{fact_id}"
+        _call("POST", f"/v1/default/banks/{_ensure_bank(study_id)}/memories", {"items": [{
+            "content": f"A fact about participant {participant.strip()}: {words}", "document_id": doc,
+            "timestamp": old.get("mentioned_at") or "unset",
+            "context": f"a fact first saved without a participant code, linked by {by}",
+            "metadata": {k: str(v) for k, v in meta.items()},
+            "tags": [f"study:{study_id}", "source:link", tag]}]})
+        _call("PATCH", f"/v1/default/banks/{b}/memories/{fact_id}",
+              {"state": "invalidated", "reason": f"linked to {participant.strip()} ({by}): {reason}"}, timeout=60)
+        db.audit("memory_fact_linked", old=words, participant_id=participant.strip(), new_document=doc, **log)
+    else:
+        raise ValueError(f"unknown change {action!r}")
+    return {"ok": True}
 
 
 def facts(study_id: str, limit: int = 200) -> list[dict]:

@@ -1,6 +1,7 @@
 """Read-only admin pages for the people who run the bot (web.admin.emails): is it healthy, every message with its whole
-conversation and what the bot did, every alert, and who has signed in or written. A small React app (cormon/web)
-draws the pages from the JSON answers here. Nothing on these pages changes anything."""
+conversation and what the bot did, every alert, who has signed in or written, and what patient memory holds. A small
+React app (cormon/web) draws the pages from the JSON answers here. The only change these pages make is an admin's
+correction to patient memory (memory_change), each with a reason in the audit trail."""
 
 from __future__ import annotations
 
@@ -592,6 +593,37 @@ def people() -> dict:
                 acts)]}
 
 
+# ---------------------------------------------------------------- patient memory
+
+def memory_page(query: dict) -> dict:
+    """What patient memory holds for a study: its participants, or one participant's facts, and the facts linked
+    to nobody."""
+    from . import hindsight
+    studies = list(_studies())
+    study = query.get("study") if query.get("study") in studies else (studies[0] if studies else "")
+    out = {"studies": studies, "study": study, "enabled": hindsight.enabled(), "participant": query.get("participant", "")}
+    if not out["enabled"] or not study:
+        return out
+    try:
+        if out["participant"]:
+            out["facts"] = hindsight.participant_facts(study, out["participant"])
+        else:
+            out.update(hindsight.overview(study))
+    except Exception as e:
+        out["error"] = f"Patient memory could not be read: {str(e)[:200]}"
+    return out
+
+
+def memory_change(body: dict, email: str) -> dict:
+    """An admin's correct, retire, restore or link of one fact (hindsight.change_fact)."""
+    from . import hindsight
+    if body.get("study") not in _studies():
+        raise ValueError("unknown study")
+    return hindsight.change_fact(body["study"], str(body.get("fact") or ""), str(body.get("action") or ""), email,
+                                 str(body.get("reason") or ""), str(body.get("text") or ""),
+                                 str(body.get("participant") or ""))
+
+
 # ---------------------------------------------------------------- routing
 
 def shell(email: str) -> str:
@@ -628,4 +660,6 @@ def api(path: str) -> dict | None:
         return alerts(query)
     if p == "/people":
         return people()
+    if p == "/memory":
+        return memory_page(query)
     return None

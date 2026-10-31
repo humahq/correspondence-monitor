@@ -89,6 +89,19 @@ fact was marked replaced, and the answer was "No. The study coordinator reported
 stopped St. John's wort completely". The search plus the check took about 4 seconds.
 
 **6. A page to view, correct and retire facts (1 to 1.5 days).** (email)
+Built (31 Oct): admin page "Patient memory" (`/admin/memory`, admins only, Google sign-in). It lists each
+participant with their number of facts, then each fact with who reported it, when, and a link to the message.
+"Not linked to a participant" lists facts from messages with no clear study code. An admin can correct a fact's
+words, retire it (Hindsight keeps it but leaves it out of answers), restore it, or link an unlinked fact to a
+participant (tags cannot be edited, so a tagged copy is saved and the original retired). Each change needs a
+reason and goes in the audit trail with the old and new words (`memory_fact_corrected`, `_retired`, `_restored`,
+`_linked`). Nothing is deleted. An answer that uses a corrected fact says who corrected it. A message whose facts
+an admin changed is not saved again when it is re-read, so the change is not undone. A change is accepted only
+from the admin page itself (its own header, JSON, no other site's Origin).
+Checked on the laptop's Hindsight: correct, retire, restore and link all worked, with the audit entries. The check
+also found Hindsight's AI writing a Hebrew word into an English fact ("dizziness מאז Tuesday"); its instructions now
+say to write each fact in the message's language, and the rerun was clean.
+Still open (question 2 below): only admins can change facts; whether site coordinators may too is for Eliot.
 
 **7. Logging and retention (1 day).**
 Every save and search is in the audit trail. Facts kept for 7 years, deletable per study, and in the records export.
