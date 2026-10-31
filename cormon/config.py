@@ -20,6 +20,7 @@ class Person:
     roles: list[str]
     sites: list[str]
     teams_upn: str | None = None
+    phone: str | None = None
 
     @property
     def first_name(self) -> str:
@@ -121,7 +122,7 @@ def _person(d: dict) -> Person:
     return Person(
         id=d["id"], name=d.get("name", d["id"]), email=d.get("email"),
         roles=list(d.get("roles", [])), sites=list(d.get("sites", ["*"])),
-        teams_upn=d.get("teams_upn"),
+        teams_upn=d.get("teams_upn"), phone=d.get("phone"),
     )
 
 

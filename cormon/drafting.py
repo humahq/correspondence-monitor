@@ -85,6 +85,7 @@ def sender_ctx(study: Study, ev: dict) -> dict:
 
 
 def item_context(study: Study, item: dict, recipient: Person | None, routed_to: str = "") -> dict:
+    from . import safety
     ev = item["evidence"] if isinstance(item["evidence"], dict) else db.unjs(item["evidence"], {})
     pattern = study.pattern(item.get("pattern_class") or "") or {}
     return {
@@ -120,6 +121,7 @@ def item_context(study: Study, item: dict, recipient: Person | None, routed_to: 
         "bundle": False,
         "recipient": _person_ctx(recipient, "Hello"),
         "people": people_ctx(study, item.get("site")),
+        "safety": safety.context(study, item) if item.get("kind") == "out_of_scope" else {},
     }
 
 

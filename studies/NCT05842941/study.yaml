@@ -75,6 +75,9 @@ roles:
   - { id: cra, label: Clinical research associate }
   - { id: clinops_lead, label: Sponsor ClinOps lead }
   - { id: medical_monitor, label: Medical monitor }
+  # the safety contact list after the medical monitor (config/routing.yaml safety.chain, SAF-05)
+  - { id: pv_backup, label: Safety backup (pharmacovigilance) }
+  - { id: safety_on_call, label: Safety on-call (phones the medical monitor) }
   # doctors at the site: the bot is careful with them (config/careful.yaml); no routing rule emails them
   - { id: pi, label: Principal investigator }
   - { id: sub_investigator, label: Sub-investigator }
@@ -100,10 +103,24 @@ people:
     email: john@huma.ai
     roles: [clinops_lead]
     sites: ["*"]
+  # The safety contacts are stand-ins until the sponsor names them: put in each real name, email and phone.
   - id: medical-monitor
-    name: the Regimen G medical monitor
-    email: john+medicalmonitor@huma.ai   # stand-in until the sponsor names the medical monitor
+    name: John (medical monitor stand-in)
+    email: john+medicalmonitor@huma.ai
+    phone: null
     roles: [medical_monitor]
+    sites: ["*"]
+  - id: pv-backup
+    name: John (safety backup stand-in)
+    email: john+pvbackup@huma.ai
+    phone: null
+    roles: [pv_backup]
+    sites: ["*"]
+  - id: safety-on-call
+    name: John (safety on-call stand-in)
+    email: john+safetyoncall@huma.ai
+    phone: null
+    roles: [safety_on_call]
     sites: ["*"]
   - id: peter-tester
     name: Peter Brown

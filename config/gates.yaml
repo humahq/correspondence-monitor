@@ -42,6 +42,7 @@ sets:
       - cormon/conversation.py
       - cormon/triage.py
       - cormon/items.py
+      - cormon/safety.py
       - cormon/capture.py
       - cormon/phi.py
       - cormon/textutil.py

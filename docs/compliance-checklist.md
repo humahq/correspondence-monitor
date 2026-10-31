@@ -5,12 +5,12 @@ Part I is the developer's part. It has 71 requirements. Part II (policies, contr
 
 This list is fixed: the same 71 IDs, in the document's order. Only the boxes change.
 
-Status on 30 Oct 2026: **47 done, 18 partly done, 4 not done, 2 later (V2).**
+Status on 30 Oct 2026: **49 done, 19 partly done, 1 not done, 2 later (V2).**
 
-Built on 30 Oct and waiting to be merged and deployed: retention setting (PR #13), safety routing (PR #15),
-write-once store (PR #17), records export (PR #19), protocol version per site (PR #21).
+The safety contacts (medical monitor, safety backup, on-call) are stand-in addresses that reach John until the
+sponsor names the real people: put their names, emails and phones in the study file, nothing else changes.
 
-## Done (47)
+## Done (49)
 
 - [x] CAP-01 Original bytes preserved
 - [x] CAP-02 Hash-linked derivations
@@ -30,8 +30,10 @@ write-once store (PR #17), records export (PR #19), protocol version per site (P
 - [x] QAA-03 Standing answer disclaimer
 - [x] QAA-04 Q&A validation (the question test set now blocks a release if it scores too low)
 - [x] QAA-05 Physician handling (templates are versioned config, changed only through a tested pull request)
+- [x] SAF-03 Severity as routing metadata (severe when the message has a word from a fixed list, `safety.severe_words` in config/routing.yaml, plus the study's own; acknowledge within 1 hour if severe, 24 hours if not, counted from when the message was received. The list is our draft for the sponsor's safety team to approve)
+- [x] SAF-04 Acknowledgment is a disposition (only the medical monitor or the safety backup: they reply "ACK <code>", checked by code against the people list, their role and the sender check; or an admin records which of them answered the phone with `cormon ack N --by <person>`. Anyone else on the list who replies is told it did not count. Who, when, how and who recorded it are audited; the item is never cleared)
 - [x] SAF-06 Safety routing validation
-- [x] SAF-07 Safety routing record (each safety message and where it was sent is in the records export, `safety.csv`. PR #19)
+- [x] SAF-07 Safety routing record (each safety message in the records export, `safety.csv`: received time and hash, severity, where it was sent, who acknowledged and when, how far it escalated, and any deviation)
 - [x] SAF-10 Site notice never fires for safety
 - [x] SAF-11 Negative assurance
 - [x] DSP-03 Roster authority check
@@ -60,7 +62,7 @@ write-once store (PR #17), records export (PR #19), protocol version per site (P
 - [x] GOV-02 Drift monitoring
 - [x] EXP-01 MVP export procedure (`cormon export-records`: one zip per study with originals and their hashes, alerts and every change to them, safety routing, sent messages, audit trail, AI log and settings history, plus the integrity checks. CSV, not PDF. PR #19)
 
-## Partly done (18)
+## Partly done (19)
 
 | ID | Name | What is left |
 |---|---|---|
@@ -70,7 +72,8 @@ write-once store (PR #17), records export (PR #19), protocol version per site (P
 | OUT-02 | Outbound domain authentication | DMARC `p=reject` on the sending domain (a DNS task) |
 | OUT-03 | LLM output never routes | The AI still decides "whether" in 3 places (doctor check, careful check, clear by reply) |
 | QAA-06 | No clinical judgment | A judgment in a final answer is recorded, not blocked. Needs real answers to measure |
-| SAF-02 | Detection and routing | Safety mail goes, unassessed, to the medical monitor (PR #15), but the address is a stand-in (john+medicalmonitor@huma.ai) until the sponsor names one |
+| SAF-02 | Detection and routing | Safety mail goes, unassessed, to the medical monitor with the CRA copied, but the address is a stand-in (john+medicalmonitor@huma.ai) until the sponsor names one |
+| SAF-05 | Escalation and terminus | Built: not acknowledged in time, it goes to the safety backup, then the ClinOps lead, then the on-call person and the admins are told to phone (3 reminders); reaching that last step is recorded as a deviation, with the steps that went unanswered. The contacts are stand-ins and no phone numbers are on file yet |
 | DSP-01 | Deterministic disposition grammar | No fixed "token + action + reason" reply format; the AI reads the reply |
 | DSP-04 | Reason and visibility | A clear by reply gets the code "by_reply"; waits on DSP-01 |
 | IAM-01 | Operator access | MFA depends on the Google Workspace setting |
@@ -82,16 +85,12 @@ write-once store (PR #17), records export (PR #19), protocol version per site (P
 | SEC-03 | Secrets and credentials | Some secrets still in env vars and files; no rotation |
 | PRV-01 | PHI handling | No consent-form coverage check when a study starts |
 | VAL-04 | Per-site protocol version effectivity | An alert checked against a version the site was not on that day is held for a person (PR #21). Only one version per document is loaded, and the sites have no version dates yet |
-## Not done (4)
+## Not done (1)
 
 | ID | Name | What is missing |
 |---|---|---|
-| SAF-03 | Severity as routing metadata | No severity levels; no 1-hour / 24-hour acknowledgment clock |
-| SAF-04 | Acknowledgment is a disposition | The medical monitor cannot acknowledge a safety alert |
-| SAF-05 | Escalation and terminus | No escalation chain (PV backup, then ClinOps lead, then a person by phone) |
 | DSP-02 | Echo-back confirmation | No "reply CONFIRM" step before a clear takes effect |
 
-SAF-03, SAF-04 and SAF-05 all need the medical monitor's contact (and a backup) first.
 
 ## Later, V2 (2)
 

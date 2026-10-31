@@ -451,6 +451,34 @@ def cmd_timings(args):
                          ("failed", "failed", 6)])
 
 
+def cmd_safety(args):
+    from . import safety
+    rows = [dict(r) for r in db.q("SELECT * FROM items WHERE kind='out_of_scope'" + (" AND acked_at IS NULL"
+                                  if args.open else "") + " ORDER BY id DESC LIMIT ?", (args.limit,))]
+    for r in rows:
+        r["code"] = safety.ack_code(r)
+        r["due"] = local_time(r["ack_due_at"]) if r["ack_due_at"] else "-"
+        r["ack"] = f"{local_time(r['acked_at'])} {r['acked_by']}" if r["acked_at"] else "NOT YET"
+        r["dev"] = "yes" if r["ack_deviation_at"] else ""
+    table(rows, [("id", "id", 5), ("participant_id", "participant", 11), ("severity", "severity", 9),
+                 ("due", "due", 18), ("escalation_step", "step", 5), ("dev", "deviation", 10), ("code", "code", 10),
+                 ("ack", "acknowledged", 50)])
+
+
+def cmd_ack(args):
+    from . import safety
+    try:
+        item = items.get(args.id)
+        if item["kind"] != "out_of_scope":
+            raise ValueError(f"#{args.id} is not a safety item")
+        p = safety.ack_person(config.study(item["study_id"]), args.by)
+        done = safety.acknowledge(args.id, f"{p.name} <{p.email}>", "phone", actor_type="operator", note=args.note,
+                                  recorded_by=actor(args))
+    except (KeyError, ValueError) as e:
+        sys.exit(f"refused: {e}")
+    print(f"#{args.id} acknowledged; escalation stopped" if done else f"#{args.id} was already acknowledged")
+
+
 def cmd_items(args):
     sql = "SELECT * FROM items WHERE 1=1"
     params: list = []
@@ -1085,6 +1113,17 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("rerun", help="re-run classification on one message")
     s.add_argument("id", type=int); s.add_argument("--cached", action="store_true", help="reuse cached model output")
     s.set_defaults(fn=cmd_rerun)
+
+    s = sub.add_parser("safety", help="safety messages: severity, when acknowledgment is due, escalation step")
+    s.add_argument("--open", action="store_true", help="only those not acknowledged")
+    s.add_argument("--limit", type=int, default=30); s.set_defaults(fn=cmd_safety)
+    s = sub.add_parser("ack", help="record that a safety message was acknowledged (for example by phone); "
+                                   "stops its escalation")
+    s.add_argument("id", type=int)
+    s.add_argument("--by", required=True, help="the person id (study file) of the medical monitor or safety backup "
+                                               "who acknowledged")
+    s.add_argument("--note", required=True, help='how, e.g. "phoned at 14:10"')
+    s.set_defaults(fn=cmd_ack)
 
     s = sub.add_parser("draft", help="force drafts to be produced for an item")
     s.add_argument("id", type=int); s.add_argument("--force", action="store_true")

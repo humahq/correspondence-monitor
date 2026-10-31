@@ -33,11 +33,50 @@ good_news:
   - { destination: teams_study_channel, recipient: study_team }
 
 # Safety is not reviewed: the message is recorded (item, daily summary) and passed on, unassessed, to the
-# study's medical monitor (SAF-02). No reply goes to the sender: it confused readers, above all in chat.
-# To bring it back:
+# study's medical monitor, with the site's CRA copied (SAF-02). No reply goes to the sender: it confused readers,
+# above all in chat. To bring it back:
 #   - { destination: email, to: sender, topic: safety_out_of_scope }
 out_of_scope:
-  - { destination: email, to_role: medical_monitor, topic: safety_for_medical_monitor }
+  - { destination: email, to_role: medical_monitor, cc_roles: [cra], topic: safety_for_medical_monitor }
+
+# After the safety email (cormon/safety.py, SAF-03 to SAF-05). Severe: the message has one of severe_words (each a
+# pattern matched at the start of a word; a study adds its own as safety.severe_words in its study file).
+# ack_minutes: how long the medical monitor has to acknowledge. Not acknowledged, chain is emailed in order, one
+# role per step_minutes; the last role is asked to phone, with the admins, terminus_reminders more times.
+safety:
+  severe_words:
+    - 'died'
+    - 'death'
+    - 'dead\b'
+    - 'deceased'
+    - 'fatal'
+    - 'life[- ]threatening'
+    - 'hospitali[sz]'
+    - 'admitted to (the )?hospital'
+    - 'emergency (room|department)'
+    - 'intensive care'
+    - 'ICU\b'
+    - 'resuscitat'
+    - 'CPR\b'
+    - 'cardiac arrest'
+    - 'heart attack'
+    - 'myocardial infarction'
+    - 'stroke'
+    - 'seizure'
+    - 'anaphyla'
+    - 'intubat'
+    - 'ventilator'
+    - 'overdose'
+    - 'suicid'
+    - 'self[- ]harm'
+    - 'disabilit'
+    - 'birth defect'
+    - 'congenital'
+    - 'pregnan'
+  ack_minutes: { severe: 60, standard: 1440 }
+  step_minutes: { severe: 30, standard: 240 }
+  chain: [pv_backup, clinops_lead, safety_on_call]
+  terminus_reminders: 3
 
 copy_nudge:
   - { destination: email, to: first_writer_while_absent, topic: copy_nudge }
