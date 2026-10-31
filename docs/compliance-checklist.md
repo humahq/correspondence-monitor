@@ -5,16 +5,19 @@ Part I is the developer's part. It has 71 requirements. Part II (policies, contr
 
 This list is fixed: the same 71 IDs, in the document's order. Only the boxes change.
 
-Status on 30 Oct 2026: **45 done, 18 partly done, 6 not done, 2 later (V2).**
+Status on 30 Oct 2026: **47 done, 18 partly done, 4 not done, 2 later (V2).**
 
-## Done (45)
+Built on 30 Oct and waiting to be merged and deployed: retention setting (PR #13), safety routing (PR #15),
+write-once store (PR #17), records export (PR #19), protocol version per site (PR #21).
+
+## Done (47)
 
 - [x] CAP-01 Original bytes preserved
 - [x] CAP-02 Hash-linked derivations
 - [x] CAP-03 Teams mutability
 - [x] CAP-04 Authoritative timestamps
 - [x] CAP-05 Inbound source integrity
-- [x] CAP-06 Study authorization at ingestion (a message from someone not on the study's people list is kept and read, but goes only to the admins: no alert, chat post, reply or digest line. Built 30 Oct, not deployed yet)
+- [x] CAP-06 Study authorization at ingestion (a message from someone not on the study's people list is kept and read, but goes only to the admins: no alert, chat post, reply or digest line.)
 - [x] CAP-07 Ingestion completeness
 - [x] CAP-08 Coverage statements
 - [x] OUT-04 Template and content guardrails
@@ -28,6 +31,7 @@ Status on 30 Oct 2026: **45 done, 18 partly done, 6 not done, 2 later (V2).**
 - [x] QAA-04 Q&A validation (the question test set now blocks a release if it scores too low)
 - [x] QAA-05 Physician handling (templates are versioned config, changed only through a tested pull request)
 - [x] SAF-06 Safety routing validation
+- [x] SAF-07 Safety routing record (each safety message and where it was sent is in the records export, `safety.csv`. PR #19)
 - [x] SAF-10 Site notice never fires for safety
 - [x] SAF-11 Negative assurance
 - [x] DSP-03 Roster authority check
@@ -45,39 +49,40 @@ Status on 30 Oct 2026: **45 done, 18 partly done, 6 not done, 2 later (V2).**
 - [x] ARC-02 Open-system controls (11.30)
 - [x] ARC-03 Operational sequence checks
 - [x] SDL-02 Change linking
-- [x] SDL-03 Environment isolation (only the live bot may read or send real mail and chat; a copy that is not the live bot will not open the live database or a backup of it, and will not download the off-server backups. Built 30 Oct, not deployed yet)
+- [x] SDL-03 Environment isolation (only the live bot may read or send real mail and chat; a copy that is not the live bot will not open the live database or a backup of it, and will not download the off-server backups)
 - [x] SDL-05 Regression blocking
 - [x] SEC-02 Dependency and SBOM scanning in CI
 - [x] SEC-04 Two-person rule for destructive actions
-- [x] PRV-04 Non-production isolation (the same checks as SDL-03. Built 30 Oct, not deployed yet)
-- [x] BCK-01 Backup automation and recovery targets (built and deployed; copies to Google Cloud Storage start once Eliot approves the bucket setting)
+- [x] PRV-04 Non-production isolation (the same checks as SDL-03)
+- [x] BCK-01 Backup automation and recovery targets (built and deployed; copies to Google Cloud Storage start once Eliot approves settings version 61)
 - [x] SUP-02 Model lifecycle controls
 - [x] VAL-05 Revalidation triggers
 - [x] GOV-02 Drift monitoring
+- [x] EXP-01 MVP export procedure (`cormon export-records`: one zip per study with originals and their hashes, alerts and every change to them, safety routing, sent messages, audit trail, AI log and settings history, plus the integrity checks. CSV, not PDF. PR #19)
 
 ## Partly done (18)
 
 | ID | Name | What is left |
 |---|---|---|
-| CAP-09 | Prompt-injection defense | 2 tricks still fool the bot; the trick test set is small (20). Parked |
+| CAP-09 | Prompt-injection defense | 2 tricks still fool the bot; the trick test set is small (20). Research and a plan in `docs/prompt-injection-research.md` |
 | CAP-10 | Second-copy governance | No written rule for how long the mailbox keeps mail |
-| OUT-01 | Sent-message records | Sent messages are stored and checked, but not in write-once storage (Phase 3) |
+| OUT-01 | Sent-message records | A write-once copy now goes to a separate database (PR #17), a stand-in: the locked bucket is Phase 3 |
 | OUT-02 | Outbound domain authentication | DMARC `p=reject` on the sending domain (a DNS task) |
 | OUT-03 | LLM output never routes | The AI still decides "whether" in 3 places (doctor check, careful check, clear by reply) |
 | QAA-06 | No clinical judgment | A judgment in a final answer is recorded, not blocked. Needs real answers to measure |
-| SAF-02 | Detection and routing | Safety mail is caught but goes to nobody: we need the medical monitor's email |
-| SAF-07 | Safety routing record | The record exists, but it is not in an export yet |
+| SAF-02 | Detection and routing | Safety mail goes, unassessed, to the medical monitor (PR #15), but the address is a stand-in (john+medicalmonitor@huma.ai) until the sponsor names one |
 | DSP-01 | Deterministic disposition grammar | No fixed "token + action + reason" reply format; the AI reads the reply |
 | DSP-04 | Reason and visibility | A clear by reply gets the code "by_reply"; waits on DSP-01 |
 | IAM-01 | Operator access | MFA depends on the Google Workspace setting |
 | IAM-04 | Key management | No separate key-admin role; no key rotation |
-| AUD-02 | Immutability via compensating controls | No separate write-once store (Phase 3) |
+| AUD-02 | Immutability via compensating controls | Each audit entry is copied to a separate write-once database and checked daily (PR #17); someone with the file can still drop its triggers, so the locked bucket is Phase 3 |
 | ARC-04 | Availability controls | Alerts go by email, not by pager (Phase 3) |
 | SDL-01 | Version control and peer review | GitHub does not force a review before merge (main branch is not protected) |
 | SEC-01 | Encryption | No app-level encryption or customer-owned key |
 | SEC-03 | Secrets and credentials | Some secrets still in env vars and files; no rotation |
 | PRV-01 | PHI handling | No consent-form coverage check when a study starts |
-## Not done (6)
+| VAL-04 | Per-site protocol version effectivity | An alert checked against a version the site was not on that day is held for a person (PR #21). Only one version per document is loaded, and the sites have no version dates yet |
+## Not done (4)
 
 | ID | Name | What is missing |
 |---|---|---|
@@ -85,8 +90,6 @@ Status on 30 Oct 2026: **45 done, 18 partly done, 6 not done, 2 later (V2).**
 | SAF-04 | Acknowledgment is a disposition | The medical monitor cannot acknowledge a safety alert |
 | SAF-05 | Escalation and terminus | No escalation chain (PV backup, then ClinOps lead, then a person by phone) |
 | DSP-02 | Echo-back confirmation | No "reply CONFIRM" step before a clear takes effect |
-| EXP-01 | MVP export procedure | Export gives the rules, not a study's records package |
-| VAL-04 | Per-site protocol version effectivity | No protocol version by site and date |
 
 SAF-03, SAF-04 and SAF-05 all need the medical monitor's contact (and a backup) first.
 
