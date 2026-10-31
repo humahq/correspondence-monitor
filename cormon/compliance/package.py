@@ -91,11 +91,17 @@ def build(study_id: str, out: Path, since: str | None = None, until: str | None 
         if a["state"] != "out_of_scope":
             continue
         routes = [o for o in sent if o["item_id"] == a["id"]]
+        received = db.q1("SELECT received_at, sha256 FROM messages WHERE id=?", (a["first_message_id"],))
         for o in routes or [{}]:
             safety.append({"alert": a["id"], "message": a["first_message_id"], "participant": a["participant_id"],
-                           "site": a["site"], "found_at": a["created_at"], "why": a["reasoning"],
-                           "sent_to": o.get("to_addrs"), "send_status": o.get("status") or "not sent",
-                           "sent_at": o.get("sent_at"), "outbox": o.get("id")})
+                           "site": a["site"], "received_at": received["received_at"] if received else None,
+                           "message_sha256": received["sha256"] if received else None, "found_at": a["created_at"],
+                           "why": a["reasoning"], "severity": a.get("severity"), "ack_due_at": a.get("ack_due_at"),
+                           "acknowledged_at": a.get("acked_at"), "acknowledged_by": a.get("acked_by"),
+                           "escalation_step": a.get("escalation_step"), "deviation_at": a.get("ack_deviation_at"),
+                           "email": o.get("purpose"), "sent_to": o.get("to_addrs"), "cc": o.get("cc_addrs"),
+                           "send_status": o.get("status") or "not sent", "sent_at": o.get("sent_at"),
+                           "outbox": o.get("id")})
 
     w, wa = _window("ts", since, until)
     calls = _rows(f"SELECT * FROM ai_log WHERE study_id=?{w} ORDER BY id", [study_id, *wa])
@@ -140,8 +146,11 @@ def build(study_id: str, out: Path, since: str | None = None, until: str | None 
                                                "evidence", "reasoning"]))
         z.writestr("dispositions.csv", _csv(dispositions, ["ts", "entity_id", "action", "actor", "actor_type",
                                                            "details"]))
-        z.writestr("safety.csv", _csv(safety, ["alert", "message", "participant", "site", "found_at", "why",
-                                               "sent_to", "send_status", "sent_at", "outbox"]))
+        z.writestr("safety.csv", _csv(safety, ["alert", "message", "participant", "site", "received_at",
+                                               "message_sha256", "found_at", "why", "severity", "ack_due_at",
+                                               "acknowledged_at", "acknowledged_by", "escalation_step",
+                                               "deviation_at", "email", "sent_to", "cc", "send_status", "sent_at",
+                                               "outbox"]))
         z.writestr("sent.csv", _csv(sent, ["id", "created_at", "sent_at", "status", "purpose", "channel",
                                            "destination", "template_id", "item_id", "message_id", "from_addr",
                                            "to_addrs", "cc_addrs", "subject", "body", "sha256", "last_error"]))

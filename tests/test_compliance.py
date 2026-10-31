@@ -1419,6 +1419,8 @@ def test_the_records_package_holds_a_study_and_shows_a_changed_original(tmp_path
     raw = next(r for r in t["manifest.csv"] if r["kind"] == "message_raw")
     assert z.read(raw["file"]) == b'{"text": "admitted"}'
     assert t["safety.csv"][0]["sent_to"] == '["mm@sponsor.org"]' and t["safety.csv"][0]["send_status"] == "queued"
+    assert {"received_at", "message_sha256", "acknowledged_by", "escalation_step", "deviation_at"} <= \
+        set(t["safety.csv"][0])
     assert t["alerts.csv"][0]["state_label"] == "safety (not assessed)"
     assert not any(r["entity_id"] == str(other) for r in t["audit_trail.csv"] if r["entity_type"] == "message")
     assert "Audit chain: intact" in z.read("README.txt").decode()
@@ -1502,8 +1504,9 @@ def test_a_safety_message_is_severe_by_the_word_list_and_gets_its_clock():
     assert safety.severity(study, "the deadline for the visit") == ("standard", None)
     iid = _safety_item(study, "DNL-1012 was hospitalized after a fall.")
     it = items.get(iid)
-    due = datetime.fromisoformat(it["ack_due_at"]) - datetime.now(timezone.utc)
-    assert it["severity"] == "severe" and timedelta(minutes=58) < due <= timedelta(minutes=60)
+    received = datetime.fromisoformat(capture.message(it["first_message_id"])["received_at"])
+    assert it["severity"] == "severe"
+    assert datetime.fromisoformat(it["ack_due_at"]) == received + timedelta(minutes=60)   # from ingestion
     mail = db.q1("SELECT subject, body, cc_addrs FROM outbox WHERE item_id=?", (iid,))
     assert mail["subject"].startswith("Severe:") and f"ACK {safety.ack_code(it)}" in mail["body"]
     assert "within 1 hour" in mail["body"] and study.people_with_role("cra")[0].email in mail["cc_addrs"]
@@ -1528,6 +1531,10 @@ def test_an_unacknowledged_safety_message_goes_up_the_chain_then_to_a_phone(monk
     assert seq[3] == ("email-safety-phone", "john+safetyoncall@huma.ai") and seq[4][1] == "ops@huma.ai"
     assert sum(1 for t, _ in seq if t == "email-safety-phone") == 4         # the terminus and 3 reminders
     assert items.get(iid)["next_step_at"] is None                         # then it stops
+    dev = db.q("SELECT details FROM audit_log WHERE action='safety_ack_deviation'")
+    assert len(dev) == 1 and items.get(iid)["ack_deviation_at"]            # recorded once, as a deviation
+    assert [r["role"] for r in db.unjs(dev[0]["details"])["unanswered"]] == \
+        ["medical_monitor", "pv_backup", "clinops_lead"]
     assert safety.escalate(log=lambda *_: None) == []
 
 
@@ -1545,8 +1552,13 @@ def test_the_medical_monitor_acknowledges_by_reply_and_the_chain_stops(monkeypat
                                        body_text=text, rfc_message_id=f"<ack{n}@x.org>", study_id=study.study_id))
 
     crc = study.people_with_role("crc")[0].email
-    assert not safety.handle_ack(capture.message(reply(1, crc, f"ACK {code}")))              # not in the chain
-    assert db.q1("SELECT 1 FROM audit_log WHERE action='safety_ack_refused'")
+    assert not safety.handle_ack(capture.message(reply(1, crc, f"ACK {code}")))              # not allowed
+    assert not safety.handle_ack(capture.message(reply(4, "john@huma.ai", f"ACK {code}")))   # nor the ClinOps lead
+    assert not safety.handle_ack(capture.message(reply(5, "someone@else.org", f"ACK {code}")))  # nor a stranger
+    told = db.q("SELECT to_addrs FROM outbox WHERE template_id='email-safety-ack-refused' ORDER BY id")
+    assert [db.unjs(o["to_addrs"]) for o in told] == [[crc], ["john@huma.ai"]]        # the stranger is told nothing
+    assert len(db.q("SELECT 1 FROM audit_log WHERE action='safety_ack_refused'")) == 3
+    assert items.get(iid)["acked_at"] is None
     monitor = "john+medicalmonitor@huma.ai"
     assert not safety.handle_ack(capture.message(reply(2, monitor, f"ACK S{iid}-0000")))          # wrong code
     out = pipeline.process(reply(3, monitor, f"Seen, thanks.\n\nack {code.lower()}"))
@@ -1561,12 +1573,16 @@ def test_an_admin_records_a_phoned_acknowledgment(capsys):
     from cormon import cli, config, items
 
     iid = _safety_item(config.study("NCT05842941"), "DNL-1012 had a seizure.")
-    cli.main(["--as", "ann", "ack", str(iid), "--note", "phoned the medical monitor"])
+    with pytest.raises(SystemExit, match="cannot acknowledge"):
+        cli.main(["--as", "ann", "ack", str(iid), "--by", "john-clinops", "--note", "phoned"])
+    cli.main(["--as", "ann", "ack", str(iid), "--by", "pv-backup", "--note", "phoned at 14:10"])
     assert "escalation stopped" in capsys.readouterr().out
-    assert items.get(iid)["acked_by"] == "ann"
+    assert items.get(iid)["acked_by"] == "John (safety backup stand-in) <john+pvbackup@huma.ai>"
+    a = db.q1("SELECT actor, details FROM audit_log WHERE action='safety_acknowledged'")
+    assert a["actor"] == "ann" and '"how": "phone"' in a["details"]
+    _item(999, kind="finding")
     with pytest.raises(SystemExit, match="not a safety item"):
-        _item(999, kind="finding")
-        cli.main(["--as", "ann", "ack", "999", "--note", "x"])
+        cli.main(["--as", "ann", "ack", "999", "--by", "medical-monitor", "--note", "x"])
 
 
 def test_a_message_with_a_safety_part_sends_no_notice_back_to_the_site(monkeypatch):

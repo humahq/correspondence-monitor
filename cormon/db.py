@@ -496,6 +496,7 @@ MIGRATIONS = {
     ("items", "acked_by"): "ALTER TABLE items ADD COLUMN acked_by TEXT",
     ("items", "escalation_step"): "ALTER TABLE items ADD COLUMN escalation_step INTEGER NOT NULL DEFAULT 0",
     ("items", "next_step_at"): "ALTER TABLE items ADD COLUMN next_step_at TEXT",
+    ("items", "ack_deviation_at"): "ALTER TABLE items ADD COLUMN ack_deviation_at TEXT",
 }
 # run once, right after the column is added
 BACKFILL = {

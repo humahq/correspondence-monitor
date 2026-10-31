@@ -388,7 +388,24 @@ templates:
 
       The full message: {{ item.link }}
 
-      Please acknowledge by replying with: ACK {{ safety.ack_code }}
+      Only the medical monitor or the safety backup can acknowledge it, by replying with: ACK {{ safety.ack_code }}
+      If that is not you, please make sure one of them sees it now.
+
+      {{ study.monitor_signature }}
+
+  - id: email-safety-ack-refused
+    topic: safety_ack_refused
+    recipient: "*"
+    channel: email
+    severity: "*"
+    subject: "Not recorded: acknowledgment {{ safety.ack_code }} · {{ study.short_name }}"
+    body: |
+      {{ recipient.first_name }},
+
+      Your reply with ACK {{ safety.ack_code }} was not recorded. Only the medical monitor or the safety backup can acknowledge a possible safety message, so it is still going up the safety contact list.
+
+      If you have reached the medical monitor, please ask them to reply with: ACK {{ safety.ack_code }}
+      Or ask the study team to record who acknowledged it by phone.
 
       {{ study.monitor_signature }}
 
@@ -401,7 +418,7 @@ templates:
     body: |
       {{ recipient.first_name }},
 
-      A possible safety message ({{ safety.severity_label }}) has not been acknowledged by anyone on the safety contact list. It was due by {{ safety.due }}. Please phone the medical monitor now.
+      A possible safety message ({{ safety.severity_label }}) has not been acknowledged by anyone on the safety contact list. It was due by {{ safety.due }}. This is now recorded as a deviation. Please phone the medical monitor now.
 
       Phone numbers on file: {{ safety.phones }}
 
@@ -413,7 +430,8 @@ templates:
 
       The full message: {{ item.link }}
 
-      When someone has it, reply with: ACK {{ safety.ack_code }}
+      When the medical monitor or the safety backup has it, they reply with: ACK {{ safety.ack_code }}
+      Or the study team records who answered the phone (cormon ack {{ item.id }} --by <person> --note "phoned").
 
       {{ study.monitor_signature }}
 

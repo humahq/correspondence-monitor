@@ -3,17 +3,21 @@ decides none of it.
 
 Severity (SAF-03): severe when the message has a word from the severe list (the `safety:` part of
 config/routing.yaml, plus the study file's own `safety.severe_words`), otherwise standard. Severity is routing
-metadata, not a clinical judgment: it sets the clock, 1 hour (severe) or 24 hours (standard), to acknowledge.
+metadata, not a clinical judgment: it sets the clock, 1 hour (severe) or 24 hours (standard), to acknowledge. The
+clock starts when the message was received (ingestion), not when the bot read it.
 
-Acknowledgment (SAF-04): someone in the chain replies with "ACK <code>" (the code is in every safety email), from
-an address on the study's people list that passes the sender check, or an admin records it with `cormon ack`
-(after a phone call). It is a disposition: who, when and how, in the audit trail. A safety item is still never
-cleared or disregarded.
+Acknowledgment (SAF-04): only the medical monitor or the safety backup (`safety.ack_roles`) acknowledges: by
+replying "ACK <code>" (the code is in every safety email) from their address on the study's people list, passing
+the sender check, or by phone, which an admin records with `cormon ack N --by <person>` naming who answered. It is
+a disposition: who, when, how and who recorded it, in the audit trail. Anyone else on the people list who replies
+is told it did not count; a sender not on the list, or failing the sender check, is told nothing. A safety item is
+still never cleared or disregarded.
 
 Escalation (SAF-05): not acknowledged in time, the next role in `safety.chain` is emailed, each step after
 `step_minutes`: the backup safety contact, then the ClinOps lead, then the terminus, the on-call person, asked to
-phone the medical monitor, and the admins. The terminus is reminded `terminus_reminders` times. The chain stops at
-the first acknowledgment. A step with no one to email is recorded and passed over.
+phone the medical monitor, and the admins. Reaching the terminus is recorded as a deviation (ack_deviation_at, with
+the steps that went unanswered). The terminus is reminded `terminus_reminders` times. The chain stops at the first
+acknowledgment. A step with no one to email is recorded and passed over.
 """
 
 from __future__ import annotations
@@ -26,7 +30,8 @@ from . import config, db, drafting, items, senders
 from .config import Study
 
 DEFAULTS = {"ack_minutes": {"severe": 60, "standard": 1440}, "step_minutes": {"severe": 30, "standard": 240},
-            "chain": ["pv_backup", "clinops_lead", "safety_on_call"], "terminus_reminders": 3, "severe_words": []}
+            "chain": ["pv_backup", "clinops_lead", "safety_on_call"], "terminus_reminders": 3, "severe_words": [],
+            "ack_roles": ["medical_monitor", "pv_backup"]}
 ACK = re.compile(r"\bACK[\s:#-]*(S\d+-[A-Z0-9]{4})\b", re.I)
 
 
@@ -48,8 +53,9 @@ def ack_code(item: dict) -> str:
     return f"S{item['id']}-{hashlib.sha256(item['link_token'].encode()).hexdigest()[:4].upper()}"
 
 
-def _at(minutes: int) -> str:
-    return (datetime.now(timezone.utc) + timedelta(minutes=int(minutes))).isoformat(timespec="seconds")
+def _at(minutes: int, base: str | None = None) -> str:
+    start = datetime.fromisoformat(base) if base else datetime.now(timezone.utc)
+    return (start.astimezone(timezone.utc) + timedelta(minutes=int(minutes))).isoformat(timespec="seconds")
 
 
 def _hours(minutes: int) -> str:
@@ -77,15 +83,25 @@ def start(item_id: int, msg: dict) -> None:
     c = conf(study)
     if item.get("severity") and (item["acked_at"] or item["severity"] == "severe" or sev != "severe"):
         return
-    due = _at(c["ack_minutes"][sev])
+    due = _at(c["ack_minutes"][sev], msg.get("received_at"))
     db.ex("UPDATE items SET severity=?, ack_due_at=?, next_step_at=?, updated_at=? WHERE id=?",
           (sev, due, due, db.now(), item_id))
     db.audit("safety_severity_set", entity_type="item", entity_id=item_id, study_id=study.study_id,
              severity=sev, word=word, ack_due_at=due, message_id=msg["id"], raised=bool(item.get("severity")))
 
 
+def ack_person(study: Study, person_id: str):
+    """The person named as having acknowledged (by phone): on the study's list, in an acknowledging role."""
+    p = study.person(person_id)
+    roles = conf(study)["ack_roles"]
+    if p is None or not set(roles) & set(p.roles):
+        names = ", ".join(q.id for q in study.people if set(roles) & set(q.roles)) or "nobody is listed"
+        raise ValueError(f"{person_id} cannot acknowledge a safety message; who can: {names}")
+    return p
+
+
 def acknowledge(item_id: int, who: str, how: str, *, actor_type: str, note: str | None = None,
-                message_id: int | None = None) -> bool:
+                message_id: int | None = None, recorded_by: str | None = None) -> bool:
     item = items.get(item_id)
     if item["kind"] != "out_of_scope":
         raise ValueError(f"#{item_id} is not a safety item")
@@ -96,8 +112,9 @@ def acknowledge(item_id: int, who: str, how: str, *, actor_type: str, note: str 
     now = db.now()
     db.ex("UPDATE items SET acked_at=?, acked_by=?, next_step_at=NULL, updated_at=? WHERE id=?",
           (now, who, now, item_id))
-    db.audit("safety_acknowledged", entity_type="item", entity_id=item_id, study_id=item["study_id"], actor=who,
-             actor_type=actor_type, how=how, note=note, message_id=message_id, severity=item.get("severity"),
+    db.audit("safety_acknowledged", entity_type="item", entity_id=item_id, study_id=item["study_id"],
+             actor=recorded_by or who, actor_type=actor_type, acknowledged_by=who, how=how, note=note,
+             message_id=message_id, severity=item.get("severity"),
              ack_due_at=item.get("ack_due_at"), late=bool(item.get("ack_due_at") and now > item["ack_due_at"]),
              escalation_step=item.get("escalation_step"))
     return True
@@ -119,13 +136,15 @@ def handle_ack(msg: dict) -> bool:
             continue
         study = config.study(item["study_id"])
         person = study.person_by_email(msg.get("from_addr"))
-        allowed = {"medical_monitor", "clinops_lead", *conf(study)["chain"]}
+        wrong_role = person is not None and not set(conf(study)["ack_roles"]) & set(person.roles)
         why = ("the sender check failed" if senders.failed(msg) else "the sender is not on the study's people list"
-               if person is None else "the sender's role is not in the safety chain"
-               if not allowed & set(person.roles) else None)
+               if person is None else "only the medical monitor or the safety backup can acknowledge"
+               if wrong_role else None)
         if why:
+            told = _send(study, item, [person], "safety_ack_refused", again=True) \
+                if wrong_role and not senders.failed(msg) and person.email else []
             db.audit("safety_ack_refused", entity_type="item", entity_id=item["id"], study_id=study.study_id,
-                     message_id=msg["id"], code=code, sender=msg.get("from_addr"), why=why)
+                     message_id=msg["id"], code=code, sender=msg.get("from_addr"), why=why, told=told or None)
             continue
         acknowledge(item["id"], f"{person.name} <{person.email}>", "reply", actor_type="medical",
                     message_id=msg["id"])
@@ -170,12 +189,22 @@ def escalate(log=print) -> list[int]:
         people = [p for p in study.people_with_role(role, item.get("site")) if p.email]
         item = dict(item, escalation_step=min(step, last))
         sent = _send(study, item, people, "safety_phone" if terminus else "safety_escalation", again=reminder > 0)
+        if terminus and not item.get("ack_deviation_at"):
+            rungs = [{"step": 0, "role": "medical_monitor", "at": item["created_at"]}] + [
+                {"step": d.get("step"), "role": d.get("role"), "at": r["ts"]}
+                for r in db.q("SELECT ts, details FROM audit_log WHERE action='safety_escalated' AND entity_type='item'"
+                              " AND entity_id=? ORDER BY id", (str(item["id"]),)) for d in [db.unjs(r["details"], {})]]
+            db.ex("UPDATE items SET ack_deviation_at=? WHERE id=?", (db.now(), item["id"]))
+            db.audit("safety_ack_deviation", entity_type="item", entity_id=item["id"], study_id=study.study_id,
+                     severity=sev, ack_due_at=item["ack_due_at"], unanswered=rungs,
+                     note="not acknowledged by the end of the safety chain: a deviation (SAF-05, TRN-04)")
         if terminus:
             alerts.notify(f"safety:{item['id']}", f"Safety message not acknowledged: {study.study_id} #{item['id']}",
                           f"Safety alert #{item['id']} ({sev}) was due to be acknowledged by "
                           f"{drafting.local_time(item['ack_due_at'])} and nobody has. Phone the medical monitor now. "
-                          f"Phone numbers: {context(study, item)['phones']}.\n\nWhen they have it, record it: "
-                          f"cormon ack {item['id']} --note \"phoned <name>\"\n\n{drafting.item_link(item)}",
+                          f"Phone numbers: {context(study, item)['phones']}. This is recorded as a deviation.\n\n"
+                          f"When the medical monitor or the safety backup has it, record who: cormon ack {item['id']} "
+                          f"--by <person id> --note \"phoned\"\n\n{drafting.item_link(item)}",
                           every_minutes=0)
         done = terminus and reminder >= c["terminus_reminders"]
         db.ex("UPDATE items SET escalation_step=?, next_step_at=?, updated_at=? WHERE id=?",

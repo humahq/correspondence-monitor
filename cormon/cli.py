@@ -459,14 +459,21 @@ def cmd_safety(args):
         r["code"] = safety.ack_code(r)
         r["due"] = local_time(r["ack_due_at"]) if r["ack_due_at"] else "-"
         r["ack"] = f"{local_time(r['acked_at'])} {r['acked_by']}" if r["acked_at"] else "NOT YET"
+        r["dev"] = "yes" if r["ack_deviation_at"] else ""
     table(rows, [("id", "id", 5), ("participant_id", "participant", 11), ("severity", "severity", 9),
-                 ("due", "due", 18), ("escalation_step", "step", 5), ("code", "code", 10), ("ack", "acknowledged", 50)])
+                 ("due", "due", 18), ("escalation_step", "step", 5), ("dev", "deviation", 10), ("code", "code", 10),
+                 ("ack", "acknowledged", 50)])
 
 
 def cmd_ack(args):
     from . import safety
     try:
-        done = safety.acknowledge(args.id, actor(args), "operator", actor_type="operator", note=args.note)
+        item = items.get(args.id)
+        if item["kind"] != "out_of_scope":
+            raise ValueError(f"#{args.id} is not a safety item")
+        p = safety.ack_person(config.study(item["study_id"]), args.by)
+        done = safety.acknowledge(args.id, f"{p.name} <{p.email}>", "phone", actor_type="operator", note=args.note,
+                                  recorded_by=actor(args))
     except (KeyError, ValueError) as e:
         sys.exit(f"refused: {e}")
     print(f"#{args.id} acknowledged; escalation stopped" if done else f"#{args.id} was already acknowledged")
@@ -1112,7 +1119,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--limit", type=int, default=30); s.set_defaults(fn=cmd_safety)
     s = sub.add_parser("ack", help="record that a safety message was acknowledged (for example by phone); "
                                    "stops its escalation")
-    s.add_argument("id", type=int); s.add_argument("--note", required=True, help='how, e.g. "phoned Dr Smith"')
+    s.add_argument("id", type=int)
+    s.add_argument("--by", required=True, help="the person id (study file) of the medical monitor or safety backup "
+                                               "who acknowledged")
+    s.add_argument("--note", required=True, help='how, e.g. "phoned at 14:10"')
     s.set_defaults(fn=cmd_ack)
 
     s = sub.add_parser("draft", help="force drafts to be produced for an item")

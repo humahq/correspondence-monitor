@@ -30,10 +30,10 @@ sponsor names the real people: put their names, emails and phones in the study f
 - [x] QAA-03 Standing answer disclaimer
 - [x] QAA-04 Q&A validation (the question test set now blocks a release if it scores too low)
 - [x] QAA-05 Physician handling (templates are versioned config, changed only through a tested pull request)
-- [x] SAF-03 Severity as routing metadata (severe when the message has a word from a fixed list, `safety.severe_words` in config/routing.yaml, plus the study's own; acknowledge within 1 hour if severe, 24 hours if not. The list is our draft for the sponsor's safety team to approve)
-- [x] SAF-04 Acknowledgment is a disposition (the medical monitor replies "ACK <code>", checked by code against the people list and the sender check; or an admin records a phoned acknowledgment with `cormon ack`. Who, when and how are audited; the item is never cleared)
+- [x] SAF-03 Severity as routing metadata (severe when the message has a word from a fixed list, `safety.severe_words` in config/routing.yaml, plus the study's own; acknowledge within 1 hour if severe, 24 hours if not, counted from when the message was received. The list is our draft for the sponsor's safety team to approve)
+- [x] SAF-04 Acknowledgment is a disposition (only the medical monitor or the safety backup: they reply "ACK <code>", checked by code against the people list, their role and the sender check; or an admin records which of them answered the phone with `cormon ack N --by <person>`. Anyone else on the list who replies is told it did not count. Who, when, how and who recorded it are audited; the item is never cleared)
 - [x] SAF-06 Safety routing validation
-- [x] SAF-07 Safety routing record (each safety message and where it was sent is in the records export, `safety.csv`. PR #19)
+- [x] SAF-07 Safety routing record (each safety message in the records export, `safety.csv`: received time and hash, severity, where it was sent, who acknowledged and when, how far it escalated, and any deviation)
 - [x] SAF-10 Site notice never fires for safety
 - [x] SAF-11 Negative assurance
 - [x] DSP-03 Roster authority check
@@ -73,7 +73,7 @@ sponsor names the real people: put their names, emails and phones in the study f
 | OUT-03 | LLM output never routes | The AI still decides "whether" in 3 places (doctor check, careful check, clear by reply) |
 | QAA-06 | No clinical judgment | A judgment in a final answer is recorded, not blocked. Needs real answers to measure |
 | SAF-02 | Detection and routing | Safety mail goes, unassessed, to the medical monitor with the CRA copied, but the address is a stand-in (john+medicalmonitor@huma.ai) until the sponsor names one |
-| SAF-05 | Escalation and terminus | Built: not acknowledged in time, it goes to the safety backup, then the ClinOps lead, then the on-call person and the admins are told to phone (3 reminders). The contacts are stand-ins and no phone numbers are on file yet |
+| SAF-05 | Escalation and terminus | Built: not acknowledged in time, it goes to the safety backup, then the ClinOps lead, then the on-call person and the admins are told to phone (3 reminders); reaching that last step is recorded as a deviation, with the steps that went unanswered. The contacts are stand-ins and no phone numbers are on file yet |
 | DSP-01 | Deterministic disposition grammar | No fixed "token + action + reason" reply format; the AI reads the reply |
 | DSP-04 | Reason and visibility | A clear by reply gets the code "by_reply"; waits on DSP-01 |
 | IAM-01 | Operator access | MFA depends on the Google Workspace setting |
