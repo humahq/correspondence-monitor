@@ -31,13 +31,15 @@ if [ "$NOW" != "$MACHINE" ]; then
   "${G[@]}" instances start "$VM" --zone "$ZONE"
   AFTER=$("${G[@]}" instances describe "$VM" --zone "$ZONE" --format 'get(networkInterfaces[0].accessConfigs[0].natIP)')
   [ "$AFTER" = "$IP" ] || echo "WARNING: the address changed from $IP to $AFTER" >&2
-  sleep 30
 fi
 
-"${G[@]}" scp --zone "$ZONE" --tunnel-through-iap "$(dirname "$0")/hindsight.sh" "$VM":/tmp/hindsight.sh 2>/dev/null
+echo -n "waiting for SSH "
+for _ in $(seq 30); do "${SSH[@]}" --command true >/dev/null 2>&1 && break; echo -n .; sleep 10; done
+echo
+"${G[@]}" scp --zone "$ZONE" --tunnel-through-iap "$(dirname "$0")/hindsight.sh" "$VM":/tmp/hindsight.sh
 "${SSH[@]}" --command "set -e
   sudo install -m 755 -o root /tmp/hindsight.sh /opt/cormon/deploy/hindsight.sh
   sudo CORMON_HOME=/opt/cormon bash /opt/cormon/deploy/hindsight.sh
   for i in \$(seq 12); do curl -fsS 127.0.0.1:8091/health >/dev/null && break; sleep 5; done
   systemctl is-active -q cormon && curl -fsS 127.0.0.1:8091/health >/dev/null && echo 'the bot is healthy'
-  free -m | head -2" 2>/dev/null
+  free -m | head -2"
