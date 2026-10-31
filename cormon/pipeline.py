@@ -11,7 +11,7 @@ from . import (answers, asks, capture, careful, checks, config, conversation, db
                outbox, reader, routing, senders, settings, textutil, timing, triage)
 from .compliance import records
 from .config import Study
-from . import drafting, safety
+from . import drafting, hindsight, safety
 from .drafting import item_link, local_time
 
 SAFETY_TITLE = "Safety information received; not reviewed by this monitor (out of scope)"
@@ -529,6 +529,7 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
             return summary
 
         study = config.study(msg["study_id"])
+        hindsight.save_message(study, msg, _own_text(msg.get("body_text") or ""))
         if not rerun:
             timing.step("receipt")
             try:  # a receipt that fails must not stop the read

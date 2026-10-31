@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import secrets
 
-from . import config, db
+from . import config, db, hindsight
 from .config import Study
 
 OVERRIDABLE = ("tier", "recipient_person", "send_draft", "counts")
@@ -60,6 +60,7 @@ def upsert(*, study: Study, thread_key: str, message_id: int, dedup_key: str, ki
              kind=kind, tier=tier, tier_reason=tier_reason, pattern_class=pattern_class, rule_id=rule_id,
              participant_id=participant_id, recipient=recipient, recipient_reason=reason,
              message_id=message_id, evidence=evidence, reasoning=reasoning)
+    hindsight.save_alert(item_id, kind=kind, participant_id=participant_id)
     return item_id, True
 
 
@@ -205,6 +206,7 @@ def set_state(item_id: int, state: str, actor: str, actor_type: str = "operator"
     db.audit(f"item_{state}", entity_type="item", entity_id=item_id, study_id=item["study_id"],
              actor=actor, actor_type=actor_type, old_state=item["state"], reason=reason, code=code,
              code_label=REASON_CODES.get(code))
+    hindsight.save_alert(item_id, kind=item["kind"], participant_id=item["participant_id"])
 
 
 def history(item_id: int) -> list[dict]:

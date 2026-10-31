@@ -1812,7 +1812,8 @@ def test_every_code_file_is_tied_to_a_test_set_or_known_to_need_none():
     none_needed = {  # operator tools, records, alerts and pages: covered by the code tests only
         "__init__", "adminview", "backup", "cli", "compare", "corrections", "coverage", "digest", "drift", "export",
         "notes", "prune", "senders", "settings", "stuck", "timing", "watchdog", "weblogin", "webview",
-        "outbox"}  # its AI set (the trick emails) is left out for now
+        "outbox",   # its AI set (the trick emails) is left out for now
+        "hindsight"}  # off in the AI sets until its own memory set (docs/hindsight-plan.md, step 8)
     from pathlib import Path
     for f in sorted((gate.REPO / "cormon").glob("*.py")):
         rel = f"cormon/{f.name}"

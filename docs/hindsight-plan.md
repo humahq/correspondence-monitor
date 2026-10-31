@@ -41,6 +41,20 @@ when there is data to keep.
 - No clear participant: nothing is linked; the fact is listed for a person to link. (email; 28 Oct)
 - What was done about each problem is saved too. (30 Oct)
 
+Built (`cormon/hindsight.py`, off until `memory.enabled` is on): one bank per study; each message from someone
+on the study's people list goes to Hindsight in the background as the check starts; the bot's own alerts and
+their status changes are saved for their participant. Hindsight's AI (the bot's default model, about 3,800 tokens
+a message) tags each fact with its participant. It writes codes in more than one way ('1001-022', '1001022') and
+tags cannot be edited, so `participant_tags` matches the spellings with the bot's own code rule. Every save and
+failure is in the audit trail; a failure emails the admins and never stops the read. `cormon test` with
+`CORMON_TEST_MEMORY=1` uses a separate test bank, emptied for each run.
+Made-up check (`demo/test-hindsight`, 5 messages): gout kept for 1001-014; the BP typo kept only as 140/90; two
+participants in one message kept apart; "the patient" with no code tagged to nobody; the fall-date correction
+kept for 1001-022 as replacing the earlier date. A bare "014" does not find "1001-014", the same as the bot's
+dates memory today.
+To switch on live: run `deploy/hindsight.sh` there again (so it uses OpenAI) and set `memory.enabled: true`
+through a settings change, which waits for Eliot to approve settings version 61.
+
 **4. Use the facts (1 day).**
 Each new message first makes a quick Hindsight search (28 Oct). Answers can link facts across threads and years,
 with the date of the earlier message (28 Oct, gout example). If the search is slow, the bot goes on without memory

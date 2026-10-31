@@ -4,7 +4,9 @@
 #     ./deploy/hindsight.sh
 # It listens only on this machine (127.0.0.1:8888) and every call needs the key in secrets/hindsight_key.
 # Its data is in the Docker volume hindsight-data and is kept across updates.
-# Nothing in the bot uses it yet; that comes with plan steps 3 and 4 (docs/hindsight-plan.md).
+# The bot saves facts to it when memory.enabled is on (cormon/hindsight.py, plan step 3 in docs/hindsight-plan.md).
+# It pulls facts out with OpenAI, using the key in .env and the bot's default model; with no key it stores
+# messages as they are.
 set -euo pipefail
 
 ROOT="${CORMON_HOME:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -26,14 +28,26 @@ fi
 id cormon >/dev/null 2>&1 && chown cormon:cormon "$KEY_FILE"
 chmod 600 "$KEY_FILE"
 
+OPENAI_KEY=$(sed -n 's/^OPENAI_API_KEY=//p' "$ROOT/.env" 2>/dev/null | tr -d '"'"'" | head -1)
+MODEL=$(sed -n 's/^    default: *\([^ #]*\).*/\1/p' "$ROOT/config/settings.yaml" | head -1)
+if [ -n "$OPENAI_KEY" ]; then
+  LLM=(-e HINDSIGHT_API_LLM_PROVIDER=openai -e HINDSIGHT_API_LLM_API_KEY="$OPENAI_KEY"
+       -e HINDSIGHT_API_LLM_MODEL="${MODEL:-gpt-5.4-mini}" -e HINDSIGHT_API_LLM_REASONING_EFFORT=low)
+else
+  LLM=(-e HINDSIGHT_API_LLM_PROVIDER=none)
+fi
+
 "${DOCKER[@]}" pull -q "$IMAGE" >/dev/null
 "${DOCKER[@]}" rm -f hindsight >/dev/null 2>&1 || true
 # --memory: on the live server it may never take the bot's memory; it used 1 to 1.4 GB in the timing test.
 # The re-ranker settings are the ones the timing test chose (docs/hindsight-plan.md, Results).
-# No AI for now (LLM_PROVIDER=none): step 3 gives it one, with the retain mission and observations off.
+# Observations (its own AI summaries) are off, and it keeps no second copy of the message text: the bot's
+# database has the original, and each fact names the message it came from.
 "${DOCKER[@]}" run -d --name hindsight --restart unless-stopped --memory 2g \
   -p 127.0.0.1:8888:8888 -v hindsight-data:/home/hindsight/.pg0 \
-  -e HINDSIGHT_API_LLM_PROVIDER=none \
+  "${LLM[@]}" \
+  -e HINDSIGHT_API_ENABLE_OBSERVATIONS=false \
+  -e HINDSIGHT_API_STORE_DOCUMENT_TEXT=false \
   -e HINDSIGHT_API_TENANT_EXTENSION=hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension \
   -e HINDSIGHT_API_TENANT_API_KEY="$(cat "$KEY_FILE")" \
   -e HINDSIGHT_API_RERANKER_MAX_CANDIDATES=100 \

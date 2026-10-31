@@ -3299,3 +3299,82 @@ def test_the_same_ai_call_made_twice_at_once_reaches_the_model_once(monkeypatch)
     assert got == [{"a": 1}] * 3 and len(sent) == 1
     llm.structured("t", "s", "u", {}, "x", model="gpt-4.1", use_cache=False)  # a forced fresh call still goes out
     assert len(sent) == 2
+
+
+def _memory_on(monkeypatch, reply=None, fail=None):
+    from cormon import hindsight, settings
+    from cormon.compliance import alerts
+    real = settings.get
+    conf = {"memory.enabled": True, "memory.bank_prefix": ""}
+    monkeypatch.setattr(settings, "get", lambda k, d=None: conf[k] if k in conf else real(k, d))
+    calls, told = [], []
+
+    def fake(method, path, body=None, timeout=0):
+        calls.append((method, path, body))
+        if fail:
+            raise fail
+        return reply(method, path) if reply else {}
+    monkeypatch.setattr(hindsight, "_call", fake)
+    from concurrent.futures import ThreadPoolExecutor
+    monkeypatch.setattr(hindsight, "_pool", ThreadPoolExecutor(1))   # a worker holds its own database link
+    monkeypatch.setattr(alerts, "notify", lambda key, subject, body, **kw: told.append(key))
+    monkeypatch.setattr(alerts, "clear", lambda *a, **kw: None)
+    return calls, told
+
+
+def test_patient_memory_saves_a_listed_senders_message_with_who_said_it(monkeypatch):
+    from cormon import config, hindsight
+    calls, _ = _memory_on(monkeypatch)
+    study = config.study("NCT05842941")
+    msg = {"id": 7, "from_addr": "johnrohit94@gmail.com", "channel": "email", "subject": "014",
+           "sent_at": "2026-10-30T14:00:00+00:00", "thread_key": "t1", "attachments": []}
+    hindsight.save_message(study, msg, "1001-014 had a gout flare last week.").result()
+    assert [c[0] for c in calls] == ["PATCH", "POST"], "the bank is set up once, then the message is saved"
+    assert calls[0][2]["updates"]["enable_observations"] is False
+    item = calls[1][2]["items"][0]
+    assert item["document_id"] == "message-7", "a re-read replaces the message's facts, never adds a copy"
+    assert "Study coordinator" in item["content"] and "gout flare" in item["content"]
+    assert item["metadata"]["message_id"] == "7" and "study:NCT05842941" in item["tags"]
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_saved' AND entity_id='7'")
+
+    hindsight.save_message(study, dict(msg, id=8), "again").result()
+    assert [c[0] for c in calls[2:]] == ["POST"], "the bank settings are not sent again"
+
+
+def test_patient_memory_skips_unknown_senders_and_is_off_by_default(monkeypatch):
+    from cormon import config, hindsight
+    study = config.study("NCT05842941")
+    msg = {"id": 9, "from_addr": "stranger@example.com", "channel": "email", "attachments": []}
+    assert hindsight.save_message(study, msg, "1001-014 fell") is None, "off unless memory.enabled"
+    calls, _ = _memory_on(monkeypatch)
+    assert hindsight.save_message(study, msg, "1001-014 fell") is None and calls == []
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_not_saved' AND entity_id='9'")
+
+
+def test_a_memory_failure_is_logged_and_told_but_never_stops_the_read(monkeypatch):
+    from cormon import config, hindsight
+    _, told = _memory_on(monkeypatch, fail=ConnectionError("Hindsight is down"))
+    study = config.study("NCT05842941")
+    msg = {"id": 10, "from_addr": "johnrohit94@gmail.com", "channel": "chat", "attachments": []}
+    hindsight.save_message(study, msg, "text").result()
+    assert told == ["hindsight"]
+    row = db.q1("SELECT details FROM audit_log WHERE action='memory_save_failed'")
+    assert "Hindsight is down" in row["details"]
+
+
+def test_memory_finds_a_participant_however_the_code_was_written(monkeypatch):
+    from cormon import hindsight
+    tags = [{"tag": "participant:1001022"}, {"tag": "participant:1001-022"}, {"tag": "participant:1001014"}]
+    _memory_on(monkeypatch, reply=lambda m, p: {"items": tags, "total": 3})
+    assert hindsight.participant_tags("S1", "1001-022") == ["participant:1001022", "participant:1001-022"]
+    assert hindsight.participant_tags("S1", None) == []
+
+
+def test_only_alerts_about_a_participant_are_remembered_and_test_banks_alone_are_emptied(monkeypatch):
+    from cormon import hindsight
+    calls, _ = _memory_on(monkeypatch)
+    assert hindsight.save_alert(1, kind="good_news", participant_id="014") is None
+    assert hindsight.save_alert(1, kind="finding", participant_id=None) is None
+    assert calls == []
+    with pytest.raises(RuntimeError, match="not a test bank"):
+        hindsight.clear_test_bank("NCT05842941")

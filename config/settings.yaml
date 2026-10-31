@@ -23,6 +23,15 @@ matching:
   # misses is still found. Its findings go through the same quote, number and document checks.
   sweep: true
 
+memory:
+  # Patient memory in Hindsight (deploy/hindsight.sh, cormon/hindsight.py, docs/hindsight-plan.md): each study
+  # message's facts are saved, tagged by participant. Off until it is switched on through a settings change.
+  enabled: false
+  url: http://127.0.0.1:8888
+  key_file: secrets/hindsight_key
+  # Test copies use their own banks, so test facts never mix with real ones.
+  bank_prefix: ""
+
 llm:
   temperature: 0
   seed: 7
