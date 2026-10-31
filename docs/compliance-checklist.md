@@ -10,6 +10,47 @@ Status on 30 Oct 2026: **49 done, 19 partly done, 1 not done, 2 later (V2).**
 The safety contacts (medical monitor, safety backup, on-call) are stand-in addresses that reach John until the
 sponsor names the real people: put their names, emails and phones in the study file, nothing else changes.
 
+## What to do and when
+
+Every item that is not done, grouped by when it gets done and who does it. The tables further down say what is
+left for each one.
+
+**1. Next project: hindsight (patient memory).** No checklist item waits on it, but the items in group 2 come after it.
+
+**2. After hindsight: closing alerts on the web page (DSP-01, DSP-02, DSP-04, and the "clear by reply" part of OUT-03).**
+Eliot decided this on 29 Oct. Alerts are no longer closed by email or chat reply. On the alert's web page, the person picks one:
+- "I did what was asked", with the date and time. This closes the alert.
+- "I did something else", with what and when. This goes to the PI.
+- "Nothing can be done". This also goes to the PI.
+
+The PI approves or rejects. A rejection goes back to the person or is reported to the sponsor. A confirm step
+before the close takes effect covers DSP-02. The fixed choice is the reason (DSP-04). The AI no longer decides
+anything here (DSP-01, OUT-03).
+
+**3. After the sponsor contract is signed: plug in their details (no new code).**
+- SAF-02, SAF-05: the real medical monitor, safety backup and on-call names, emails and phone numbers, in the study file.
+- SAF-03 (done): the sponsor's safety team approves the severe-word list. Ours is a draft.
+- VAL-04: each site's protocol version dates, and the older protocol versions loaded.
+- PRV-01: the consent form, so we can check it covers sending patient data to the AI.
+
+**4. Code we can build any time (no one else needed).**
+- CAP-09: three cheap prompt-trick fixes from `docs/prompt-injection-research.md`, then a bigger trick test set. When John asks.
+- OUT-03: the doctor check and the careful check. The AI answers fixed questions and code decides.
+- QAA-06: block clinical judgment in answers. Needs real answers to measure first, so after real use.
+
+**5. Someone outside the code.**
+- Eliot: approve settings version 61 (`./bin/cormon-cloud config approve settings 61`). This starts off-server backups (BCK-01, done).
+- Eliot: a written rule for how long the mailbox keeps mail (CAP-10).
+- Whoever runs the huma.ai domain: DMARC `p=reject` (OUT-02).
+- The Google Workspace admin: two-step login for everyone (IAM-01).
+- A GitHub repo admin, plus a named reviewer (Peter or Eliot): require a review before merge (SDL-01).
+
+**6. Phase 3, paid, when we go for certification (a few dollars a month).**
+Locked storage (OUT-01, AUD-02), a pager (ARC-04), our own encryption key held by a separate person (SEC-01,
+IAM-04), all secrets in Secret Manager with rotation (SEC-03).
+
+**7. V2 (sponsor web features).** IAM-05, EXP-02.
+
 ## Done (49)
 
 - [x] CAP-01 Original bytes preserved
@@ -74,8 +115,8 @@ sponsor names the real people: put their names, emails and phones in the study f
 | QAA-06 | No clinical judgment | A judgment in a final answer is recorded, not blocked. Needs real answers to measure |
 | SAF-02 | Detection and routing | Safety mail goes, unassessed, to the medical monitor with the CRA copied, but the address is a stand-in (john+medicalmonitor@huma.ai) until the sponsor names one |
 | SAF-05 | Escalation and terminus | Built: not acknowledged in time, it goes to the safety backup, then the ClinOps lead, then the on-call person and the admins are told to phone (3 reminders); reaching that last step is recorded as a deviation, with the steps that went unanswered. The contacts are stand-ins and no phone numbers are on file yet |
-| DSP-01 | Deterministic disposition grammar | No fixed "token + action + reason" reply format; the AI reads the reply |
-| DSP-04 | Reason and visibility | A clear by reply gets the code "by_reply"; waits on DSP-01 |
+| DSP-01 | Deterministic disposition grammar | Today the AI reads a reply to clear an alert. Eliot decided (29 Oct) that alerts are closed on the alert's web page with fixed choices, not by reply. After hindsight |
+| DSP-04 | Reason and visibility | A clear by reply gets the code "by_reply". The web page choices will give the reason. After hindsight, with DSP-01 |
 | IAM-01 | Operator access | MFA depends on the Google Workspace setting |
 | IAM-04 | Key management | No separate key-admin role; no key rotation |
 | AUD-02 | Immutability via compensating controls | Each audit entry is copied to a separate write-once database and checked daily (PR #17); someone with the file can still drop its triggers, so the locked bucket is Phase 3 |
@@ -89,7 +130,7 @@ sponsor names the real people: put their names, emails and phones in the study f
 
 | ID | Name | What is missing |
 |---|---|---|
-| DSP-02 | Echo-back confirmation | No "reply CONFIRM" step before a clear takes effect |
+| DSP-02 | Echo-back confirmation | No confirm step before a close takes effect. It will be a confirm step on the web page, plus the PI's review. After hindsight, with DSP-01 |
 
 
 ## Later, V2 (2)
