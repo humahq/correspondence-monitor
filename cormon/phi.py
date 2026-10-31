@@ -109,6 +109,20 @@ def purge(days: int | None = None, log=print) -> dict:
     return out
 
 
+class NoRetentionPeriod(RuntimeError):
+    pass
+
+
+def check_retention() -> int:
+    """The bot does not run without a retention period (data.retention_days, a whole number of days)."""
+    days = settings.get("data.retention_days")
+    if isinstance(days, bool) or not isinstance(days, int) or days <= 0:
+        raise NoRetentionPeriod(
+            f"refused: no retention period is set (data.retention_days is {days!r}). Set how many days message text "
+            "is kept, e.g. `cormon config set settings data.retention_days 2557` (7 years), then start the bot again")
+    return days
+
+
 def daily(log=print) -> dict | None:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if not settings.get("data.retention_days") or db.get_state("purge_day") == today:

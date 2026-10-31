@@ -124,6 +124,7 @@ def chat_push(log=print) -> None:
 
 def run(once: bool = False, log=print) -> None:
     check_live_only()
+    phi.check_retention()
     server = None if once else webview.start_background()
     if server:
         log(f"item pages on {settings.get('web.base_url')}")
