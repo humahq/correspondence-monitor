@@ -366,6 +366,23 @@ def test_compare_scores_safety_and_problems_together():
     assert testbench.verdict(case) is False
 
 
+def test_a_copy_in_another_folder_takes_the_models_from_the_main_settings(tmp_path, monkeypatch):
+    from cormon import settings
+
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "settings.yaml").write_text(
+        "system:\n  studies: [S1]\nllm:\n  models:\n    default: old-model\n")
+    monkeypatch.setattr(settings, "ROOT", tmp_path)
+    monkeypatch.setattr(settings, "SETTINGS_FILE", tmp_path / "config" / "settings.yaml")
+    settings.reload()
+    try:
+        main = settings.load_yaml(settings.CODE_ROOT / "config" / "settings.yaml")["llm"]
+        assert settings.get("llm.models.default") == main["models"]["default"] != "old-model"
+        assert settings.get("system.studies") == ["S1"]
+    finally:
+        settings.reload()
+
+
 def test_a_test_message_without_a_date_always_gets_the_same_one():
     import email as email_lib
     from types import SimpleNamespace
