@@ -144,6 +144,9 @@ def prepare_sandbox(live_root: Path) -> Path:
     cfg = yaml.safe_load(path.read_text()) or {}
     cfg.setdefault("channels", {}).update({"email": "sim", "teams": "sim"})
     cfg.setdefault("web", {}).update({"enabled": False, "base_url": "(test run: no web page)"})
+    cfg.setdefault("memory", {})["bank_prefix"] = "test-"
+    if os.environ.get("CORMON_TEST_MEMORY") == "1":
+        cfg["memory"]["enabled"] = True
     path.write_text(yaml.safe_dump(cfg, sort_keys=False))
     for name in ("studies", ".env", "secrets"):
         link, target = sb / name, live_root / name
@@ -443,12 +446,15 @@ def child_main(argv: list[str]) -> None:
     story = (Path(args.folder) / ".memory").exists()
     print(f"running {len(cases)} message(s) through the sandbox (nothing is sent)"
           f"{'; participant memory carries over between messages' if story else ''}\n", flush=True)
-    from . import db
+    from . import db, hindsight
     for n, c in enumerate(cases, 1):
         if not story:
             db.ex("DELETE FROM patient_facts")
+        if hindsight.enabled() and (n == 1 or not story):
+            hindsight.clear_test_bank(study.study_id)
         try:
             run_case(study, c)
+            hindsight.flush()
         except Exception as e:  # one broken case must not stop the run
             c.result = {"got": set(), "items": [], "sent": [], "pids": set(), "seconds": 0,
                         "message_id": None, "status": f"error: {e}"}
