@@ -10,7 +10,7 @@ set -euo pipefail
 PROJECT="${PROJECT:-optical-depth-506808-t0}"
 ZONE="${ZONE:-us-east1-b}"
 NAME="${NAME:-cormon-demo}"
-MACHINE="${MACHINE:-e2-micro}"          # Google's smallest machine; covered by the free tier in us-east1
+MACHINE="${MACHINE:-e2-medium}"         # 4 GB: the bot plus Hindsight (issue #32); 2 GB was too slow
 SECRET="${SECRET:-kol-gmail-bot-app-password}"
 SA="cormon-vm@$PROJECT.iam.gserviceaccount.com"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

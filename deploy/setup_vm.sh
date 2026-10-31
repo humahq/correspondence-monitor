@@ -11,7 +11,7 @@ if ! command -v caddy >/dev/null; then
   apt-get update -qq
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-venv sqlite3 caddy >/dev/null
 fi
-if [ ! -f /swapfile ]; then   # the e2-micro has 1 GB of memory
+if [ ! -f /swapfile ]; then   # spare room when memory is short (the server was an e2-micro, 1 GB)
   fallocate -l 1G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile
   echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
@@ -77,6 +77,7 @@ cp "$APP/deploy/cormon.service" /etc/systemd/system/cormon.service
 systemctl daemon-reload
 runuser -u cormon -- env -u SUDO_USER CORMON_HOME="$APP" "$APP/.venv/bin/cormon" init >/dev/null
 systemctl enable cormon >/dev/null 2>&1
+CORMON_HOME="$APP" bash "$APP/deploy/hindsight.sh"
 systemctl restart cormon
 sleep 3
 systemctl --no-pager status cormon | head -5

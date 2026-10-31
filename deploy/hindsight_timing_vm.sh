@@ -21,6 +21,19 @@ start() {
   sudo docker logs --tail 50 hs; exit 1
 }
 
+if [ -n "${CHOSEN_ONLY:-}" ]; then
+  # The chosen setup only, at 2,000 and then 10,000 facts.
+  start -e HINDSIGHT_API_RERANKER_MAX_CANDIDATES=100 -e HINDSIGHT_API_RERANKER_LOCAL_BUCKET_BATCHING=true
+  python3 hindsight_timing.py load
+  python3 hindsight_timing.py time "100 candidates, 2,000 facts"
+  sudo docker stats --no-stream --format 'memory at 2,000 facts: {{.MemUsage}}' hs
+  FIRST=1101 COUNT=400 python3 hindsight_timing.py load
+  COUNT=500 python3 hindsight_timing.py time "100 candidates, 10,000 facts"
+  sudo docker stats --no-stream --format 'memory at 10,000 facts: {{.MemUsage}}' hs
+  free -m | head -3
+  exit
+fi
+
 start
 if [ -z "${SKIP_LOAD:-}" ]; then
   python3 hindsight_timing.py load
