@@ -1,6 +1,7 @@
 """Part 11 groundwork: fingerprints, the hash-chained audit trail, kept chat edits, the AI log, alerts, the watchdog."""
 
 import http.client
+import json
 import sqlite3
 import threading
 from dataclasses import replace
@@ -1344,6 +1345,29 @@ def test_no_monitor_listed_a_safety_message_goes_to_nobody_and_cannot_be_cleared
     assert routing.route_item(iid) == [] and not db.q1("SELECT 1 FROM outbox")
     with pytest.raises(items.StepOrder, match="safety item"):
         items.set_state(iid, "cleared", "ops", "operator", study_id=study.study_id, code="fixed")
+
+
+def test_a_safety_message_goes_unassessed_to_the_medical_monitor_only(monkeypatch):
+    from cormon import config, items, llm, routing
+
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: pytest.fail("no AI call expected"))
+    study = config.study("NCT05842941")
+    monitor = study.people_with_role("medical_monitor")[0].email
+    crc = study.people_with_role("crc")[0].email
+    mid = capture.capture(Inbound(channel="email", external_id="<s1@site.org>", thread_ref="s1", from_addr=crc,
+                                  from_name="C", subject="DNL-1012 visit", sent_at=_ago(5), study_id=study.study_id,
+                                  body_text="DNL-1012 fell at home and spent a night in the ER.",
+                                  rfc_message_id="<s1@site.org>"))
+    iid, _ = items.upsert(study=study, thread_key="email:s1", message_id=mid, dedup_key="s1", kind="out_of_scope",
+                          pattern_class=None, rule_id=None, participant_id="DNL-1012", site="site-01",
+                          polarity="neutral", title="safety", tier="low", tier_reason="safety",
+                          evidence={"message_quote": "fell at home and spent a night in the ER"}, reasoning=None,
+                          state="out_of_scope")
+    routing.route_item(iid)
+    out = [dict(r) for r in db.q("SELECT * FROM outbox WHERE item_id=?", (iid,))]
+    assert [(json.loads(r["to_addrs"]), r["status"], r["template_id"]) for r in out] == \
+        [([monitor], "queued", "email-safety-to-medical-monitor")]
+    assert "fell at home and spent a night in the ER" in out[0]["body"] and "have not assessed" in out[0]["body"]
 
 
 def test_a_message_with_a_safety_part_sends_no_notice_back_to_the_site(monkeypatch):
