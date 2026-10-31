@@ -19,7 +19,7 @@ Issue #32. Sources, and only these: John's memory email to Eliot (28 Oct 2026) a
 
 ## Steps
 
-**1. Timing test (half a day, under $1).**
+**1. Timing test (done 31 Oct, see Results).**
 A temporary Google Cloud VM with 4 GB, made-up data only. Hindsight listens only inside the VM, with a password.
 Time 100 searches with the CPU re-ranker. 3 seconds or less: go on. 15 seconds or more: look at Cohere.
 Delete the VM after.
@@ -66,4 +66,21 @@ Total: about 7 to 8 days.
 
 ## Results
 
-Timing test: not run yet.
+**Timing test, 31 Oct 2026.** A temporary Google Cloud VM, e2-medium (2 shared CPUs, 4 GB), deleted after.
+2,000 made-up facts about 100 made-up participants, 20 each. No AI key (`LLM_PROVIDER=none`), so only search
+and re-ranking were timed. Scripts: `deploy/hindsight_timing.py` and `deploy/hindsight_timing_vm.sh`.
+
+| Setup | All facts: usual / worst | One participant's facts: usual / worst |
+|---|---|---|
+| Default (CPU re-ranker, 300 candidates) | 10.8 s / 18.3 s | 1.0 s / 1.2 s |
+| 100 candidates, bucket batching | 2.1 s / 4.2 s | 1.0 s / 1.2 s |
+| flashrank | 13.5 s / 29.2 s | 1.2 s / 1.3 s |
+
+- The re-ranker is almost all the time: about 10.5 of 11 seconds. Finding the facts takes about half a second.
+- Searching one participant (by tag) passes Eliot's 0 to 3 seconds, on CPU, with no GPU and no Cohere.
+- Searching all facts (a message with no participant code) passes only with 100 candidates.
+- flashrank is slower, not faster. Don't use it.
+- Memory: Hindsight used 1 to 1.4 GB. 4 GB for the server is enough.
+
+Decision: Hindsight's own CPU re-ranker, 100 candidates, bucket batching on, searches tagged by participant
+whenever there is a code. Cohere is not needed for now. Check again when a study has much more than 2,000 facts.
