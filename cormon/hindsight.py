@@ -22,7 +22,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 
 import requests
 
-from . import db, memory, settings
+from . import db, llm, memory, settings
 from .drafting import local_time
 
 MAX_TEXT = 20000
@@ -228,14 +228,50 @@ def participant_tags(study_id: str, pid: str | None, timeout: float = 30) -> lis
             return out
 
 
-def _fact_line(r: dict) -> str:
+def _day(r: dict) -> str:
+    return local_time(r.get("mentioned_at")).rsplit(" ", 1)[0]
+
+
+def _fact_line(r: dict, replaced_by: dict | None = None) -> str:
     text = r["text"].split(" | ")
     when = next((p[5:].strip() for p in text[1:] if p.startswith("When:")), "")
     meta = r.get("metadata") or {}
-    said = local_time(r.get("mentioned_at")).rsplit(" ", 1)[0]
     who = f"{meta['sender']} ({meta['role']})" if meta.get("sender") else "the monitoring bot"
     happened = f" (happened: {when[:10] if when[:4].isdigit() else when})" if when else ""
-    return f"earlier fact, reported on {said} by {who}: {text[0].strip()}{happened}"
+    kind = (f"replaced fact (a later report, on {_day(replaced_by)}, changed it)" if replaced_by
+            else "earlier fact")
+    return f"{kind}, reported on {_day(r)} by {who}: {text[0].strip()}{happened}"
+
+
+NEWER_SYSTEM = """You read the facts a clinical-trial study monitor holds about one participant, numbered, oldest
+report first. A later fact replaces an earlier one when both are about the same thing (a birth year, a diagnosis,
+a dose, a date, whether a medicine is still taken, a result) and the later one gives a different value, says the
+earlier one was wrong, or says it has stopped or ended. A fact that only adds detail, repeats it, or is about
+something else replaces nothing. List each replaced fact with the number of the fact that replaces it; list none
+when nothing is replaced."""
+
+NEWER_SCHEMA = llm.obj({"replaced": {"type": "array", "items": llm.obj({
+    "old": {"type": "integer"}, "by": {"type": "integer"}})}})
+
+
+def _newest_wins(rows: list[dict]) -> dict[int, int]:
+    """{old fact: the later fact that replaces it} ("born 1967", later "born 1972"). Both are kept and shown; the
+    AI says which facts are about the same thing, and code keeps a pair only when the replacing fact was reported
+    later. rows are oldest first."""
+    if len(rows) < 2:
+        return {}
+    listed = "\n".join(f"{n}. reported {r.get('mentioned_at') or 'date unknown'}: {r['text'].split(' | ')[0]}"
+                       for n, r in enumerate(rows, 1))
+    pairs = llm.structured("memory_newer", NEWER_SYSTEM, listed, NEWER_SCHEMA, "newer")["replaced"]
+    out = {}
+    for p in pairs:
+        old, by = p["old"] - 1, p["by"] - 1
+        if 0 <= old < by < len(rows) and (rows[old].get("mentioned_at") or "") < (rows[by].get("mentioned_at") or ""):
+            out.setdefault(old, by)
+    for old in list(out):   # a chain (1967, then 1970, then 1972) points at the newest
+        while out[old] in out:
+            out[old] = out[out[old]]
+    return out
 
 
 def recall_lines(study, pid: str | None, query: str, msg: dict) -> list[str]:
@@ -259,9 +295,16 @@ def recall_lines(study, pid: str | None, query: str, msg: dict) -> list[str]:
     mine = str(msg.get("id"))
     rows = [r for r in found.get("results") or [] if (r.get("metadata") or {}).get("message_id") != mine]
     rows = sorted(rows[:MAX_FACTS], key=lambda r: r.get("mentioned_at") or "")
+    try:
+        newer = _newest_wins(rows)
+    except Exception as e:   # without the check every fact is shown with its date, and the answer is told the later wins
+        newer = {}
+        db.audit("memory_newer_failed", entity_type="message", entity_id=msg.get("id"), study_id=study.study_id,
+                 error=str(e)[:300])
     db.audit("memory_searched", entity_type="message", entity_id=msg.get("id"), study_id=study.study_id,
-             participant_id=pid, facts=len(rows), seconds=round(time.monotonic() - began, 2))
-    return [_fact_line(r) for r in rows]
+             participant_id=pid, facts=len(rows), seconds=round(time.monotonic() - began, 2),
+             replaced=[{"old": rows[o].get("id"), "by": rows[b].get("id")} for o, b in newer.items()])
+    return [_fact_line(r, rows[newer[n]] if n in newer else None) for n, r in enumerate(rows)]
 
 
 def facts(study_id: str, limit: int = 200) -> list[dict]:

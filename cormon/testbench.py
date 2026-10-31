@@ -113,7 +113,8 @@ def _read_json(path: Path) -> Case:
     chat = (d.get("chat") or "room").strip().lower()
     return Case(name=path.name, subject=d.get("subject") or d["text"][:60], body=d["text"].strip(),
                 sender=d.get("from") or "crc", expect=_expect(d.get("expect")),
-                participant=d.get("participant") or None, chat="direct" if chat == "direct" else "room")
+                participant=d.get("participant") or None, chat="direct" if chat == "direct" else "room",
+                date=d.get("date") or None)
 
 
 def read_folder(folder: Path) -> list[Case]:
@@ -207,12 +208,16 @@ def _sender(study, who: str) -> tuple[str, str]:
     return addr(role), addr("cra" if role != "cra" else "crc")
 
 
-def _date(when: str | None) -> str:
+def _sent(when: str | None) -> datetime:
     if not when:
-        return format_datetime(TEST_SENT)
+        return TEST_SENT
     from dateutil import parser as dtparser
     dt = dtparser.parse(when, default=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0))
-    return format_datetime(dt.astimezone() if dt.tzinfo is None else dt)
+    return dt.astimezone() if dt.tzinfo is None else dt
+
+
+def _date(when: str | None) -> str:
+    return format_datetime(_sent(when))
 
 
 def _build(study, case: Case) -> bytes:
@@ -244,7 +249,7 @@ def _post_chat(study, case: Case, inbox: Path) -> str:
     ext = f"test-chat:{time.time_ns()}"
     (inbox / f"case-{time.time_ns()}.json").write_text(json.dumps({
         "id": ext, "study_id": study.study_id, "channel": case.chat, "from_email": addr, "from_name": name,
-        "text": case.body, "sent_at": TEST_SENT.isoformat()}))
+        "text": case.body, "sent_at": _sent(case.date).isoformat()}))
     return ext
 
 
