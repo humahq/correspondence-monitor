@@ -16,6 +16,8 @@ Every item that is not done, grouped by when it gets done and who does it. The t
 left for each one.
 
 **1. Next project: hindsight (patient memory).** No checklist item waits on it, but the items in group 2 come after it.
+Plan in `docs/hindsight-plan.md` (issue #32): 7 build steps, about 7 to 8 days. The re-ranker timing test is done
+(31 Oct): about 1 second per patient search on a CPU, so no GPU or Cohere is needed.
 
 **2. After hindsight: closing alerts on the web page (DSP-01, DSP-02, DSP-04, and the "clear by reply" part of OUT-03).**
 Eliot decided this on 29 Oct. Alerts are no longer closed by email or chat reply. On the alert's web page, the person picks one:
