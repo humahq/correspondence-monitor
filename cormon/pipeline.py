@@ -356,9 +356,17 @@ def _target_item(msg: dict) -> int | None:
 
 def _only_a_question(event: dict, pid: str | None, events: list[dict]) -> bool:
     """A finding read from a question about the rules, about no participant, in a message reporting nothing done
-    or planned: the question is answered, it is not a problem at the site."""
-    return (event.get("status") == "asked" and not pid
+    or planned: the question is answered, it is not a problem at the site. A question that states facts about a
+    real person ("our participant's FSH came back at 34") is about that person, named or not."""
+    return (event.get("status") == "asked" and not pid and not event.get("reports_facts")
             and all(e["temporality"] == "hypothetical" for e in events))
+
+
+def _answered_but_alert_unsaid(turn: str, summary: dict) -> bool:
+    """A 1-on-1 message that asked and also raised a problem: the answer went, and the alert must be told too,
+    since nothing said 1-on-1 is posted in a group chat where it would show."""
+    return (turn == "direct" and bool(summary.get("answered"))
+            and any((it := items.get(i)) and it["kind"] == "finding" for i in summary["items_created"]))
 
 
 def _code_step(said: dict, ai_step: str | None) -> str | None:
@@ -831,6 +839,8 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
         if (turn in ("direct", "addressed") and not rerun and not summary.get("answered")
                 and not summary.get("answer_failed") and not summary.get("instruction")
                 and not (declined and declined["only"] and not summary["items_created"])):
+            _acknowledge(study, msg, summary, data["trial_related"])
+        elif not rerun and _answered_but_alert_unsaid(turn, summary):
             _acknowledge(study, msg, summary, data["trial_related"])
 
         timing.step("finish")

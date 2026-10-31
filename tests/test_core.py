@@ -1569,6 +1569,8 @@ def test_a_question_about_the_rules_is_answered_not_raised():
     assert not pipeline._only_a_question(asked, "G-1", what_if)                        # about a participant
     assert not pipeline._only_a_question(planned, None, what_if)                       # a plan at the site
     assert not pipeline._only_a_question(asked, None, what_if + [{"temporality": "current"}])  # something happened
+    # "Our participant's FSH came back at 34, can she count as postmenopausal?": facts about a real person, no ID
+    assert not pipeline._only_a_question(dict(asked, reports_facts=True), None, what_if)
 
 
 def test_replies_in_a_thread_that_began_by_talking_to_the_bot_are_to_the_bot():
@@ -2729,6 +2731,12 @@ def test_a_doctor_1_on_1_with_a_problem_gets_a_calm_reply_and_the_alert_goes_pri
     summary = {"items_created": [crc_item], "items_repeat": []}
     pipeline._acknowledge(study, capture.message(items.get(crc_item)["first_message_id"]), summary, True)
     assert summary["acknowledged"].startswith("Thanks. I found 1 problem:")
+    # a question and a problem in one 1-on-1 message: the answer goes and the alert is told as well
+    asked = dict(summary, answered=1)
+    assert pipeline._answered_but_alert_unsaid("direct", asked)
+    assert not pipeline._answered_but_alert_unsaid("direct", summary)                    # not answered: as before
+    assert not pipeline._answered_but_alert_unsaid("addressed", asked)                   # a group shows its alert
+    assert not pipeline._answered_but_alert_unsaid("direct", dict(asked, items_created=[]))
 
 
 def test_with_no_doctor_in_the_chat_nothing_changes_and_no_ai_is_asked(monkeypatch):
