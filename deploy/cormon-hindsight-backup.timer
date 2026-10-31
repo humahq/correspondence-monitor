@@ -1,0 +1,10 @@
+[Unit]
+Description=Back up patient memory every hour
+
+[Timer]
+OnBootSec=10min
+OnCalendar=hourly
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

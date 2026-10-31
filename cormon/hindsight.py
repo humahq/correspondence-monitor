@@ -19,6 +19,7 @@ import hashlib
 import json
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
+from urllib.parse import quote
 
 import requests
 
@@ -325,7 +326,8 @@ def recall_lines(study, pid: str | None, query: str, msg: dict) -> list[str]:
 
 # ---------------------------------------------------------------- the memory page (adminview.py)
 
-CHANGES = ("memory_fact_corrected", "memory_fact_retired", "memory_fact_restored", "memory_fact_linked")
+CHANGES = ("memory_fact_corrected", "memory_fact_retired", "memory_fact_restored", "memory_fact_linked",
+           "memory_fact_forgotten")
 
 
 def _changes(study_id: str, ids: list) -> dict[str, list[dict]]:
@@ -457,6 +459,90 @@ def change_fact(study_id: str, fact_id: str, action: str, by: str, reason: str, 
     else:
         raise ValueError(f"unknown change {action!r}")
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- retention, forgetting and records
+
+def used() -> bool:
+    """Memory is on, or was on once (its facts are still kept and still need retention and forgetting)."""
+    return enabled() or bool(db.q1("SELECT 1 FROM audit_log WHERE action='memory_saved' LIMIT 1"))
+
+
+def _documents_of(study_id: str, extra: str) -> set[str]:
+    return {r["document_id"] for r in _every(study_id, extra) if r.get("document_id")}
+
+
+def purge_before(study_id: str, cutoff: str) -> int:
+    """Delete every message's facts reported before `cutoff` (the retention period), with the message's Hindsight
+    record; returns how many messages. The audit trail keeps that they were deleted."""
+    b = bank(study_id)
+    docs = _documents_of(study_id, f"&time_field=mentioned_at&end_date={quote(cutoff)}")
+    for d in sorted(docs):
+        _call("DELETE", f"/v1/default/banks/{b}/documents/{quote(d, safe='')}", timeout=60)
+    if docs:
+        db.audit("memory_purged", entity_type="study", entity_id=study_id, study_id=study_id, before=cutoff,
+                 documents=len(docs))
+    return len(docs)
+
+
+FORGOTTEN = "[removed: the participant's facts were deleted]"
+
+
+def forget_participant(study_id: str, pid: str) -> int:
+    """Erase what memory holds about one participant; returns how many facts. A message whose facts are all
+    theirs is deleted from Hindsight outright; in a message about others too, each of their facts is blanked and
+    retired, so the others' facts stay. Hindsight keeps no message text, so nothing else holds it. The bot does
+    not save those messages again on a re-read (curated)."""
+    tags = set(participant_tags(study_id, pid))
+    if not tags:
+        return 0
+    b, rows = bank(study_id), _every(study_id)
+    theirs = [r for r in rows if set(r.get("tags") or []) & tags]
+    n = 0
+    for doc in sorted({r.get("document_id") for r in theirs if r.get("document_id")}):
+        mine = [r for r in theirs if r.get("document_id") == doc]
+        others = [r for r in rows if r.get("document_id") == doc and r not in mine]
+        if not others:
+            _call("DELETE", f"/v1/default/banks/{b}/documents/{quote(doc, safe='')}", timeout=60)
+        else:
+            for r in mine:
+                _call("PATCH", f"/v1/default/banks/{b}/memories/{r['id']}", {
+                    "text": FORGOTTEN, "entities": [], "state": "invalidated",
+                    "reason": "participant forgotten"}, timeout=60)
+        n += len(mine)
+        db.audit("memory_fact_forgotten", entity_type="memory_fact", entity_id=mine[0]["id"], study_id=study_id,
+                 document=doc, facts=len(mine), deleted_document=not others, participant_id=memory.key(pid))
+    return n
+
+
+def delete_study(study_id: str) -> None:
+    """Delete a study's whole memory (its Hindsight bank). Its saves and changes stay in the audit trail."""
+    flush()
+    b = bank(study_id)
+    try:
+        _call("DELETE", f"/v1/default/banks/{b}", timeout=120)
+    except requests.HTTPError as e:
+        if e.response is None or e.response.status_code != 404:
+            raise
+    db.set_state(f"hindsight_bank:{b}", "")
+    db.audit("memory_study_deleted", entity_type="study", entity_id=study_id, study_id=study_id, bank=b)
+
+
+def export_rows(study_id: str, since: str | None = None, until: str | None = None) -> list[dict]:
+    """Every fact in the study's memory, current and retired, for the records package (oldest report first)."""
+    out = []
+    for r in _every(study_id):
+        at = r.get("mentioned_at") or ""
+        if (since and at < since) or (until and at[:10] > until):
+            continue
+        text, when = _parts(r)
+        meta = r.get("metadata") or {}
+        out.append({"fact": r["id"], "reported_at": at, "reported_by": _who(r), "participants": " ".join(_pids(r)),
+                    "fact_text": text, "happened": when, "state": r.get("state"),
+                    "retired_why": r.get("invalidation_reason"), "edited_at": r.get("edited_at"),
+                    "document": r.get("document_id"), "message_id": meta.get("message_id"),
+                    "alert_id": meta.get("alert_id")})
+    return sorted(out, key=lambda x: x["reported_at"])
 
 
 def facts(study_id: str, limit: int = 200) -> list[dict]:

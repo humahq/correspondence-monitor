@@ -42,12 +42,14 @@ fi
 # --memory: on the live server it may never take the bot's memory; it used 1 to 1.4 GB in the timing test.
 # The re-ranker settings are the ones the timing test chose (docs/hindsight-plan.md, Results).
 # Observations (its own AI summaries) are off, and it keeps no second copy of the message text: the bot's
-# database has the original, and each fact names the message it came from.
+# database has the original, and each fact names the message it came from. Its log of AI calls (llm_requests)
+# would hold each message's text for a day, and so every hourly backup, so it is off too.
 "${DOCKER[@]}" run -d --name hindsight --restart unless-stopped --memory 2g \
   -p 127.0.0.1:8888:8888 -v hindsight-data:/home/hindsight/.pg0 \
   "${LLM[@]}" \
   -e HINDSIGHT_API_ENABLE_OBSERVATIONS=false \
   -e HINDSIGHT_API_STORE_DOCUMENT_TEXT=false \
+  -e HINDSIGHT_API_LLM_TRACE_ENABLED=false \
   -e HINDSIGHT_API_TENANT_EXTENSION=hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension \
   -e HINDSIGHT_API_TENANT_API_KEY="$(cat "$KEY_FILE")" \
   -e HINDSIGHT_API_RERANKER_MAX_CANDIDATES=100 \
@@ -60,7 +62,15 @@ for _ in $(seq 120); do
     code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8888/v1/default/banks)
     [ "$code" = 401 ] || { echo; echo "Hindsight answered without the key (HTTP $code); stopping it" >&2;
                            "${DOCKER[@]}" rm -f hindsight >/dev/null; exit 1; }
-    echo; echo "Hindsight is running on 127.0.0.1:8888 and refuses calls without the key"; exit 0
+    echo; echo "Hindsight is running on 127.0.0.1:8888 and refuses calls without the key"
+    if [ -d /etc/systemd/system ] && [ "$(id -u)" = 0 ]; then
+      # Hourly backups of its database (deploy/hindsight_backup.sh), run by root: the bot's user has no Docker.
+      cp "$ROOT/deploy/cormon-hindsight-backup.service" "$ROOT/deploy/cormon-hindsight-backup.timer" /etc/systemd/system/
+      systemctl daemon-reload
+      systemctl enable --now cormon-hindsight-backup.timer >/dev/null 2>&1
+      echo "hourly Hindsight backups are on (cormon-hindsight-backup.timer)"
+    fi
+    exit 0
   fi
   echo -n .; sleep 5
 done

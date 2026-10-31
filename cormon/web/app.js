@@ -380,7 +380,8 @@
   }
 
   // ------------------------------------------------------------------ patient memory
-  const CHANGE_WORDS = { corrected: "Corrected", retired: "Retired", restored: "Restored", linked: "Linked" };
+  const CHANGE_WORDS = { corrected: "Corrected", retired: "Retired", restored: "Restored", linked: "Linked",
+                         forgotten: "Deleted (participant forgotten)" };
 
   function FactChange({ study, f, onDone }) {
     const [mode, setMode] = useState("");

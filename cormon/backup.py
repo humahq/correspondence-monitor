@@ -119,6 +119,56 @@ def hourly(log=print) -> dict | None:
     return result
 
 
+MEMORY_HOURS = 2   # one hour between copies, plus the hour being made
+
+
+def memory_hourly(log=print) -> dict | None:
+    """Patient memory's backups, made every hour by root (deploy/hindsight_backup.sh: the bot's user has no Docker).
+    The newest must be under MEMORY_HOURS old and have passed its restore check; it is copied off the server once.
+    Otherwise the admins are told."""
+    from . import hindsight
+    hour = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
+    if _rehearsal() or not hindsight.used() or db.get_state("memory_backup_hour") == hour:
+        return None
+    from .compliance import alerts
+    import json
+    db.set_state("memory_backup_hour", hour)
+    dumps = sorted(folder().glob("hindsight-*.dump"))
+    newest = dumps[-1] if dumps else None
+    info = json.loads(Path(f"{newest}.json").read_text()) if newest and Path(f"{newest}.json").exists() else {}
+    made = datetime.fromisoformat(info["at"].replace("Z", "+00:00")) if info.get("at") else None
+    problem = ("no patient memory backup has been made" if not newest
+               else "its check result is missing" if not info
+               else f"the newest is {(datetime.now(timezone.utc) - made).total_seconds() / 3600:.1f} hours old"
+               if (datetime.now(timezone.utc) - made).total_seconds() > MEMORY_HOURS * 3600
+               else f"the newest failed its restore check ({info.get('facts')} of {info.get('live_facts')} facts)"
+               if not info.get("ok") else None)
+    if problem:
+        db.audit("backup_memory_failed", entity_type="service", entity_id="backup", file=newest and newest.name,
+                 problem=problem)
+        log(f"patient memory backup: {problem}")
+        alerts.notify("backup_memory", "cormon: the patient memory backup FAILED",
+                      f"Patient memory (Hindsight) is not backed up: {problem}. Check the timer with "
+                      "`systemctl status cormon-hindsight-backup` and run deploy/hindsight_backup.sh by hand. "
+                      "This is sent again every 6 hours while it lasts.", every_minutes=360)
+        return {"ok": False, "problem": problem}
+    out = {"ok": True, "file": newest.name, "facts": info.get("facts")}
+    if bucket() and db.get_state("memory_backup_sent") != newest.name:
+        try:
+            out["offsite"] = upload(newest)
+            db.set_state("memory_backup_sent", newest.name)
+        except Exception as e:
+            db.audit("backup_offsite_failed", entity_type="service", entity_id="backup", path=newest.name,
+                     error=str(e)[:500])
+            alerts.notify("backup_memory", "cormon: the patient memory backup could not leave the server",
+                          f"{newest.name} could not be copied to gs://{bucket()}: {str(e)[:300]}.",
+                          every_minutes=360)
+            return dict(out, ok=False, problem=str(e)[:300])
+    alerts.clear("backup_memory", "cormon: patient memory is backed up again",
+                 f"{newest.name} passed its restore check ({info.get('facts')} facts).")
+    return out
+
+
 # ---------------------------------------------------------------- off the server (Cloud Storage)
 
 def bucket() -> str | None:

@@ -106,6 +106,29 @@ Still open (question 2 below): only admins can change facts; whether site coordi
 **7. Logging and retention (1 day).**
 Every save and search is in the audit trail. Facts kept for 7 years, deletable per study, and in the records export.
 (Our suggestion, to match the checklist.)
+Built (31 Oct):
+- Logging: saves, searches, failures and every admin change were already in the audit trail (steps 3 to 6).
+- Retention: the daily purge also deletes from Hindsight every message whose facts were reported before
+  `data.retention_days` (2557 days, 7 years), with its facts (`memory_purged`). A failure emails the admins.
+- Forgetting: `cormon forget-participant` also erases the participant's facts. A message only about them is
+  deleted from Hindsight; in a message about others too, their facts are blanked and retired. Such messages are
+  not saved again on a re-read. If Hindsight cannot be reached it says so and asks to run it again.
+- Per study: `cormon forget-study-memory <study>` deletes the study's whole memory. Like purge, it needs a second
+  person to approve.
+- Records export: the package has `patient_memory.csv` (every fact, current and retired, who reported it, from
+  which message). If memory cannot be read, the README says so.
+- Backups: `deploy/hindsight_backup.sh` runs every hour as root (`cormon-hindsight-backup.timer`; the bot's user has
+  no Docker). It dumps Hindsight's database, restores it into a scratch database and counts the facts against the
+  live ones, so each copy is shown to restore. The bot checks the newest every hour (under 2 hours old, check
+  passed), copies it to the backup bucket once, and emails the admins otherwise. Restore:
+  `YES=1 deploy/hindsight_backup.sh restore <file>`.
+- Found while doing this: Hindsight logs each AI call with its full input (`llm_requests`), so a second copy of
+  every message's text for a day, and in every backup. It is now off (`HINDSIGHT_API_LLM_TRACE_ENABLED=false`).
+  Live has made no such calls yet (it runs without AI until `deploy/hindsight.sh` is run there again).
+- Checked on the laptop: backup 9 of 9 facts restored; restore put them back; forgetting 1001-022 removed her 4
+  facts and left 1001-014's 4; the purge emptied the test bank.
+- Gap to discuss: Hindsight's own AI calls (to pull facts out) are not in the bot's AI log; the audit trail has
+  their token counts only.
 
 **8. Tests (1 day).**
 30 to 50 multi-message cases: gout, born 1967 then 1972, a corrected typo, no participant ID, a fact from another

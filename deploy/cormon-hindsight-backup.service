@@ -1,0 +1,8 @@
+[Unit]
+Description=Back up patient memory (Hindsight's database) and prove the copy restores
+After=docker.service
+
+[Service]
+Type=oneshot
+Environment=CORMON_HOME=/opt/cormon
+ExecStart=/bin/bash /opt/cormon/deploy/hindsight_backup.sh

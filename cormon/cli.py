@@ -386,7 +386,19 @@ def cmd_forget(args):
         return
     if not second_person(args, "forget-participant", f"{args.study}:{args.participant}"):
         return
-    print(f"removed {phi.forget_participant(args.study, args.participant)} saved fact rows")
+    print(f"removed {phi.forget_participant(args.study, args.participant)} saved dates and patient-memory facts")
+
+
+def cmd_forget_study_memory(args):
+    from . import hindsight
+    if not args.yes:
+        print(f"This deletes all of patient memory for {args.study} (every fact about every participant). "
+              "The audit trail keeps what was saved and changed. Run again with --yes.")
+        return
+    if not second_person(args, "forget-study-memory", args.study):
+        return
+    hindsight.delete_study(args.study)
+    print(f"patient memory for {args.study} is deleted")
 
 
 def cmd_pause(args):
@@ -1076,9 +1088,12 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("purge", help="clear message text older than the retention period")
     s.add_argument("--days", type=int); s.add_argument("--yes", action="store_true"); s.add_argument("--reason")
     _approval(s); s.set_defaults(fn=cmd_purge)
-    s = sub.add_parser("forget-participant", help="delete the dates and events the bot remembers for one participant")
+    s = sub.add_parser("forget-participant", help="delete the dates, events and patient-memory facts the bot holds for one participant")
     s.add_argument("study"); s.add_argument("participant"); s.add_argument("--yes", action="store_true")
     s.add_argument("--reason"); _approval(s); s.set_defaults(fn=cmd_forget)
+    s = sub.add_parser("forget-study-memory", help="delete one study's whole patient memory (needs a second person)")
+    s.add_argument("study"); s.add_argument("--yes", action="store_true"); s.add_argument("--reason")
+    _approval(s); s.set_defaults(fn=cmd_forget_study_memory)
     s = sub.add_parser("approve", help="approve another person's request for an action that needs two people")
     s.add_argument("id", type=int); s.set_defaults(fn=cmd_approve)
     sub.add_parser("approvals", help="requests for two-person actions not yet used").set_defaults(fn=cmd_approvals)

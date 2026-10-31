@@ -3507,3 +3507,114 @@ def test_a_memory_change_must_come_from_the_admin_page(monkeypatch):
         assert done == [({"study": "S", "fact": "f1"}, "peter@huma.ai")]
     finally:
         server.shutdown()
+
+
+def _memory_store(monkeypatch, facts):
+    """A fake Hindsight holding `facts`: list (by state and date), DELETE of a document, PATCH of a fact."""
+    from cormon import hindsight
+    calls = []
+
+    def fake(method, path, body=None, timeout=0):
+        calls.append((method, path, body))
+        if method == "GET" and "/tags" in path:
+            tags = sorted({t for f in facts for t in f["tags"] if t.startswith("participant:")})
+            return {"items": [{"tag": t} for t in tags], "total": len(tags)}
+        if method == "GET" and "/memories/list" in path:
+            state = "invalidated" if "state=invalidated" in path else "valid"
+            rows = [f for f in facts if f.get("state", "valid") == state]
+            if "end_date=" in path:
+                end = path.split("end_date=")[1].split("&")[0].replace("%3A", ":").replace("%2B", "+")
+                rows = [f for f in rows if f["mentioned_at"] < end]
+            return {"items": rows, "total": len(rows)}
+        if method == "DELETE" and "/documents/" in path:
+            doc = path.rsplit("/", 1)[1]
+            facts[:] = [f for f in facts if f["document_id"] != doc]
+        if method == "PATCH" and "/memories/" in path:
+            f = next(f for f in facts if f["id"] == path.rsplit("/", 1)[1])
+            f.update(text=body.get("text", f["text"]), state=body.get("state", f.get("state", "valid")))
+        return {}
+    monkeypatch.setattr(hindsight, "_call", fake)
+    monkeypatch.setattr(hindsight, "used", lambda: True)
+    return calls
+
+
+def test_old_facts_are_deleted_after_the_retention_period_and_a_failure_is_told(monkeypatch):
+    from cormon import phi
+    from cormon.compliance import alerts
+    facts = [{"id": "a", "text": "old", "document_id": "message-1", "tags": [], "mentioned_at": "2018-01-01T00:00:00+00:00"},
+             {"id": "b", "text": "new", "document_id": "message-2", "tags": [], "mentioned_at": "2026-10-01T00:00:00+00:00"}]
+    _memory_store(monkeypatch, facts)
+    told = []
+    monkeypatch.setattr(alerts, "notify", lambda key, *a, **kw: told.append(key))
+    monkeypatch.setattr(alerts, "clear", lambda *a, **kw: None)
+    out = phi.purge(2557, log=lambda *_: None)
+    assert out["memory_messages"] >= 1 and [f["id"] for f in facts] == ["b"]
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_purged'")
+
+    from cormon import hindsight
+    monkeypatch.setattr(hindsight, "_call", lambda *a, **kw: (_ for _ in ()).throw(ConnectionError("down")))
+    assert phi.purge(2557, log=lambda *_: None)["memory_messages"].startswith("failed")
+    assert told == ["memory_purge"]
+
+
+def test_forgetting_a_participant_erases_their_facts_and_keeps_others(monkeypatch):
+    from cormon import config, hindsight, phi
+    facts = [{"id": "a", "text": "014 fell", "document_id": "message-1", "tags": ["participant:1001014"],
+              "mentioned_at": "2026-10-01T00:00:00+00:00"},
+             {"id": "b", "text": "014 dizzy", "document_id": "message-2", "tags": ["participant:1001-014"],
+              "mentioned_at": "2026-10-02T00:00:00+00:00"},
+             {"id": "c", "text": "022 fine", "document_id": "message-2", "tags": ["participant:1001022"],
+              "mentioned_at": "2026-10-02T00:00:00+00:00"}]
+    calls = _memory_store(monkeypatch, facts)
+    assert phi.forget_participant("NCT05842941", "1001-014") == 2
+    assert [c[1] for c in calls if c[0] == "DELETE"] == ["/v1/default/banks/NCT05842941/documents/message-1"]
+    b = next(f for f in facts if f["id"] == "b")
+    assert b["text"] == hindsight.FORGOTTEN and b["state"] == "invalidated", "blanked where others share the message"
+    assert next(f for f in facts if f["id"] == "c")["text"] == "022 fine"
+    assert hindsight.curated("NCT05842941", "message-1") and hindsight.curated("NCT05842941", "message-2")
+
+    monkeypatch.setattr(hindsight, "_call", lambda *a, **kw: (_ for _ in ()).throw(ConnectionError("down")))
+    with pytest.raises(RuntimeError, match="run forget-participant again"):
+        phi.forget_participant("NCT05842941", "1001-022")
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='participant_forgotten' AND details LIKE '%memory_failed%'")
+
+
+def test_a_study_memory_is_deleted_whole_and_its_facts_go_in_the_records_package(monkeypatch, tmp_path):
+    import zipfile
+    from cormon import hindsight
+    from cormon.compliance import package
+    facts = [{"id": "a", "text": "014 fell | When: 2026-10-01", "document_id": "message-1",
+              "tags": ["participant:1001014"], "mentioned_at": "2026-10-01T00:00:00+00:00",
+              "metadata": {"message_id": "1", "sender": "Ann", "role": "CRC"}},
+             {"id": "b", "text": "retired one", "document_id": "message-2", "tags": [], "state": "invalidated",
+              "invalidation_reason": "said in error", "mentioned_at": "2026-10-02T00:00:00+00:00"}]
+    calls = _memory_store(monkeypatch, facts)
+    res = package.build("NCT05842941", tmp_path)
+    with zipfile.ZipFile(res["path"]) as z:
+        rows = z.read("patient_memory.csv").decode()
+    assert "014 fell" in rows and "said in error" in rows and res["counts"]["memory_facts"] == 2
+    hindsight.delete_study("NCT05842941")
+    assert calls[-1][:2] == ("DELETE", "/v1/default/banks/NCT05842941")
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_study_deleted'")
+
+
+def test_patient_memory_backups_are_checked_and_copied_off_the_server_once(tmp_path, monkeypatch):
+    import json as _json
+    from datetime import datetime, timedelta, timezone
+    from cormon import backup, hindsight
+    sent = _bucket_on(monkeypatch, _FakeBucket())
+    monkeypatch.setattr(hindsight, "used", lambda: True)
+    run = lambda: (db.set_state("memory_backup_hour", ""), backup.memory_hourly(log=lambda *_: None))[1]
+    assert run()["problem"] == "no patient memory backup has been made" and sent[-1][0] == "backup_memory"
+
+    dump = backup.folder() / "hindsight-20261031-200000.dump"
+    dump.write_bytes(b"PGDMP fake")
+    at = lambda h: (datetime.now(timezone.utc) - timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    Path(f"{dump}.json").write_text(_json.dumps({"ok": False, "facts": 3, "live_facts": 9, "at": at(0)}))
+    assert "failed its restore check (3 of 9" in run()["problem"]
+    Path(f"{dump}.json").write_text(_json.dumps({"ok": True, "facts": 9, "live_facts": 9, "at": at(5)}))
+    assert "hours old" in run()["problem"]
+    Path(f"{dump}.json").write_text(_json.dumps({"ok": True, "facts": 9, "live_facts": 9, "at": at(0)}))
+    first = run()
+    assert first["ok"] and first["offsite"]["object"].endswith("hindsight-20261031-200000.dump.gz")
+    assert "offsite" not in run(), "each copy leaves the server once"
