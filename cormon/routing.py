@@ -254,6 +254,10 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
     if stranger := senders.off_roster(msg, study):
         _hold_off_roster(study, item, others, msg, stranger, actor)
         return []
+    day = (msg.get("sent_at") or msg["received_at"])[:10]
+    if item["kind"] != "out_of_scope" and not force and (why := study.version_problems(item.get("site"), day)):
+        _hold_version(study, item, others, msg, why, actor)
+        return []
     entries = _in_group(msg, _chat_posts(item, capture.turn(msg), entries))
     routed_to = ", ".join(dict.fromkeys(
         n for it in [item] + others
@@ -324,6 +328,7 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
         db.ex("UPDATE items SET routed=1, updated_at=? WHERE id=?", (db.now(), it["id"]))
         db.audit("item_routed", entity_type="item", entity_id=it["id"], study_id=study.study_id, actor=actor,
                  tier=it["tier"], routed_to=routed_to, outbox_ids=created, forced=force or None,
+                 checked_against={d["id"]: d.get("version") for d in study.documents},
                  sent_with=[x["id"] for x in [item] + others if x["id"] != it["id"]] or None)
     return created
 
@@ -346,6 +351,25 @@ def _hold_off_roster(study: Study, item: dict, others: list[dict], msg: dict, st
                   + "If the sender belongs on this study, add them to its people list (through GitHub), deploy, then "
                     f"run `cormon draft {item['id']} --force` to send the alert. If not (for example the wrong study), "
                     "nothing more is needed.", every_minutes=10 ** 7)
+
+
+def _hold_version(study: Study, item: dict, others: list[dict], msg: dict, why: list[str], actor: str) -> None:
+    """VAL-04: an alert checked against a protocol version the site was not on that day is not sent; the admins
+    are told. Marked routed so it is not tried again."""
+    from .compliance import alerts
+    ids = [item["id"]] + [it["id"] for it in others]
+    for i in ids:
+        db.ex("UPDATE items SET routed=1, updated_at=? WHERE id=?", (db.now(), i))
+        db.audit("item_held_protocol_version", entity_type="item", entity_id=i, study_id=study.study_id,
+                 actor=actor, message_id=msg["id"], why=why)
+    lines = "\n".join(f"- {w}" for w in why)
+    alerts.notify(f"version:{msg['id']}:{item['id']}", f"Held: an alert for {study.study_id} checked against the "
+                  "wrong protocol version",
+                  f"Alert(s) {', '.join(f'#{i}' for i in ids)} from message {msg['id']} were not sent:\n\n{lines}\n\n"
+                  "Check the alert against the version the site was on. If it still holds, run "
+                  f"`cormon draft {item['id']} --force` to send it; if not, disregard it. If the site's version "
+                  "dates are wrong, correct the `protocols` list in the study file (through GitHub).",
+                  every_minutes=10 ** 7)
 
 
 def copy_nudge(study: Study, msg: dict, first_writer: str) -> int | None:

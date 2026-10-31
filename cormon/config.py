@@ -70,6 +70,31 @@ class Study:
     def known_site(self, site_id: str | None) -> bool:
         return any(s["id"] == site_id for s in self.sites)
 
+    def version_at(self, site_id: str, doc_id: str, day: str) -> str | None:
+        """VAL-04: the version of a document the site worked to on a day (YYYY-MM-DD), from the site's `protocols`
+        list (each version with the day it took effect there). None before the first. A document the site does not
+        list is taken to be the version loaded."""
+        site = next((s for s in self.sites if s["id"] == site_id), {})
+        listed = sorted((p for p in site.get("protocols") or [] if p["document"] == doc_id),
+                        key=lambda p: str(p.get("from") or ""))
+        if not listed:
+            return self.doc(doc_id).get("version")
+        now = [p for p in listed if str(p.get("from") or "") <= day]
+        return str(now[-1]["version"]) if now else None
+
+    def version_problems(self, site_id: str | None, day: str) -> list[str]:
+        """Why an alert's check may not hold for that site on that day: the site was on a different version of a
+        document than the one loaded. A site that is not known is checked against every site."""
+        sites = [site_id] if self.known_site(site_id) else [s["id"] for s in self.sites]
+        out = []
+        for d in self.documents:
+            for s in sites:
+                had = self.version_at(s, d["id"], day)
+                if had != d.get("version"):
+                    out.append(f"{self.site_name(s)} was on {d['title']} version {had or '(none yet)'} on {day}; "
+                               f"the bot checks against version {d.get('version')}")
+        return out
+
     def person_by_email(self, email: str | None) -> Person | None:
         if not email:
             return None

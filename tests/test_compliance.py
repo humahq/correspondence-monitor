@@ -1501,6 +1501,49 @@ def test_a_message_with_a_safety_part_sends_no_notice_back_to_the_site(monkeypat
     assert "email_crc" in urgent(2, "none")[1]                                  # no harm: the notice goes as before
 
 
+def _versions(study, *versions):
+    return replace(study, sites=[dict(study.sites[0], protocols=[
+        {"document": "regimen_g", "version": v, "from": f} for v, f in versions])])
+
+
+def test_a_site_works_to_the_protocol_version_in_force_on_the_day():
+    from cormon import config
+
+    study = _versions(config.study("NCT05842941"), ("1.0", None), ("2.0 (18 Dec 2023)", "2024-02-01"))
+    assert study.version_at("site-01", "regimen_g", "2024-01-31") == "1.0"
+    assert study.version_at("site-01", "regimen_g", "2024-02-01") == "2.0 (18 Dec 2023)"
+    assert study.version_at("site-01", "master", "2020-01-01") == "6.0 (14 Oct 2024)"   # not listed: as loaded
+    assert study.version_problems("site-01", "2024-03-01") == []
+    assert "version 1.0 on 2024-01-31" in study.version_problems("site-01", "2024-01-31")[0]
+    late = _versions(config.study("NCT05842941"), ("2.0 (18 Dec 2023)", "2024-02-01"))
+    assert "(none yet)" in late.version_problems(None, "2024-01-01")[0]
+
+
+def test_an_alert_checked_against_a_version_the_site_was_not_on_is_held(monkeypatch):
+    from cormon import careful, config, items, outbox, routing
+
+    monkeypatch.setattr(careful, "check_post", lambda **k: None)
+    monkeypatch.setattr(outbox, "dispatch", lambda **k: {"sent": 0, "failed": 0})
+    _set(monkeypatch, web__admin__emails=["ops@huma.ai"])
+    study = _versions(config.study("NCT05842941"), ("1.0", None), ("2.0 (18 Dec 2023)", "2099-01-01"))
+    monkeypatch.setattr(config, "study", lambda sid: study)
+    crc = study.people_with_role("crc")[0].email
+    mid = capture.capture(Inbound(channel="email", external_id="<v1@x.org>", thread_ref="v1", from_addr=crc,
+                                  from_name="C", subject="DNL-1012", sent_at=_ago(5), rfc_message_id="<v1@x.org>",
+                                  body_text="DNL-1012 randomized with eGFR 25.", study_id=study.study_id))
+    iid, _ = items.upsert(study=study, thread_key="email:v1", message_id=mid, dedup_key="v1", kind="finding",
+                          pattern_class="eligibility", rule_id=None, participant_id="DNL-1012", site="site-01",
+                          polarity="problem", title="eGFR below the minimum", tier="immediate", tier_reason="test",
+                          evidence={}, reasoning="r")
+    assert routing.route_item(iid) == []
+    sent = db.q("SELECT purpose, to_addrs, body FROM outbox")
+    assert [(o["purpose"], db.unjs(o["to_addrs"])) for o in sent] == [("ops_alert", ["ops@huma.ai"])]
+    assert "version 1.0" in sent[0]["body"] and f"cormon draft {iid} --force" in sent[0]["body"]
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='item_held_protocol_version'")
+    assert routing.route_item(iid, force=True, actor="ann")
+    assert "checked_against" in db.q1("SELECT details FROM audit_log WHERE action='item_routed'")["details"]
+
+
 def test_a_message_from_someone_not_on_the_people_list_reaches_only_the_admins(monkeypatch):
     from datetime import timedelta as td
 
