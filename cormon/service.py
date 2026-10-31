@@ -80,6 +80,7 @@ def tick(log=print, named: list[str] | None = None, force: bool = True) -> None:
     t1 = time.perf_counter()
     db.set_state("heartbeat", db.now())
     _safely(backup.hourly, log)
+    _safely(backup.memory_hourly, log)
     _safely(backup.weekly_drill, log)
     _safely(phi.daily, log)
     _safely(trail.hourly, log)

@@ -104,9 +104,30 @@ def purge(days: int | None = None, log=print) -> dict:
                                        " (SELECT id FROM messages WHERE received_at<?)", (cutoff,)),
         "patient_facts": db.changed("DELETE FROM patient_facts WHERE COALESCE(sent_at, created_at)<?", (cutoff,)),
     }
+    out["memory_messages"] = _purge_memory(cutoff, log)
     db.audit("retention_purge", entity_type="service", entity_id="retention", days=int(days), **out)
     log(f"retention: cleared data older than {days} days: {out}")
     return out
+
+
+def _purge_memory(cutoff: str, log=print) -> int | str:
+    """Patient memory's facts older than the cutoff, in every study (hindsight.purge_before). A failure is told to
+    the admins: facts kept past the retention period must not go unnoticed."""
+    from . import config, hindsight
+    from .compliance import alerts
+    if not hindsight.used():
+        return 0
+    try:
+        n = sum(hindsight.purge_before(s, cutoff) for s in config.studies())
+    except Exception as e:
+        db.audit("memory_purge_failed", entity_type="service", entity_id="retention", error=str(e)[:500])
+        alerts.notify("memory_purge", "cormon: clearing old patient memory FAILED",
+                      f"Facts older than the retention period could not be deleted from Hindsight: {str(e)[:300]}. "
+                      "It is tried again tomorrow. See `cormon log`.")
+        log(f"retention: patient memory could not be cleared: {e}")
+        return f"failed: {str(e)[:200]}"
+    alerts.clear("memory_purge", "cormon: old patient memory is cleared again", "The daily clearing worked.")
+    return n
 
 
 class NoRetentionPeriod(RuntimeError):
@@ -132,10 +153,19 @@ def daily(log=print) -> dict | None:
 
 
 def forget_participant(study_id: str, participant: str) -> int:
-    """Delete what the bot remembers about one participant (their dates and events); returns rows removed."""
-    from . import memory
+    """Delete what the bot remembers about one participant (their dates and events, and their facts in patient
+    memory); returns rows and facts removed. If patient memory cannot be reached it raises, after the dates are
+    gone, so the person running it knows to run it again."""
+    from . import hindsight, memory
     n = db.changed("DELETE FROM patient_facts WHERE study_id=? AND participant_key=?",
                    (study_id, memory.key(participant)))
+    try:
+        facts = hindsight.forget_participant(study_id, participant) if hindsight.used() else 0
+    except Exception as e:
+        db.audit("participant_forgotten", entity_type="participant", entity_id=memory.key(participant),
+                 study_id=study_id, rows=n, memory_failed=str(e)[:300])
+        raise RuntimeError(f"the dates are deleted, but patient memory could not be reached ({e}); "
+                           "run forget-participant again") from e
     db.audit("participant_forgotten", entity_type="participant", entity_id=memory.key(participant),
-             study_id=study_id, rows=n)
-    return n
+             study_id=study_id, rows=n, memory_facts=facts)
+    return n + facts

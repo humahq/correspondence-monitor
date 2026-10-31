@@ -10,6 +10,8 @@
     sent.csv             every message the bot sent or queued
     audit_trail.csv      the study's audit entries with their chain hashes; anchors.txt holds the daily anchors
     ai_log.csv           every AI call made for the study, in full
+    patient_memory.csv   every fact patient memory holds (current and retired), who reported it and from which
+                         message; its saves, searches and admin changes are in the audit trail
     config_history.csv   every settings version, with config/ holding each one's text
     checks.json          the audit-chain check and the originals check, run when the package was made
 
@@ -108,6 +110,13 @@ def build(study_id: str, out: Path, since: str | None = None, until: str | None 
     for c in calls:
         c["request"] = json.dumps(ailog.request_of(c), ensure_ascii=False)
     configs = _rows("SELECT * FROM config_versions ORDER BY id", [])
+    from .. import hindsight
+    memory_facts, memory_problem = [], None
+    if hindsight.used():
+        try:
+            memory_facts = hindsight.export_rows(study_id, since, until)
+        except Exception as e:
+            memory_problem = f"patient memory could not be read: {str(e)[:200]}"
 
     owners = {("message", int(i)) for i in msg_ids} | {("outbox", int(i)) for i in out_ids}
     manifest = []
@@ -134,7 +143,8 @@ def build(study_id: str, out: Path, since: str | None = None, until: str | None 
         chain = trail.verify()
         checks = {"audit_chain": chain,
                   "originals": {"checked": len(manifest),
-                                "problems": [m for m in manifest if m["status"] in ("changed", "missing")]}}
+                                "problems": [m for m in manifest if m["status"] in ("changed", "missing")]},
+                  "patient_memory": {"facts": len(memory_facts), "problem": memory_problem}}
         z.writestr("manifest.csv", _csv(manifest, ["file", "record", "kind", "owner", "size", "sha256_at_capture",
                                                    "sha256_now", "status", "kept_at", "purged_at"]))
         z.writestr("messages.csv", _csv(messages, ["id", "channel", "from_addr", "from_name", "to_addrs", "cc_addrs",
@@ -161,12 +171,15 @@ def build(study_id: str, out: Path, since: str | None = None, until: str | None 
                                               "error", "request_sha256", "request", "response"]))
         z.writestr("config_history.csv", _csv(configs, ["id", "path", "sha256", "actor", "recorded_at",
                                                         "approved_by", "approved_at", "waiting"]))
+        z.writestr("patient_memory.csv", _csv(memory_facts, ["fact", "reported_at", "reported_by", "participants",
+                                                             "fact_text", "happened", "state", "retired_why",
+                                                             "edited_at", "document", "message_id", "alert_id"]))
         if trail.anchor_file().exists():
             z.writestr("anchors.txt", trail.anchor_file().read_text())
         z.writestr("checks.json", json.dumps(checks, indent=2, default=str))
         counts = {"messages": len(messages), "alerts": len(alerts), "dispositions": len(dispositions),
                   "safety": len(safety), "sent": len(sent), "originals": len(manifest), "audit_entries": len(audit),
-                  "ai_calls": len(calls), "config_versions": len(configs)}
+                  "ai_calls": len(calls), "config_versions": len(configs), "memory_facts": len(memory_facts)}
         z.writestr("README.txt", _readme(study_id, made, actor, since, until, counts, checks))
     digest = sha256(path.read_bytes())
     db.audit("records_exported", actor=actor or "system", actor_type="operator" if actor else "system",
@@ -185,7 +198,9 @@ def _readme(study_id, made, actor, since, until, counts, checks) -> str:
              "Audit chain: " + ("intact" if chain["ok"] else f"BROKEN at entry {chain.get('broken_at')}: "
                                                               f"{chain.get('why')}") + ".",
              "Originals: " + ("all match the hash they had when kept" if not bad
-                              else f"{len(bad)} do NOT match or are missing (see manifest.csv)") + ".", "",
+                              else f"{len(bad)} do NOT match or are missing (see manifest.csv)") + ".",
+             *([f"Patient memory: NOT included, {checks['patient_memory']['problem']}."]
+               if checks["patient_memory"]["problem"] else []), "",
              "Each original's SHA-256 is in manifest.csv; re-hash the file in originals/ to check it.",
              "Each audit entry's hash covers the entry before it, so an entry changed or removed breaks the chain.",
              "Safety messages are recorded and sent to the medical monitor unassessed; the bot gives no clinical",
