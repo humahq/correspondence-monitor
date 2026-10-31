@@ -3319,6 +3319,7 @@ def _memory_on(monkeypatch, reply=None, fail=None):
     monkeypatch.setattr(hindsight, "_pool", ThreadPoolExecutor(1))   # a worker holds its own database link
     monkeypatch.setattr(alerts, "notify", lambda key, subject, body, **kw: told.append(key))
     monkeypatch.setattr(alerts, "clear", lambda *a, **kw: None)
+    monkeypatch.setattr(hindsight.llm, "structured", lambda *a, **kw: {"replaced": []})
     return calls, told
 
 
@@ -3407,3 +3408,34 @@ def test_a_slow_memory_search_gives_nothing_and_is_logged(monkeypatch):
     _memory_on(monkeypatch, fail=requests.Timeout("read timed out"))
     assert hindsight.recall_lines(config.study("NCT05842941"), "1001-014", "q", {"id": 11}) == []
     assert "timed out" in db.q1("SELECT details FROM audit_log WHERE action='memory_search_failed'")["details"]
+
+
+def test_a_later_report_replaces_an_earlier_fact_and_both_are_kept(monkeypatch):
+    from cormon import config, hindsight
+    found = {"results": [
+        {"id": "a", "text": "1001014 was born in 1967", "mentioned_at": "2025-03-01T15:00:00+00:00",
+         "metadata": {"message_id": "1", "sender": "Ann", "role": "Study coordinator"}},
+        {"id": "c", "text": "1001014 was born in 1972", "mentioned_at": "2026-10-20T15:00:00+00:00",
+         "metadata": {"message_id": "5", "sender": "Bo", "role": "PI"}},
+        {"id": "b", "text": "1001014 was born in 1970", "mentioned_at": "2026-01-10T15:00:00+00:00",
+         "metadata": {"message_id": "3", "sender": "Ann", "role": "Study coordinator"}}]}
+    _memory_on(monkeypatch, reply=lambda m, p: {"items": [{"tag": "participant:1001014"}]} if m == "GET" else found)
+    # the AI's pairs, oldest first: 1970 replaces 1967, 1972 replaces 1970; "1967 replaces 1972" goes back in time
+    monkeypatch.setattr(hindsight.llm, "structured", lambda *a, **kw: {"replaced": [
+        {"old": 1, "by": 2}, {"old": 2, "by": 3}, {"old": 3, "by": 1}]})
+    lines = hindsight.recall_lines(config.study("NCT05842941"), "1001-014", "When was 014 born?", {"id": 9})
+    assert lines == [
+        "replaced fact (a later report, on 20 Oct 2026, changed it), reported on 01 Mar 2025 by Ann (Study "
+        "coordinator): 1001014 was born in 1967",
+        "replaced fact (a later report, on 20 Oct 2026, changed it), reported on 10 Jan 2026 by Ann (Study "
+        "coordinator): 1001014 was born in 1970",
+        "earlier fact, reported on 20 Oct 2026 by Bo (PI): 1001014 was born in 1972"]
+    row = db.q1("SELECT details FROM audit_log WHERE action='memory_searched'")
+    assert '"old": "a", "by": "c"' in row["details"]
+
+    def down(*a, **kw):
+        raise TimeoutError("AI slow")
+    monkeypatch.setattr(hindsight.llm, "structured", down)
+    lines = hindsight.recall_lines(config.study("NCT05842941"), "1001-014", "q", {"id": 10})
+    assert [x.split(",")[0] for x in lines] == ["earlier fact"] * 3, "without the check every fact is still given"
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_newer_failed'")

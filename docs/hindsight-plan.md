@@ -77,6 +77,16 @@ for Eliot.
 
 **5. Newest fact wins (half a day).**
 "Born 1967", later "born 1972": use 1972, keep both. The older one is replaced, not deleted. (28 Oct)
+Built (31 Oct): when a search finds two or more facts, one quick AI check (`memory_newer`) says which facts a later
+one replaces (same thing, a different value, or stopped). Code keeps a pair only when the replacing fact was
+reported later, and follows chains (1967, then 1970, then 1972) to the newest. Nothing is deleted: the old fact is
+still given to the answer, marked "replaced fact (a later report, on <date>, changed it)", and the answer must not
+use it as true. The pairs are in the audit trail (`memory_searched`). If the check fails, every fact is still
+given with its date (`memory_newer_failed`). Test messages can now carry a `"date"`.
+Made-up check (`demo/test-hindsight-newer`): March 2025 "born 1967, takes St. John's wort every day"; October 2026
+"has stopped the St. John's wort ... birth year is 1972"; then "is any medicine she takes now a problem?". The 2025
+fact was marked replaced, and the answer was "No. The study coordinator reported on 20 Oct 2026 that 1001-031 has
+stopped St. John's wort completely". The search plus the check took about 4 seconds.
 
 **6. A page to view, correct and retire facts (1 to 1.5 days).** (email)
 

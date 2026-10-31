@@ -97,7 +97,8 @@ Rules:
   only when it bears on the question. The answer must then say who reported it and on what date, in the
   sentence that uses it ("The study coordinator reported on 12 Oct 2026 that she has gout."), so the reader can
   check it. When two earlier facts disagree, the one reported later holds; mention the earlier one only if the
-  question needs it."""
+  question needs it. A "replaced fact" was changed by a later report: never use it as true; mention it only when
+  the question asks what changed or when the change matters, saying it was later corrected."""
 
 ANSWER_SCHEMA = llm.obj({
     "answerable": {"type": "boolean"},
