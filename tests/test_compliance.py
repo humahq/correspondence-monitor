@@ -1386,6 +1386,52 @@ def test_drift_samples_quiet_messages_for_a_person_to_mark(monkeypatch):
     assert rep["missed"] == 1 and any("missed problem" in f for f in rep["flags"])
 
 
+# ------------------------------------------------------------------ records package (EXP-01, SAF-07)
+
+def test_the_records_package_holds_a_study_and_shows_a_changed_original(tmp_path):
+    import csv
+    import io
+    import zipfile
+
+    from cormon import config, items, routing
+    from cormon.compliance import package
+
+    study = config.study("NCT04098666")
+    mid = capture.capture(_chat(text="Participant 001 was admitted to hospital", raw=b'{"text": "admitted"}'))
+    other = capture.capture(replace(_chat(ext="spaces/S1/messages/2", raw=b"{}"), study_id="NCT05842941"))
+    iid, _ = items.upsert(study=study, thread_key="teams:t1", message_id=mid, dedup_key="s1", kind="out_of_scope",
+                          pattern_class=None, rule_id=None, participant_id="001", site=None, polarity="problem",
+                          title="safety", tier="low", tier_reason="safety", evidence={}, reasoning="hospital",
+                          state="out_of_scope")
+    routing.enqueue(purpose="safety", channel="email", destination="email", body="Safety message", item_id=iid,
+                    subject="Safety", to=["mm@sponsor.org"], study_id=study.study_id)
+
+    def read(res):
+        z = zipfile.ZipFile(res["path"])
+        return z, {n: list(csv.DictReader(io.StringIO(z.read(n).decode()))) for n in z.namelist()
+                   if n.endswith(".csv")}
+
+    res = package.build(study.study_id, tmp_path / "out", actor="ann")
+    z, t = read(res)
+    assert [m["id"] for m in t["messages.csv"]] == [str(mid)]
+    assert {r["owner"] for r in t["manifest.csv"]} == {f"message {mid}", "outbox 1"}
+    assert all(r["status"] == "ok" for r in t["manifest.csv"])
+    raw = next(r for r in t["manifest.csv"] if r["kind"] == "message_raw")
+    assert z.read(raw["file"]) == b'{"text": "admitted"}'
+    assert t["safety.csv"][0]["sent_to"] == '["mm@sponsor.org"]' and t["safety.csv"][0]["send_status"] == "queued"
+    assert t["alerts.csv"][0]["state_label"] == "safety (not assessed)"
+    assert not any(r["entity_id"] == str(other) for r in t["audit_trail.csv"] if r["entity_type"] == "message")
+    assert "Audit chain: intact" in z.read("README.txt").decode()
+    logged = db.q1("SELECT actor, details FROM audit_log WHERE action='records_exported'")
+    assert logged["actor"] == "ann" and res["sha256"] in logged["details"]
+
+    (settings.data_dir() / db.q1("SELECT raw_path FROM messages WHERE id=?", (mid,))["raw_path"]).write_bytes(b"{}")
+    res = package.build(study.study_id, tmp_path / "out2")
+    z, t = read(res)
+    assert next(r for r in t["manifest.csv"] if r["kind"] == "message_raw")["status"] == "changed"
+    assert "do NOT match" in z.read("README.txt").decode()
+
+
 # ------------------------------------------------------------------ safety routing failure paths (SAF-06)
 
 def test_no_monitor_listed_a_safety_message_goes_to_nobody_and_cannot_be_cleared():

@@ -175,6 +175,17 @@ def cmd_export_rules(args):
         print(f"  wrote {p}")
 
 
+def cmd_export_records(args):
+    from .compliance import package
+
+    res = package.build(args.study, Path(args.folder).expanduser(), args.since, args.until, actor(args))
+    print(f"wrote {res['path']}\n  sha256 {res['sha256']}")
+    print("  " + ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in res["counts"].items()))
+    chain, bad = res["checks"]["audit_chain"], res["checks"]["originals"]["problems"]
+    print(f"  audit chain {'intact' if chain['ok'] else 'BROKEN'}; originals "
+          + ("all match" if not bad else f"{len(bad)} changed or missing"))
+
+
 def cmd_rules_suggest(args):
     from . import prune
 
@@ -976,6 +987,12 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("export-rules", help="write the rules (Word and Excel) and the source documents to a folder")
     s.add_argument("folder"); s.add_argument("--study", default=next(iter(config.studies()), None))
     s.set_defaults(fn=cmd_export_rules)
+
+    s = sub.add_parser("export-records", help="write one study's records package (originals, hashes, alerts, "
+                                              "audit trail, AI log, settings history) as a zip")
+    s.add_argument("folder"); s.add_argument("--study", default=next(iter(config.studies()), None))
+    s.add_argument("--since", help="first day, YYYY-MM-DD"); s.add_argument("--until", help="last day, YYYY-MM-DD")
+    s.set_defaults(fn=cmd_export_records)
 
     s = sub.add_parser("rules-suggest", help="AI suggests keep or remove for each rule (turns nothing off)")
     s.add_argument("--study", default=next(iter(config.studies()), None))
