@@ -2374,6 +2374,20 @@ def test_old_message_text_is_cleared_only_when_a_retention_period_is_set(monkeyp
         ["[cleared after retention period]", "new text"]
 
 
+def test_the_bot_does_not_start_without_a_retention_period(monkeypatch):
+    from cormon import phi, service, settings
+    get = settings.get
+    assert phi.check_retention() == 2557
+    for bad in (None, 0, -5, "7 years", True):
+        monkeypatch.setattr(settings, "get", lambda k, d=None, bad=bad: bad if k == "data.retention_days" else get(k, d))
+        with pytest.raises(phi.NoRetentionPeriod, match="no retention period"):
+            phi.check_retention()
+    monkeypatch.setattr(service, "check_live_only", lambda: None)
+    monkeypatch.setattr(service.webview, "start_background", lambda: pytest.fail("the bot started"))
+    with pytest.raises(phi.NoRetentionPeriod):
+        service.run(once=True)
+
+
 def test_markdown_guide_keeps_section_numbers_and_table_rows(tmp_path):
     from cormon import guide
     md = tmp_path / "lab.md"
