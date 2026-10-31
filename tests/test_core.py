@@ -3439,3 +3439,71 @@ def test_a_later_report_replaces_an_earlier_fact_and_both_are_kept(monkeypatch):
     lines = hindsight.recall_lines(config.study("NCT05842941"), "1001-014", "q", {"id": 10})
     assert [x.split(",")[0] for x in lines] == ["earlier fact"] * 3, "without the check every fact is still given"
     assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_newer_failed'")
+
+
+def test_an_admin_corrects_retires_and_links_facts_with_a_reason_and_nothing_is_deleted(monkeypatch):
+    from cormon import config, hindsight
+    store = {"f1": {"id": "f1", "text": "1001014 born in 1967 | When: 2025", "document_id": "message-3",
+                    "tags": ["participant:1001014"], "metadata": {"message_id": "3", "sender": "Ann", "role": "CRC"},
+                    "mentioned_at": "2025-03-01T15:00:00+00:00", "state": "valid"},
+             "f2": {"id": "f2", "text": "The patient fell at home", "document_id": "message-4", "tags": [],
+                    "metadata": {"message_id": "4"}, "mentioned_at": "2026-10-01T15:00:00+00:00", "state": "valid"}}
+
+    def reply(method, path):
+        return dict(store[path.rsplit("/", 1)[1]]) if method == "GET" and "/memories/f" in path else {}
+    calls, _ = _memory_on(monkeypatch, reply=reply)
+    with pytest.raises(ValueError, match="reason"):
+        hindsight.change_fact("NCT05842941", "f1", "retire", "peter@huma.ai", "")
+    hindsight.change_fact("NCT05842941", "f1", "correct", "peter@huma.ai", "ID card checked", text="Born in 1972")
+    assert calls[-1] == ("PATCH", "/v1/default/banks/NCT05842941/memories/f1", {"text": "Born in 1972"})
+    row = db.q1("SELECT actor, details FROM audit_log WHERE action='memory_fact_corrected'")
+    assert row["actor"] == "peter@huma.ai"
+    assert '"old": "1001014 born in 1967"' in row["details"] and '"new": "Born in 1972"' in row["details"]
+    hindsight.change_fact("NCT05842941", "f1", "retire", "peter@huma.ai", "said in error")
+    assert calls[-1][2]["state"] == "invalidated", "retired, not deleted"
+    assert not [c for c in calls if c[0] == "DELETE"]
+
+    hindsight.change_fact("NCT05842941", "f2", "link", "peter@huma.ai", "the nurse meant 022", participant="1001-022")
+    saved = next(c for c in calls if c[0] == "POST")[2]["items"][0]
+    assert "participant:1001022" in saved["tags"] and saved["metadata"]["message_id"] == "4"
+    assert calls[-1][2]["state"] == "invalidated", "the untagged original is retired once its copy is saved"
+    with pytest.raises(ValueError, match="already linked"):
+        hindsight.change_fact("NCT05842941", "f1", "link", "peter@huma.ai", "wrong person", participant="1001-031")
+
+    msg = {"id": 3, "from_addr": "johnrohit94@gmail.com", "channel": "email", "attachments": []}
+    before = len(calls)
+    hindsight.save_message(config.study("NCT05842941"), msg, "again").result()
+    assert len(calls) == before, "a re-read must not replace facts an admin changed"
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_not_saved' AND entity_id='3'")
+    assert hindsight._corrections("NCT05842941", ["f1"])["f1"]["by"] == "peter@huma.ai"
+
+
+def test_a_memory_change_must_come_from_the_admin_page(monkeypatch):
+    import http.client, json, threading, time as _t
+    from http.server import ThreadingHTTPServer
+    from cormon import adminview, settings, webview, weblogin
+    conf = {"web.login.enabled": True, "web.login.client_id": "cid", "web.base_url": "https://mon.example",
+            "web.admin.emails": ["peter@huma.ai"]}
+    real = settings.get
+    monkeypatch.setattr(settings, "get", lambda k, d=None: conf.get(k, real(k, d)))
+    done = []
+    monkeypatch.setattr(adminview, "memory_change", lambda body, email: done.append((body, email)) or {"ok": True})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), webview.Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def post(email, headers):
+        c = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        cookie = f"{weblogin.COOKIE}={weblogin._sign({'email': email, 'exp': _t.time() + 60})}"
+        c.request("POST", "/admin/api/memory/change", body=json.dumps({"study": "S", "fact": "f1"}),
+                  headers={"Cookie": cookie, **headers})
+        return c.getresponse().status
+    ok = {"Content-Type": "application/json", "X-Cormon-Admin": "1"}
+    try:
+        assert post("someone@huma.ai", ok) == 403, "not an admin"
+        assert post("peter@huma.ai", {"Content-Type": "application/json"}) == 403, "a form on another site"
+        assert post("peter@huma.ai", dict(ok, Origin="https://evil.example")) == 403
+        assert done == []
+        assert post("peter@huma.ai", dict(ok, Origin="https://mon.example")) == 200
+        assert done == [({"study": "S", "fact": "f1"}, "peter@huma.ai")]
+    finally:
+        server.shutdown()

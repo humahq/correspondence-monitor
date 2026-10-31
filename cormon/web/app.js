@@ -7,7 +7,7 @@
   const EMAIL = document.body.dataset.email || "";
 
   const NAV = [["/admin", "Home"], ["/admin/messages", "Messages"], ["/admin/alerts", "Alerts"],
-               ["/admin/people", "Sign-ins and use"]];
+               ["/admin/memory", "Patient memory"], ["/admin/people", "Sign-ins and use"]];
 
   function go(to) { history.pushState(null, "", to); window.dispatchEvent(new Event("popstate")); window.scrollTo(0, 0); }
   function linkTo(to) {
@@ -379,6 +379,86 @@
       </div>`}<//>`;
   }
 
+  // ------------------------------------------------------------------ patient memory
+  const CHANGE_WORDS = { corrected: "Corrected", retired: "Retired", restored: "Restored", linked: "Linked" };
+
+  function FactChange({ study, f, onDone }) {
+    const [mode, setMode] = useState("");
+    const [text, setText] = useState(f.text);
+    const [who, setWho] = useState("");
+    const [reason, setReason] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
+    const send = () => {
+      setBusy(true); setError("");
+      fetch("/admin/api/memory/change", { method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-Cormon-Admin": "1" },
+        body: JSON.stringify({ study, fact: f.id, action: mode, reason, text, participant: who }) })
+        .then((r) => r.json().then((d) => { if (!r.ok) throw new Error(d.error || "http " + r.status); }))
+        .then(() => { setMode(""); onDone(); })
+        .catch((e) => setError(e.message)).finally(() => setBusy(false));
+    };
+    if (!mode) return html`<div class="small actions">
+      ${f.retired ? html`<button class="link" onClick=${() => setMode("restore")}>Restore</button>` : html`
+        <button class="link" onClick=${() => setMode("correct")}>Correct</button>
+        <button class="link" onClick=${() => setMode("retire")}>Retire</button>
+        ${!f.participants.length && html`<button class="link" onClick=${() => setMode("link")}>Link to a participant</button>`}`}</div>`;
+    return html`<div class="change">
+      ${mode === "correct" && html`<label>Corrected fact<textarea rows="2" value=${text} onInput=${(e) => setText(e.target.value)} /></label>`}
+      ${mode === "link" && html`<label>Participant's study code<input value=${who} onInput=${(e) => setWho(e.target.value)} /></label>`}
+      <label>Reason (kept in the audit trail)<input value=${reason} onInput=${(e) => setReason(e.target.value)} /></label>
+      ${error && html`<div class="error">${error}</div>`}
+      <div><button class="primary" disabled=${busy} onClick=${send}>${{ correct: "Save the correction", retire: "Retire it",
+        restore: "Restore it", link: "Link it" }[mode]}</button>
+        <button class="link" onClick=${() => setMode("")}>Cancel</button></div></div>`;
+  }
+
+  function FactRow({ study, f, onDone }) {
+    return html`<tr key=${f.id} class=${f.retired ? "retired" : ""}>
+      <td class="small nowrap">${f.reported}<div class="muted">${f.who}</div></td>
+      <td>${f.text}${f.happened && html`<div class="small muted">Happened: ${f.happened}</div>`}
+        ${f.retired && html`<div class="small"><${Badge}>Retired<//> ${f.retired_why}</div>`}
+        ${f.changes.map((c, i) => html`<div key=${i} class="small muted">${`${CHANGE_WORDS[c.what] || c.what} by ${c.by}, ${c.when}: `}
+          ${c.reason}${c.what === "corrected" ? html` (was: "${c.old}")` : ""}</div>`)}
+        <${FactChange} study=${study} f=${f} onDone=${onDone} /></td>
+      <td class="small">${f.message_id ? html`<a href=${"/admin/messages/" + f.message_id}
+        onClick=${linkTo("/admin/messages/" + f.message_id)}>Message ${f.message_id}</a>` : ""}
+        ${f.alert_id ? html`<div class="muted">Alert #${f.alert_id}</div>` : ""}</td></tr>`;
+  }
+
+  function Memory() {
+    const [q, set] = useQuery({ study: "", participant: "" });
+    const [n, setN] = useState(0);
+    const state = useData("/admin/api/memory?" + new URLSearchParams({ ...q, r: n }));
+    const again = () => setN(n + 1);
+    const facts = (rows, study) => html`<div class="panel table"><table>
+      <thead><tr><th>Reported</th><th>Fact</th><th>From</th></tr></thead>
+      <tbody>${rows.map((f) => html`<${FactRow} key=${f.id} study=${study} f=${f} onDone=${again} />`)}</tbody></table></div>`;
+    return html`
+      <div class="head"><div><h1>Patient memory</h1><div class="sub">What the bot remembers about each participant
+        from earlier messages, and uses in its answers. Correct or retire a fact that is wrong; nothing is deleted,
+        and every change is kept in the audit trail with its reason.</div></div></div>
+      <${Loading} state=${state}>${(d) => html`
+        <div class="filters">
+          <${Select} value=${d.study} onChange=${(v) => set("study", v)} options=${d.studies.map((s) => ({ value: s, label: s }))} />
+          ${d.participant && html`<a href="#" onClick=${(e) => { e.preventDefault(); set("participant", ""); }}>All participants</a>`}
+        </div>
+        ${!d.enabled ? html`<div class="empty">Patient memory is switched off (memory.enabled).</div>`
+          : d.error ? html`<div class="error">${d.error}</div>`
+          : d.participant ? html`<h2>${d.participant}</h2>${d.facts.length ? facts(d.facts, d.study)
+            : html`<div class="empty">Nothing remembered about ${d.participant}.</div>`}`
+          : html`
+            <div class="panel table">${d.participants.length ? html`<table>
+              <thead><tr><th>Participant</th><th>Facts</th><th>Last reported</th></tr></thead>
+              <tbody>${d.participants.map((p) => html`<tr key=${p.key} class="click" onClick=${() => set("participant", p.id)}>
+                <td>${p.id}</td><td>${p.facts}${p.retired ? html`<span class="muted"> (and ${p.retired} retired)</span>` : ""}</td>
+                <td class="small">${p.last ? new Date(p.last).toLocaleDateString() : ""}</td></tr>`)}</tbody></table>`
+              : html`<div class="empty pad">Nothing remembered yet.</div>`}</div>
+            <h2 class="gap-top">Not linked to a participant</h2>
+            <div class="sub">Facts from messages that gave no clear study code. Link one to its participant, or leave it.</div>
+            ${d.unlinked.length ? facts(d.unlinked, d.study) : html`<div class="empty">None.</div>`}`}`}<//>`;
+  }
+
   // ------------------------------------------------------------------ app
   function App() {
     const loc = useLocation();
@@ -392,13 +472,15 @@
       page = html`<${Loading} state=${opts}>${(o) => path === "/admin/messages"
         ? html`<${Messages} key=${loc} options=${o} />` : html`<${Alerts} key=${loc} options=${o} />`}<//>`;
     else if (path === "/admin/people") page = html`<${People} />`;
+    else if (path === "/admin/memory") page = html`<${Memory} key=${loc} />`;
     else page = html`<div class="error">Not found.</div>`;
     const section = msg ? "/admin/messages" : path;
     return html`<div class="app">
       <aside class="side"><div class="logo"><i></i>Study monitor</div>
         ${NAV.map(([to, name]) => html`<a key=${to} href=${to} class=${section === to ? "on" : ""} onClick=${linkTo(to)}>${name}</a>`)}
         <div class="who">${EMAIL}<br /><a href="/auth/logout">Sign out</a></div></aside>
-      <main>${page}<div class="foot-note">Read-only. Every page view is logged. This monitor does not review safety
+      <main>${page}<div class="foot-note">Read-only, except corrections to patient memory, each kept with its reason.
+        Every page view is logged. This monitor does not review safety
         information. This system does not guarantee the detection of safety signals. Silence does not constitute
         clearance.</div></main></div>`;
   }

@@ -1,5 +1,5 @@
 """Read-only item and answer detail pages, reached only through the unguessable link in a draft or a reply, and the
-read-only admin pages under /admin (adminview.py)."""
+admin pages under /admin (adminview.py), read-only except an admin's corrections to patient memory."""
 
 from __future__ import annotations
 
@@ -225,6 +225,35 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, json.dumps({"error": "not found"}), "application/json", ADMIN_HEADERS)
             return self._send(200, json.dumps(data), "application/json", ADMIN_HEADERS)
         return self._send(200, adminview.shell(email), headers=ADMIN_HEADERS)
+
+    def _same_site(self) -> bool:
+        """A change must come from the admin app itself: its own header (a form or a link on another site cannot
+        send one without asking first, and nothing here allows it), JSON, and no other site's Origin."""
+        origin = self.headers.get("Origin")
+        base = (settings.get("web.base_url") or "").rstrip("/")
+        return (self.headers.get("X-Cormon-Admin") == "1"
+                and (self.headers.get("Content-Type") or "").startswith("application/json")
+                and (not origin or origin.rstrip("/") == base))
+
+    def do_POST(self):
+        from . import adminview
+        if self.path != "/admin/api/memory/change":
+            return self._send(404, "not found", "text/plain")
+        stop, email = weblogin.admin_gate(self.path, self.headers.get("Cookie"), log=False)
+        if stop:
+            return self._send(stop[0], stop[2], "text/plain; charset=utf-8", stop[1])
+        size = int(self.headers.get("Content-Length") or 0)
+        if not self._same_site() or not 0 < size <= 20000:
+            db.audit("admin_refused", entity_type="web", entity_id=self.path, email=email, why="not from the admin page")
+            return self._send(403, json.dumps({"error": "refused"}), "application/json", ADMIN_HEADERS)
+        try:
+            result = adminview.memory_change(json.loads(self.rfile.read(size)), email)
+        except (ValueError, json.JSONDecodeError) as e:
+            return self._send(400, json.dumps({"error": str(e)}), "application/json", ADMIN_HEADERS)
+        except Exception as e:
+            return self._send(502, json.dumps({"error": f"Patient memory could not be changed: {str(e)[:200]}"}),
+                              "application/json", ADMIN_HEADERS)
+        return self._send(200, json.dumps(result), "application/json", ADMIN_HEADERS)
 
     def do_GET(self):
         if self.path == "/health":
