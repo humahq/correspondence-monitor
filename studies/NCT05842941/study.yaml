@@ -102,7 +102,7 @@ people:
     sites: ["*"]
   - id: medical-monitor
     name: the Regimen G medical monitor
-    email: null
+    email: john+medicalmonitor@huma.ai   # stand-in until the sponsor names the medical monitor
     roles: [medical_monitor]
     sites: ["*"]
   - id: peter-tester

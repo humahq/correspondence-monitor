@@ -342,6 +342,29 @@ templates:
 
       {{ study.monitor_signature }}
 
+  - id: email-safety-to-medical-monitor
+    topic: safety_for_medical_monitor
+    recipient: medical_monitor
+    channel: email
+    severity: "*"
+    subject: "Possible safety information · {{ study.short_name }} · {{ item.participant_id or 'participant not named' }}"
+    body: |
+      {{ recipient.first_name }},
+
+      A message to the study may contain safety information about a participant. I do not review safety
+      information: I have not assessed it, and I have not replied to the sender about it. Please review it.
+
+      Participant: {{ item.participant_id or "not named" }} · {{ item.site }}
+      From: {{ finding.sender_name }}, {{ finding.message_date }}
+      Subject: {{ finding.message_subject }}
+
+      What they wrote:
+      "{{ finding.message_quote }}"
+
+      The full message: {{ item.link }}
+
+      {{ study.monitor_signature }}
+
   # ---------------- Copy nudge after the bot was dropped from a thread ----------------
   - id: email-copy-nudge
     topic: copy_nudge
