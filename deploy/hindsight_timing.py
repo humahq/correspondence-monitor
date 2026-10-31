@@ -16,7 +16,8 @@ import urllib.request
 URL = os.environ.get("HS_URL", "http://127.0.0.1:8888")
 KEY = os.environ["HS_KEY"]
 BANK = "timing"
-PARTICIPANTS = [f"P-{1001 + i}" for i in range(100)]
+FIRST = int(os.environ.get("FIRST", "1001"))
+PARTICIPANTS = [f"P-{FIRST + i}" for i in range(int(os.environ.get("COUNT", "100")))]
 FACTS_EACH = 20
 SEARCHES = int(os.environ.get("SEARCHES", "100"))
 

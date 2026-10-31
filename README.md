@@ -461,7 +461,7 @@ A personal Microsoft account cannot do this. You need a work tenant, for example
 
 What this sets up:
 
-- **Server:** an always-on `e2-micro` running Ubuntu 24.04 in `us-east1-b`, Google's smallest machine and within the free tier. The bot runs as a systemd service.
+- **Server:** an always-on `e2-medium` (4 GB) running Ubuntu 24.04 in `us-east1-b`, about $24 a month, with a reserved address. The bot runs as a systemd service. Hindsight (patient memory, `deploy/hindsight.sh`) runs beside it in Docker, on 127.0.0.1:8888 only, with a key. Until the resize (`deploy/resize_vm.sh`) it is the free-tier `e2-micro`.
 - **Gmail password:** the server reads it from Secret Manager with its own service account (`cormon-vm`), which may read that one secret and nothing else. No password is copied onto the server.
 - **Item pages:** served over HTTPS by Caddy at `https://<ip-with-dashes>.sslip.io`. The app itself only listens on localhost.
 - **SSH:** open only to Google's IAP range, and people log in with their own Google account (OS Login).

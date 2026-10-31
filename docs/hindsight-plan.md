@@ -25,8 +25,12 @@ Time 100 searches with the CPU re-ranker. 3 seconds or less: go on. 15 seconds o
 Delete the VM after.
 
 **2. Set it up (1 day).**
-Live server to 4 GB, about $18 to $25 a month more (needs Eliot's OK). Hindsight runs next to the bot, listening
-only on loopback with a password (28 Oct: "Hindsight's dangerous"). Backed up with our data. Same setup on a laptop.
+Live server to 4 GB (e2-medium), about $24 a month instead of free. Hindsight runs next to the bot, listening
+only on loopback with a password (28 Oct: "Hindsight's dangerous"). Same setup on a laptop.
+Built: `deploy/hindsight.sh` (version 1.1.0, pinned by digest; key in `secrets/hindsight_key`; capped at 2 GB of
+memory; refuses to stay up if it answers without the key) and `deploy/resize_vm.sh` (reserves the server's address
+first so links in sent mail keep working, then resizes and starts Hindsight). Backups of its data come with step 3,
+when there is data to keep.
 
 **3. Save facts (1 day).**
 - Each message goes to Hindsight while the normal check runs, not one after the other. (28 Oct)
@@ -81,6 +85,11 @@ and re-ranking were timed. Scripts: `deploy/hindsight_timing.py` and `deploy/hin
 - Searching all facts (a message with no participant code) passes only with 100 candidates.
 - flashrank is slower, not faster. Don't use it.
 - Memory: Hindsight used 1 to 1.4 GB. 4 GB for the server is enough.
+
+**2 GB check, 31 Oct.** The same test on an e2-small (2 GB), 100 candidates: one participant 1.5 s (worst 2.0 s),
+all facts 6.2 s (worst 9.2 s), saving 2,000 facts took 225 s instead of 65 s, memory 1.04 GB of 1.9 GB. Under
+steady load its CPU slowed until saving 50 facts took about 4 minutes, so the 10,000-fact part was stopped.
+John chose 4 GB (e2-medium).
 
 Decision: Hindsight's own CPU re-ranker, 100 candidates, bucket batching on, searches tagged by participant
 whenever there is a code. Cohere is not needed for now. Check again when a study has much more than 2,000 facts.
