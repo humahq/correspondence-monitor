@@ -3378,3 +3378,32 @@ def test_only_alerts_about_a_participant_are_remembered_and_test_banks_alone_are
     assert calls == []
     with pytest.raises(RuntimeError, match="not a test bank"):
         hindsight.clear_test_bank("NCT05842941")
+
+
+def test_an_answer_is_given_the_participants_earlier_facts_with_when_and_who(monkeypatch):
+    from cormon import config, hindsight
+    found = {"results": [
+        {"text": "1001014 has gout | When: early October 2026 | Involving: 1001014", "mentioned_at":
+         "2026-10-12T15:00:00+00:00", "metadata": {"message_id": "3", "sender": "Ann", "role": "Study coordinator"}},
+        {"text": "1001014 reports toe pain", "mentioned_at": "2026-10-30T15:00:00+00:00",
+         "metadata": {"message_id": "9", "sender": "Ann", "role": "Study coordinator"}},
+        {"text": "Safety report sent about 1001014", "mentioned_at": "2026-10-01T15:00:00+00:00", "metadata": {}}]}
+    calls, _ = _memory_on(monkeypatch, reply=lambda m, p: {"items": [{"tag": "participant:1001014"}]}
+                          if m == "GET" else found)
+    study = config.study("NCT05842941")
+    lines = hindsight.recall_lines(study, "1001-014", "Has 014 had toe trouble before?", {"id": 9})
+    assert lines == ["earlier fact, reported on 01 Oct 2026 by the monitoring bot: Safety report sent about 1001014",
+                     "earlier fact, reported on 12 Oct 2026 by Ann (Study coordinator): 1001014 has gout "
+                     "(happened: early October 2026)"], "oldest first, and the message being answered is left out"
+    search = calls[-1][2]
+    assert search["tags"] == ["participant:1001014"] and search["tags_match"] == "any_strict"
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_searched' AND entity_id='9'")
+    assert hindsight.recall_lines(study, None, "q", {"id": 9}) == [], "no participant, no search"
+
+
+def test_a_slow_memory_search_gives_nothing_and_is_logged(monkeypatch):
+    from cormon import config, hindsight
+    import requests
+    _memory_on(monkeypatch, fail=requests.Timeout("read timed out"))
+    assert hindsight.recall_lines(config.study("NCT05842941"), "1001-014", "q", {"id": 11}) == []
+    assert "timed out" in db.q1("SELECT details FROM audit_log WHERE action='memory_search_failed'")["details"]

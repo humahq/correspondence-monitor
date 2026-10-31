@@ -20,7 +20,7 @@ from datetime import date, datetime
 
 from dateutil.relativedelta import relativedelta
 
-from . import capture, careful, conversation, db, guide, llm, memory, outcheck, reader, routing, settings
+from . import capture, careful, conversation, db, guide, hindsight, llm, memory, outcheck, reader, routing, settings
 from .compliance import sha256
 from .config import Study
 
@@ -92,7 +92,12 @@ Rules:
   serious adverse event (death, hospital admission, life-threatening, disability, birth defect, important medical
   event). Then put first in quotes the protocol's rule on reporting it (to whom and how fast) and say it in the
   answer, then answer the question itself. Do not judge the medical side (cause, relatedness, treatment).
-- If the record or message shows the participant has died or withdrawn, give no future visit dates."""
+- If the record or message shows the participant has died or withdrawn, give no future visit dates.
+- An "earlier fact" in the record was reported in another message, perhaps another thread or long ago. Use one
+  only when it bears on the question. The answer must then say who reported it and on what date, in the
+  sentence that uses it ("The study coordinator reported on 12 Oct 2026 that she has gout."), so the reader can
+  check it. When two earlier facts disagree, the one reported later holds; mention the earlier one only if the
+  question needs it."""
 
 ANSWER_SCHEMA = llm.obj({
     "answerable": {"type": "boolean"},
@@ -109,7 +114,8 @@ Rules:
 - Rewrite, do not summarise: keep every fact the checked answer gives in reply to the question (numbers, windows
   such as "± 3 days", definitions and their thresholds, counts, who does or reviews what, conditions, exceptions).
 - Remove only how it was worked out: sums, "worked out by code", section numbers, quotation marks, "the protocol
-  does not state this directly", where a date came from.
+  does not state this directly", where a date came from. Keep who reported an earlier fact about the
+  participant and when ("the coordinator reported on 12 Oct that she has gout"): that is part of the answer.
 - Keep the participant's own calendar dates when the checked answer gives them; do not swap them for day numbers.
 - Use only facts in the CHECKED ANSWER and the PROTOCOL'S WORDS. Never add a number, a date or a rule of your own.
 - When a serious event must be reported, say to whom and how fast, taken from the protocol's words.
@@ -354,7 +360,7 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
     past += [dict(h, dates=[d for d in h["dates"] if d["kind"] not in known_anchors])
              for h in stated_anchors(q["question"], reader._email_date(msg).date())]
     visits = [i for i in items if i["kind"] == "visit"]
-    record = memory.record_lines(past)
+    record = memory.record_lines(past) + hindsight.recall_lines(study, pid, q["question"], msg)
     sched = schedule(past, visits)
     # the numbered sections themselves, not topic briefs: a brief cites dozens of sections, too many to quote from
     pickable = sources + visits

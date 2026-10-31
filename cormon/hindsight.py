@@ -7,7 +7,8 @@ tag, so it is in nobody's record until a person links it. The bot's own alerts a
 already raised and done about a problem. One bank per study, so studies never mix.
 
 memory.py is different: the dates the rule checks count from. This module is the wider record (gout, a fall, a
-medicine), for answers and for linking a new message to an old one.
+medicine): an answer about a participant is given what memory holds about them (recall_lines), with when and by
+whom each fact was reported, so it can link a new message to one from another thread or a year ago.
 
 A failure never stops a message being read: it is logged, and the admins are told while it lasts.
 """
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from concurrent.futures import Future, ThreadPoolExecutor
 
 import requests
@@ -24,6 +26,7 @@ from . import db, memory, settings
 from .drafting import local_time
 
 MAX_TEXT = 20000
+MAX_FACTS = 12
 TIMEOUT = 180
 
 MISSION = (
@@ -207,7 +210,7 @@ def _submit(fn, *args) -> Future:
     return fut
 
 
-def participant_tags(study_id: str, pid: str | None) -> list[str]:
+def participant_tags(study_id: str, pid: str | None, timeout: float = 30) -> list[str]:
     """Every participant tag in the study's bank that means this participant. Hindsight's AI writes the code as
     it reads it ('1001-022' one time, '1001022' the next) and tags cannot be edited, so the spellings are matched
     here with the same rule the bot matches codes with (memory.key)."""
@@ -217,12 +220,48 @@ def participant_tags(study_id: str, pid: str | None) -> list[str]:
     out, offset = [], 0
     while True:
         res = _call("GET", f"/v1/default/banks/{bank(study_id)}/tags?q=participant:*&limit=500&offset={offset}",
-                    timeout=30)
+                    timeout=timeout)
         page = res.get("items") or []
         out += [t["tag"] for t in page if memory.key(t["tag"].split(":", 1)[1]) == k]
         offset += len(page)
         if not page or offset >= (res.get("total") or 0):
             return out
+
+
+def _fact_line(r: dict) -> str:
+    text = r["text"].split(" | ")
+    when = next((p[5:].strip() for p in text[1:] if p.startswith("When:")), "")
+    meta = r.get("metadata") or {}
+    said = local_time(r.get("mentioned_at")).rsplit(" ", 1)[0]
+    who = f"{meta['sender']} ({meta['role']})" if meta.get("sender") else "the monitoring bot"
+    happened = f" (happened: {when[:10] if when[:4].isdigit() else when})" if when else ""
+    return f"earlier fact, reported on {said} by {who}: {text[0].strip()}{happened}"
+
+
+def recall_lines(study, pid: str | None, query: str, msg: dict) -> list[str]:
+    """What memory holds about a participant that bears on a question, oldest first, one line per fact with when
+    it was reported and by whom. The message being answered is left out (its own words are read anyway). Only the
+    participant's own facts: a fact tagged to nobody or to someone else never comes back. A slow or failed search
+    gives nothing and is logged, so an answer is never held up by memory."""
+    if not enabled() or not memory.key(pid):
+        return []
+    seconds = float(settings.get("memory.search_seconds", 5))
+    began = time.monotonic()
+    try:
+        tags = participant_tags(study.study_id, pid, timeout=seconds)
+        found = _call("POST", f"/v1/default/banks/{bank(study.study_id)}/memories/recall", {
+            "query": query, "tags": tags, "tags_match": "any_strict", "budget": "mid", "max_tokens": 1500},
+            timeout=seconds) if tags else {}
+    except Exception as e:
+        db.audit("memory_search_failed", entity_type="message", entity_id=msg.get("id"), study_id=study.study_id,
+                 participant_id=pid, seconds=round(time.monotonic() - began, 2), error=str(e)[:300])
+        return []
+    mine = str(msg.get("id"))
+    rows = [r for r in found.get("results") or [] if (r.get("metadata") or {}).get("message_id") != mine]
+    rows = sorted(rows[:MAX_FACTS], key=lambda r: r.get("mentioned_at") or "")
+    db.audit("memory_searched", entity_type="message", entity_id=msg.get("id"), study_id=study.study_id,
+             participant_id=pid, facts=len(rows), seconds=round(time.monotonic() - began, 2))
+    return [_fact_line(r) for r in rows]
 
 
 def facts(study_id: str, limit: int = 200) -> list[dict]:
