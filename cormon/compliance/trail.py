@@ -4,8 +4,8 @@ changed, removed or slipped in later breaks the chain where it happened.
 Each entry's hash covers its fields and the hash of the entry before it. The first chained entry links to a seal:
 one hash over every entry written before the chain began. Once a day the latest entry's id and hash are written to
 an anchor file outside the database; the verifier walks the whole chain and checks every anchor still matches, so
-cutting entries off the end is caught too. Certified backend (later): the anchors and a copy of each entry go to a
-write-once bucket the operator role cannot rewrite.
+cutting entries off the end is caught too. Each entry and each anchor is also copied to the write-once store
+(vault.py), which checks every day that the entries here still read as their copies do.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .. import db, settings
-from . import backend, sha256
+from . import backend, sha256, vault
 
 BUILT = ("local",)
 FIELDS = ("ts", "actor", "actor_type", "action", "entity_type", "entity_id", "study_id", "details")
@@ -62,16 +62,18 @@ def append(row: dict) -> int:
         try:
             last = c.execute("SELECT hash FROM audit_log WHERE hash IS NOT NULL ORDER BY id DESC LIMIT 1").fetchone()
             prev = last["hash"] if last else _seal(c)
+            own_hash = entry_hash(prev, row)
             rid = c.execute(
                 "INSERT INTO audit_log (ts, actor, actor_type, action, entity_type, entity_id, study_id, details,"
                 " prev_hash, hash) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (*[row[k] for k in FIELDS], prev, entry_hash(prev, row))).lastrowid
+                (*[row[k] for k in FIELDS], prev, own_hash)).lastrowid
             if own:
                 c.execute("COMMIT")
         except BaseException:
             if own:
                 c.execute("ROLLBACK")
             raise
+    vault.put("audit", str(rid), vault.audit_line(dict(row, id=rid, prev_hash=prev, hash=own_hash)))
     return rid
 
 
@@ -188,6 +190,7 @@ def anchor() -> dict | None:
     day = datetime.now(timezone.utc).isoformat(timespec="seconds")
     with f.open("a") as out:
         out.write(f"{day}\t{last['id']}\t{last['hash']}\n")
+    vault.put("anchor", day, f"{day}\t{last['id']}\t{last['hash']}")
     return {"at": day, "id": last["id"], "hash": last["hash"]}
 
 

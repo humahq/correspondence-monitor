@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .. import db, settings
-from . import backend, sha256
+from . import backend, sha256, vault
 
 BUILT = ("local",)
 
@@ -33,6 +33,7 @@ def put(kind: str, owner_type: str, owner_id: int, data: bytes, location: str | 
         p.write_bytes(data)
     db.ex("INSERT INTO records(kind, owner_type, owner_id, sha256, size, location, created_at) VALUES (?,?,?,?,?,?,?)",
           (kind, owner_type, owner_id, digest, len(data), location, db.now()))
+    vault.put(kind, f"{owner_type}:{owner_id}", data, vault.retention_days())
     return digest
 
 

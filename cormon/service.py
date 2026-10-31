@@ -8,7 +8,7 @@ import traceback
 
 from . import backup, capture, config, db, digest, drift, llm, outbox, phi, pipeline, settings, stuck, webview
 from .channels import chat_events, check_live_only, email_channel, teams_channel
-from .compliance import deps, records, trail
+from .compliance import deps, records, trail, vault
 
 
 _last_poll: dict[str, float] = {}
@@ -85,6 +85,7 @@ def tick(log=print, named: list[str] | None = None, force: bool = True) -> None:
     _safely(trail.hourly, log)
     _safely(trail.daily, log)
     _safely(records.daily, log)
+    _safely(vault.daily, log)
     _safely(deps.weekly, log)
     _safely(llm.check_models, log)
     if outbox.is_paused():
