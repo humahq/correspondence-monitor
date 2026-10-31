@@ -12,7 +12,7 @@ import pytest
 
 from cormon import capture, db, settings
 from cormon.capture import Inbound
-from cormon.compliance import SAFETY_NOTICE, ailog, alerts, backend, records, secrets, trail
+from cormon.compliance import SAFETY_NOTICE, ailog, alerts, backend, records, secrets, trail, vault
 
 
 @pytest.fixture(autouse=True)
@@ -228,6 +228,63 @@ def test_old_messages_are_fingerprinted_only_by_backfill():
     assert records.backfill() == 1 and records.backfill() == 0
     assert db.q1("SELECT kind FROM records WHERE owner_id=?", (mid,))["kind"] == "message_raw_backfill"
     assert db.q1("SELECT sha256 FROM messages WHERE id=?", (mid,))["sha256"] == records.sha256(b"From: a\r\n\r\nx")
+
+
+# ------------------------------------------------------------------ write-once store
+
+def test_originals_and_audit_entries_get_a_write_once_copy():
+    mid = capture.capture(_chat(raw=b'{"text": "BP 168/92"}'))
+    assert vault.get("message_raw", f"message:{mid}") == [b'{"text": "BP 168/92"}']
+    assert vault.get("audit", "1")
+    out = vault.verify()
+    assert out["ok"] and out["audit_entries"] == db.q1("SELECT COUNT(*) n FROM audit_log")["n"]
+
+
+def test_the_write_once_store_refuses_a_change_and_an_early_delete():
+    vault.put("message_raw", "message:1", b"original", keep_days=30)
+    vault.put("audit", "1", "entry")
+    c = vault._conn()
+    with pytest.raises(sqlite3.DatabaseError, match="cannot be changed"):
+        c.execute("UPDATE objects SET data=x'00' WHERE ref='message:1'")
+    with pytest.raises(sqlite3.DatabaseError, match="kept until"):
+        c.execute("DELETE FROM objects WHERE ref='message:1'")
+    with pytest.raises(sqlite3.DatabaseError, match="kept until"):
+        c.execute("DELETE FROM objects WHERE kind='audit'")
+
+
+def test_the_write_once_store_drops_originals_after_retention_but_keeps_the_audit():
+    vault.put("message_raw", "message:1", b"old", keep_days=0)
+    vault.put("audit", "1", "entry")
+    assert vault.expire() == 1
+    assert vault.get("message_raw", "message:1") == [] and vault.get("audit", "1") == [b"entry"]
+
+
+def test_the_write_once_store_catches_a_changed_audit_entry(monkeypatch):
+    told = []
+    monkeypatch.setattr(alerts, "notify", lambda key, subject, body, **k: told.append(key))
+    for i in range(3):
+        db.audit("test_action", entity_type="x", entity_id=i)
+    c = db.conn()
+    for t in c.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='audit_log'").fetchall():
+        c.execute(f"DROP TRIGGER {t['name']}")
+    c.execute("UPDATE audit_log SET details='{\"n\":99}' WHERE id=2")
+    c.commit()
+    out = vault.daily(log=lambda *_: None)
+    assert out["problems"] == ["audit entry 2 differs from its stored copy"]
+    assert told == ["vault"]
+    assert vault.daily(log=lambda *_: None) is None
+
+
+def test_a_failed_copy_does_not_stop_the_bot_and_the_daily_check_makes_it(monkeypatch):
+    real = vault._conn
+    monkeypatch.setattr(vault, "_conn", lambda: (_ for _ in ()).throw(sqlite3.OperationalError("disk full")))
+    mid = capture.capture(_chat(raw=b"{}"))
+    assert "disk full" in db.get_state("vault_error")
+    monkeypatch.setattr(vault, "_conn", real)
+    assert not vault.verify()["ok"]
+    copied = vault.backfill()
+    assert copied["records"] == 1 and copied["audit"] >= 1
+    assert vault.get("message_raw", f"message:{mid}") == [b"{}"] and vault.verify()["ok"]
 
 
 def test_events_carry_the_hash_of_the_message_they_came_from():
