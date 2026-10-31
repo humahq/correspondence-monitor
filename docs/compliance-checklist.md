@@ -34,7 +34,16 @@ anything here (DSP-01, OUT-03).
 - PRV-01: the consent form, so we can check it covers sending patient data to the AI.
 
 **4. Code we can build any time (no one else needed).**
-- CAP-09: three cheap prompt-trick fixes from `docs/prompt-injection-research.md`, then a bigger trick test set. When John asks.
+- CAP-09: trick emails. Research done and checked (31 Oct, `docs/prompt-injection-research.md`). Later, when John asks:
+  1. A random marker around the email, and invisible characters removed.
+  2. A claim of permission in an email ("the sponsor said it's fine") never stops an alert; only the protocol or our approved notes can.
+  3. A second check that sees only the facts and the protocol, not the email's words; it can only add a "please check". Measure its false alerts first.
+  4. An email that gives the bot orders is flagged to the admins, and its "no problem" result goes out as "please check".
+  5. Severe safety words always reach the medical monitor, even if the AI missed it (only adds). Needs Eliot's OK.
+  6. Test like an attacker: 100 trick emails (20 per harm) plus 20 clean ones, an AI attacker that rewords each trick up to 5 times, and John, Peter and Eliot trying to fool it. Score per harm. About $25 a run, weekly.
+  7. A weekly list for the admins of flagged emails and "please check" alerts from steps 2 to 5.
+
+  No ready-made detector for now: adaptive tricks get past them over 90% of the time, cloud ones need a new patient-data agreement, and they flag normal clinical orders. Closing alerts without the AI is group 2.
 - OUT-03: the doctor check and the careful check. The AI answers fixed questions and code decides.
 - QAA-06: block clinical judgment in answers. Needs real answers to measure first, so after real use.
 
@@ -107,7 +116,7 @@ IAM-04), all secrets in Secret Manager with rotation (SEC-03).
 
 | ID | Name | What is left |
 |---|---|---|
-| CAP-09 | Prompt-injection defense | 2 tricks still fool the bot; the trick test set is small (20). Research and a plan in `docs/prompt-injection-research.md` |
+| CAP-09 | Prompt-injection defense | 2 tricks still fool the bot; the trick test set is small (20). Biggest gap: if the AI is talked into "fine", nothing else checks that email. Checked research and a 7-step plan (group 4 above) in `docs/prompt-injection-research.md` |
 | CAP-10 | Second-copy governance | No written rule for how long the mailbox keeps mail |
 | OUT-01 | Sent-message records | A write-once copy now goes to a separate database (PR #17), a stand-in: the locked bucket is Phase 3 |
 | OUT-02 | Outbound domain authentication | DMARC `p=reject` on the sending domain (a DNS task) |
