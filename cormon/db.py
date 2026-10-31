@@ -489,6 +489,13 @@ MIGRATIONS = {
     ("config_versions", "approved_at"): "ALTER TABLE config_versions ADD COLUMN approved_at TEXT",
     # 1: recorded but not in use until a second person approves it (CFG-01); earlier versions stay in use
     ("config_versions", "waiting"): "ALTER TABLE config_versions ADD COLUMN waiting INTEGER NOT NULL DEFAULT 0",
+    # a safety item's severity, acknowledgment clock and escalation step (safety.py, SAF-03 to SAF-05)
+    ("items", "severity"): "ALTER TABLE items ADD COLUMN severity TEXT",
+    ("items", "ack_due_at"): "ALTER TABLE items ADD COLUMN ack_due_at TEXT",
+    ("items", "acked_at"): "ALTER TABLE items ADD COLUMN acked_at TEXT",
+    ("items", "acked_by"): "ALTER TABLE items ADD COLUMN acked_by TEXT",
+    ("items", "escalation_step"): "ALTER TABLE items ADD COLUMN escalation_step INTEGER NOT NULL DEFAULT 0",
+    ("items", "next_step_at"): "ALTER TABLE items ADD COLUMN next_step_at TEXT",
 }
 # run once, right after the column is added
 BACKFILL = {

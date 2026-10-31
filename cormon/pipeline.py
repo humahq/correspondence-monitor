@@ -11,7 +11,7 @@ from . import (answers, asks, capture, careful, checks, config, conversation, db
                outbox, reader, routing, senders, settings, textutil, timing, triage)
 from .compliance import records
 from .config import Study
-from . import drafting
+from . import drafting, safety
 from .drafting import item_link, local_time
 
 SAFETY_TITLE = "Safety information received; not reviewed by this monitor (out of scope)"
@@ -510,6 +510,10 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
     db.ex("UPDATE messages SET status='processing', processing_at=?, error=NULL WHERE id=?", (db.now(), msg_id))
     early = None
     try:
+        if not rerun and safety.handle_ack(msg):
+            summary["safety_ack"] = True
+            db.ex("UPDATE messages SET status='processed' WHERE id=?", (msg_id,))
+            return summary
         if msg["route"] != "study" or not msg["study_id"]:
             db.audit("general_message", entity_type="message", entity_id=msg_id,
                      note="no study tag in the address; handled as a general bot message, not matched")
@@ -596,9 +600,10 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
                 tier_reason="safety signals are out of scope (Section 4.6); routed nowhere",
                 evidence=dict(base, message_quote=event["quote"]), reasoning=why, state="out_of_scope")
             (summary["items_created"] if created else summary["items_repeat"]).append(item_id)
+            safety.start(item_id, msg)
             if created:
                 db.audit("safety_out_of_scope", entity_type="item", entity_id=item_id, study_id=study.study_id,
-                         why=why, note="recorded only; sender told to contact the medical monitor")
+                         why=why, note="sent unassessed to the medical monitor; nothing to the sender")
                 routing.route_item(item_id)
 
         for event in data["events"]:

@@ -347,7 +347,7 @@ templates:
     recipient: medical_monitor
     channel: email
     severity: "*"
-    subject: "Possible safety information · {{ study.short_name }} · {{ item.participant_id or 'participant not named' }}"
+    subject: "{{ safety.severity_label }}: possible safety information · {{ study.short_name }} · {{ item.participant_id or 'participant not named' }}"
     body: |
       {{ recipient.first_name }},
 
@@ -362,6 +362,58 @@ templates:
       "{{ finding.message_quote }}"
 
       The full message: {{ item.link }}
+
+      Please acknowledge within {{ safety.within }} (by {{ safety.due }}) by replying with: ACK {{ safety.ack_code }}
+      If it is not acknowledged by then, it goes to the next person on the safety contact list.
+      {{ safety.severity_label }} means only that the message has a word from the study's severe-event list; it is not an assessment.
+
+      {{ study.monitor_signature }}
+
+  - id: email-safety-escalation
+    topic: safety_escalation
+    recipient: "*"
+    channel: email
+    severity: "*"
+    subject: "Not acknowledged: possible safety information · {{ study.short_name }} · {{ item.participant_id or 'participant not named' }}"
+    body: |
+      {{ recipient.first_name }},
+
+      A possible safety message ({{ safety.severity_label }}) was sent to {{ people.medical_monitor.name or "the medical monitor" }} and has not been acknowledged. It was due by {{ safety.due }}. You are next on the study's safety contact list. I have not assessed it.
+
+      Participant: {{ item.participant_id or "not named" }} · {{ item.site }}
+      From: {{ finding.sender_name }}, {{ finding.message_date }}
+
+      What they wrote:
+      "{{ finding.message_quote }}"
+
+      The full message: {{ item.link }}
+
+      Please acknowledge by replying with: ACK {{ safety.ack_code }}
+
+      {{ study.monitor_signature }}
+
+  - id: email-safety-phone
+    topic: safety_phone
+    recipient: "*"
+    channel: email
+    severity: "*"
+    subject: "PHONE NOW: safety message not acknowledged · {{ study.short_name }} · {{ item.participant_id or 'participant not named' }}"
+    body: |
+      {{ recipient.first_name }},
+
+      A possible safety message ({{ safety.severity_label }}) has not been acknowledged by anyone on the safety contact list. It was due by {{ safety.due }}. Please phone the medical monitor now.
+
+      Phone numbers on file: {{ safety.phones }}
+
+      Participant: {{ item.participant_id or "not named" }} · {{ item.site }}
+      From: {{ finding.sender_name }}, {{ finding.message_date }}
+
+      What they wrote:
+      "{{ finding.message_quote }}"
+
+      The full message: {{ item.link }}
+
+      When someone has it, reply with: ACK {{ safety.ack_code }}
 
       {{ study.monitor_signature }}
 

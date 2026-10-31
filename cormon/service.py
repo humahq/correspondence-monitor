@@ -6,7 +6,7 @@ import threading
 import time
 import traceback
 
-from . import backup, capture, config, db, digest, drift, llm, outbox, phi, pipeline, settings, stuck, webview
+from . import backup, capture, config, db, digest, drift, llm, outbox, phi, pipeline, safety, settings, stuck, webview
 from .channels import chat_events, check_live_only, email_channel, teams_channel
 from .compliance import deps, records, trail, vault
 
@@ -90,6 +90,7 @@ def tick(log=print, named: list[str] | None = None, force: bool = True) -> None:
     _safely(llm.check_models, log)
     if outbox.is_paused():
         return
+    _safely(safety.escalate, log)
     _safely(pipeline.recover_messages, log)
     t2 = time.perf_counter()
     done = pipeline.process_pending(log)

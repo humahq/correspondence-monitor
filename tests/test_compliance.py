@@ -1473,6 +1473,102 @@ def test_a_safety_message_goes_unassessed_to_the_medical_monitor_only(monkeypatc
     assert "fell at home and spent a night in the ER" in out[0]["body"] and "have not assessed" in out[0]["body"]
 
 
+def _safety_item(study, text, n=1):
+    from cormon import items, routing, safety
+
+    crc = study.people_with_role("crc")[0].email
+    mid = capture.capture(Inbound(channel="email", external_id=f"<sv{n}@site.org>", thread_ref=f"sv{n}", from_addr=crc,
+                                  from_name="C", subject="DNL-1012", sent_at=_ago(5), study_id=study.study_id,
+                                  body_text=text, rfc_message_id=f"<sv{n}@site.org>"))
+    iid, _ = items.upsert(study=study, thread_key=f"email:sv{n}", message_id=mid, dedup_key=f"sv{n}",
+                          kind="out_of_scope", pattern_class=None, rule_id=None, participant_id="DNL-1012",
+                          site="site-01", polarity="neutral", title="safety", tier="low", tier_reason="safety",
+                          evidence={"message_quote": text}, reasoning=None, state="out_of_scope")
+    safety.start(iid, capture.message(mid))
+    routing.route_item(iid)
+    return iid
+
+
+def _due_now(iid):
+    db.ex("UPDATE items SET next_step_at=? WHERE id=?", (_ago(1), iid))
+
+
+def test_a_safety_message_is_severe_by_the_word_list_and_gets_its_clock():
+    from cormon import config, items, safety
+
+    study = config.study("NCT05842941")
+    assert safety.severity(study, "She was admitted to hospital overnight")[0] == "severe"
+    assert safety.severity(study, "He had a mild headache after the visit") == ("standard", None)
+    assert safety.severity(study, "the deadline for the visit") == ("standard", None)
+    iid = _safety_item(study, "DNL-1012 was hospitalized after a fall.")
+    it = items.get(iid)
+    due = datetime.fromisoformat(it["ack_due_at"]) - datetime.now(timezone.utc)
+    assert it["severity"] == "severe" and timedelta(minutes=58) < due <= timedelta(minutes=60)
+    mail = db.q1("SELECT subject, body, cc_addrs FROM outbox WHERE item_id=?", (iid,))
+    assert mail["subject"].startswith("Severe:") and f"ACK {safety.ack_code(it)}" in mail["body"]
+    assert "within 1 hour" in mail["body"] and study.people_with_role("cra")[0].email in mail["cc_addrs"]
+
+
+def test_an_unacknowledged_safety_message_goes_up_the_chain_then_to_a_phone(monkeypatch):
+    from cormon import config, items, safety
+
+    _set(monkeypatch, web__admin__emails=["ops@huma.ai"])
+    study = config.study("NCT05842941")
+    iid = _safety_item(study, "DNL-1012 had a mild headache.")
+    assert items.get(iid)["severity"] == "standard"
+    assert safety.escalate(log=lambda *_: None) == []                      # not due yet
+    for _ in range(6):
+        _due_now(iid)
+        safety.escalate(log=lambda *_: None)
+    rows = db.q("SELECT template_id, to_addrs, purpose FROM outbox ORDER BY id")
+    seq = [(r["template_id"], db.unjs(r["to_addrs"])[0]) for r in rows]
+    assert seq[0] == ("email-safety-to-medical-monitor", "john+medicalmonitor@huma.ai")
+    assert ("email-safety-escalation", "john+pvbackup@huma.ai") == seq[1]
+    assert ("email-safety-escalation", "john@huma.ai") == seq[2]
+    assert seq[3] == ("email-safety-phone", "john+safetyoncall@huma.ai") and seq[4][1] == "ops@huma.ai"
+    assert sum(1 for t, _ in seq if t == "email-safety-phone") == 4         # the terminus and 3 reminders
+    assert items.get(iid)["next_step_at"] is None                         # then it stops
+    assert safety.escalate(log=lambda *_: None) == []
+
+
+def test_the_medical_monitor_acknowledges_by_reply_and_the_chain_stops(monkeypatch):
+    from cormon import config, items, llm, pipeline, safety
+
+    study = config.study("NCT05842941")
+    iid = _safety_item(study, "DNL-1012 was hospitalized after a fall.")
+    code = safety.ack_code(items.get(iid))
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: pytest.fail("an acknowledgment is not read by the AI"))
+
+    def reply(n, sender, text):
+        return capture.capture(Inbound(channel="email", external_id=f"<ack{n}@x.org>", thread_ref=f"ack{n}",
+                                       from_addr=sender, from_name="M", subject="Re: safety", sent_at=_ago(1),
+                                       body_text=text, rfc_message_id=f"<ack{n}@x.org>", study_id=study.study_id))
+
+    crc = study.people_with_role("crc")[0].email
+    assert not safety.handle_ack(capture.message(reply(1, crc, f"ACK {code}")))              # not in the chain
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='safety_ack_refused'")
+    monitor = "john+medicalmonitor@huma.ai"
+    assert not safety.handle_ack(capture.message(reply(2, monitor, f"ACK S{iid}-0000")))          # wrong code
+    out = pipeline.process(reply(3, monitor, f"Seen, thanks.\n\nack {code.lower()}"))
+    assert out["safety_ack"] and items.get(iid)["acked_by"].endswith(f"<{monitor}>")
+    assert items.get(iid)["state"] == "out_of_scope"                     # acknowledged, never cleared
+    _due_now(iid)
+    assert safety.escalate(log=lambda *_: None) == []
+    assert not safety.acknowledge(iid, "ops", "operator", actor_type="operator", note="phoned")  # already done
+
+
+def test_an_admin_records_a_phoned_acknowledgment(capsys):
+    from cormon import cli, config, items
+
+    iid = _safety_item(config.study("NCT05842941"), "DNL-1012 had a seizure.")
+    cli.main(["--as", "ann", "ack", str(iid), "--note", "phoned the medical monitor"])
+    assert "escalation stopped" in capsys.readouterr().out
+    assert items.get(iid)["acked_by"] == "ann"
+    with pytest.raises(SystemExit, match="not a safety item"):
+        _item(999, kind="finding")
+        cli.main(["--as", "ann", "ack", "999", "--note", "x"])
+
+
 def test_a_message_with_a_safety_part_sends_no_notice_back_to_the_site(monkeypatch):
     from cormon import careful, config, events, items, llm, routing
 
