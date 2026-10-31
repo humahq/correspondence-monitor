@@ -1592,7 +1592,8 @@ def _check(study, msg, email, use_cache, log, save, pool) -> tuple[list[Finding]
             pid = part["participant"] or None
             event = {"participant_id": pid, "event_type": "other", "description": f["problem"],
                      "quote": f["email_quote"], "temporality": "current" if f["status"] == "done" else "planned",
-                     "status": f["status"], "event_datetime": None, "polarity": "problem", "source": "body", "facts": []}
+                     "status": f["status"], "event_datetime": None, "polarity": "problem", "source": "body", "facts": [],
+                     "reports_facts": any(s["status"] in ("done", "reported") for s in part.get("statements", []))}
             rule = {"id": sec["id"], "pattern_class": f["pattern_class"], "doc_id": sec["doc_id"],
                     "text": f"{_heading(sec)}".strip() or f["problem"], "check_type": "judgment"}
             meta.append((dict(f, participant=pid or ""), rec))
