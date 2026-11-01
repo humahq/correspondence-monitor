@@ -1,0 +1,7 @@
+{"story": "Two participants in one message are kept apart",
+ "messages": [
+  {"text": "Week 4 today: 1001-123 reported nausea for two hours after her morning dose. 1001-124 had no complaints but we missed his week 4 blood draw, rebooked for Friday.",
+   "chat": "room", "date": "2026-10-14 16:00",
+   "memory": {"1001-123": {"has": ["nausea"], "lacks": ["blood draw"]},
+              "1001-124": {"has": ["blood|draw|sample"], "lacks": ["nausea"]}}}
+ ]}

@@ -1,0 +1,9 @@
+{"story": "A suspected clot, ruled out a few days later",
+ "messages": [
+  {"text": "1001-113 has a swollen left calf, the PI suspects a DVT. Ultrasound booked for Thursday.",
+   "chat": "room", "date": "2026-09-01 10:00",
+   "memory": {"1001-113": {"has": ["dvt|clot|calf"]}}},
+  {"text": "1001-113's ultrasound was negative, no DVT. Calf swelling put down to a muscle strain.",
+   "chat": "room", "date": "2026-09-04 10:00",
+   "memory": {"1001-113": {"has": ["negative|no dvt|ruled out|strain"]}}}
+ ]}

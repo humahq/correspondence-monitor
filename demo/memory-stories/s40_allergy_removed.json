@@ -1,0 +1,9 @@
+{"story": "An allergy, later removed after testing",
+ "messages": [
+  {"text": "1001-144 has a penicillin allergy listed in her chart (rash as a child).",
+   "chat": "room", "date": "2026-09-01 10:00",
+   "memory": {"1001-144": {"has": ["penicillin"]}}},
+  {"text": "Update: allergy testing showed 1001-144 is not allergic to penicillin; the allergy label was removed from her chart.",
+   "chat": "room", "date": "2026-09-20 10:00",
+   "memory": {"1001-144": {"has": ["not allergic|removed|no longer"]}}}
+ ]}

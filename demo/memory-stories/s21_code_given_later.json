@@ -1,0 +1,12 @@
+{"story": "A medicine first told with no code, then with the code: only the second is in her record",
+ "messages": [
+  {"text": "The participant from Tuesday's screening started tacrolimus after her kidney transplant review.",
+   "chat": "room", "date": "2026-10-05 10:00",
+   "memory": {"unlinked": {"has": ["tacrolimus"]}}},
+  {"text": "To be clear, the one on tacrolimus is 1001-122, 1 mg twice daily.",
+   "chat": "room", "date": "2026-10-05 12:00",
+   "memory": {"1001-122": {"has": ["tacrolimus"]}}},
+  {"text": "Is any medicine 1001-122 takes a problem under the protocol?",
+   "chat": "direct", "date": "2026-10-07 09:00",
+   "answer_has": ["tacrolimus"]}
+ ]}

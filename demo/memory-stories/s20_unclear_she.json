@@ -1,0 +1,6 @@
+{"story": "Two participants named, then 'she' with no way to tell which: linked to neither",
+ "messages": [
+  {"text": "1001-120 and 1001-121 both came in today for their week 4 visits. One of them mentioned a headache since Monday, I forgot to note which, will check tomorrow.",
+   "chat": "room", "date": "2026-10-14 16:00",
+   "memory": {"1001-120": {"lacks": ["headache"]}, "1001-121": {"lacks": ["headache"]}}}
+ ]}

@@ -1,0 +1,9 @@
+{"story": "A code written without the dash is found under the usual code",
+ "messages": [
+  {"text": "Participant 1001137 reported a red itchy rash on both forearms since Saturday.",
+   "chat": "room", "date": "2026-10-12 10:00",
+   "memory": {"1001-137": {"has": ["rash"]}}},
+  {"text": "Update on 1001-137: the rash is fading with the cream the PI gave her.",
+   "chat": "room", "date": "2026-10-15 10:00",
+   "memory": {"1001-137": {"has": ["rash", "fading|cream|better"]}}}
+ ]}

@@ -1,0 +1,6 @@
+{"story": "What someone not on the study's people list says goes into nobody's record",
+ "messages": [
+  {"text": "Hello, I am 1001-141's neighbour. She told me she is pregnant.",
+   "chat": "email", "subject": "about my neighbour", "from": "neighbour@example.org", "date": "2026-10-05 10:00",
+   "memory": {"1001-141": {"count": 0}}}
+ ]}

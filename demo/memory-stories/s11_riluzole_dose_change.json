@@ -1,0 +1,12 @@
+{"story": "A riluzole dose cut for nausea: the later dose is used",
+ "messages": [
+  {"text": "1001-111 has been on riluzole 50 mg twice daily since 2025.",
+   "chat": "room", "date": "2026-04-01 10:00",
+   "memory": {"1001-111": {"has": ["twice"]}}},
+  {"text": "1001-111's neurologist cut her riluzole to 50 mg once daily on 10 Sep because of nausea.",
+   "chat": "room", "date": "2026-09-15 10:00",
+   "memory": {"1001-111": {"has": ["once"]}}},
+  {"text": "What riluzole dose is 1001-111 on now, and is the change a protocol deviation?",
+   "chat": "direct", "date": "2026-10-01 09:00",
+   "answer_has": ["once", "medical|not a deviation|not considered"]}
+ ]}

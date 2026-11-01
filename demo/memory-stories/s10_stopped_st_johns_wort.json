@@ -1,0 +1,12 @@
+{"story": "A prohibited supplement, later stopped: the answer goes by the later report",
+ "messages": [
+  {"text": "Screening notes for 1001-110: takes St. John's wort every day for her mood.",
+   "chat": "room", "date": "2025-03-03 10:00",
+   "memory": {"1001-110": {"has": ["john's wort|johns wort"]}}},
+  {"text": "Update on 1001-110 after the PI call: she stopped the St. John's wort completely on 1 Oct.",
+   "chat": "room", "date": "2026-10-15 10:00",
+   "memory": {"1001-110": {"has": ["stop"]}}},
+  {"text": "Is any medicine 1001-110 takes now a problem under the protocol?",
+   "chat": "direct", "date": "2026-10-29 09:00",
+   "answer_has": ["stop"]}
+ ]}

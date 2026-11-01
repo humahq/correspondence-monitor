@@ -1,0 +1,6 @@
+{"story": "A symptom with no participant code goes to nobody's record",
+ "messages": [
+  {"text": "The patient I saw this morning has new swelling in both ankles since the weekend.",
+   "chat": "room", "date": "2026-10-12 10:00",
+   "memory": {"unlinked": {"has": ["ankle"]}}}
+ ]}

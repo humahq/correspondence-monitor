@@ -1,0 +1,6 @@
+{"story": "A dose typo fixed in the same message",
+ "messages": [
+  {"text": "1001-118 takes riluzole 500 mg twice daily. Typo, 50 mg twice daily.",
+   "chat": "room", "date": "2026-10-02 10:00",
+   "memory": {"1001-118": {"has": ["50 mg"], "lacks": ["500"]}}}
+ ]}

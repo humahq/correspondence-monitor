@@ -1,0 +1,9 @@
+{"story": "A what-if question is not kept as a fact that happened",
+ "messages": [
+  {"text": "What if 1001-131 starts St. John's wort next week, would that be a problem?",
+   "chat": "room", "date": "2026-10-05 10:00",
+   "memory": {"1001-131": {"lacks": ["takes st|started st|is taking|uses st"]}}},
+  {"text": "Is any medicine 1001-131 takes now a problem under the protocol?",
+   "chat": "direct", "date": "2026-10-20 09:00",
+   "answer_lacks": ["she takes st|she is taking st|takes st. john|is on st"]}
+ ]}

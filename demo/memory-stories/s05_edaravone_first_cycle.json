@@ -1,0 +1,9 @@
+{"story": "Edaravone started days before a planned screening",
+ "messages": [
+  {"text": "1001-105 began her first cycle of IV edaravone on 29 June at the infusion center.",
+   "chat": "room", "date": "2026-07-01 10:00",
+   "memory": {"1001-105": {"has": ["edaravone"]}}},
+  {"text": "Can 1001-105 come in for Master Protocol screening on Thursday 9 July, given her ALS medicines?",
+   "chat": "direct", "date": "2026-07-06 09:00",
+   "answer_has": ["edaravone", "cycle|14 days"]}
+ ]}

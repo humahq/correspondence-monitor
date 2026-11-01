@@ -1,0 +1,9 @@
+{"story": "The bot's own alert is kept in the participant's memory",
+ "messages": [
+  {"text": "We randomized 1001-135 today. Her screening ALT was 150 U/L (ULN 35).",
+   "chat": "email", "subject": "1001-135 randomized", "date": "2026-10-05 10:00", "expect": "eligibility",
+   "memory": {"1001-135": {"has": ["alert|monitoring bot"]}}},
+  {"text": "Has anything been raised about 1001-135's eligibility, and what does the protocol say about ALT at screening?",
+   "chat": "direct", "date": "2026-10-12 09:00",
+   "answer_has": ["150", "alert|raised|flagged"]}
+ ]}

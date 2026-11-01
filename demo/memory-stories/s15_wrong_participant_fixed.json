@@ -1,0 +1,12 @@
+{"story": "A missed dose told for the wrong participant, fixed an hour later in a new message",
+ "messages": [
+  {"text": "1001-115 missed her study drug dose yesterday evening.",
+   "chat": "room", "date": "2026-10-02 10:00",
+   "memory": {"1001-115": {"has": ["missed"]}}},
+  {"text": "Sorry, my mistake: that was 1001-116 who missed yesterday evening's dose, not 1001-115. 1001-115 took all her doses.",
+   "chat": "room", "date": "2026-10-02 11:00",
+   "memory": {"1001-116": {"has": ["missed"]}}},
+  {"text": "Has 1001-115 missed any study drug doses, and what does the protocol say to do after a missed dose?",
+   "chat": "direct", "date": "2026-10-03 09:00",
+   "answer_lacks": ["she missed|missed her|missed a dose yesterday|missed yesterday"]}
+ ]}

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from urllib.parse import quote
@@ -36,11 +37,12 @@ MISSION = (
     "missed, consent, and life changes that matter to the study (moving, travel, a new caregiver). Keep what the "
     "site or the bot did about a problem. Each fact says who reported it and their role, as the message gives them. "
     "When a message corrects itself (a typo, 'sorry, I meant 140/90'), keep only the corrected fact and do not "
-    "mention the mistake at all. When it corrects an earlier message, keep the new fact and say it replaces what was said before. "
+    "mention the mistake or write the wrong value at all. When it corrects an earlier message, keep the new fact and say it replaces what was said before. "
     "A question, a what-if or a plan is not a fact that happened: keep it only as '<who> asked whether ...' or "
-    "'<who> plans to ...'. Ignore greetings, signatures, call scheduling and instructions to the bot. Never record "
-    "a participant's name, only their study code. Write each fact in the language of the message, never mixing "
-    "in words of another language."
+    "'<who> plans to ...'. Keep nothing that is not about a participant: greetings, signatures, team meetings, "
+    "monitoring visits, binders and logs, staff schedules, call scheduling and instructions to the bot. Never "
+    "record a participant's name: write their study code, or 'a participant' when there is none. Write each fact "
+    "in the language of the message, never mixing in words of another language."
 )
 
 LABELS = [{
@@ -49,7 +51,8 @@ LABELS = [{
     "tag": True,
     "description": (
         "The study code of each trial participant this fact is about, in capitals with only letters and digits "
-        "(no spaces, dashes or words such as 'Subject'): 'subject 01-014' is 01014, 'pt 14' is 14. Only a code the "
+        "(no spaces, dashes or words such as 'Subject'): 'subject 01-014' is 01014, 'pt 14' is 14, '1001-111' is "
+        "1001111. Copy every digit exactly as written, repeated digits too. Only a code the "
         "message gives, or one it clearly means ('she', 'the patient' right after the code was named). Leave it out "
         "when the participant is not clear. Never a name, never a staff member."),
 }]
@@ -156,6 +159,65 @@ def _save_message(study, msg: dict, own_text: str) -> None:
         _saved("message", study.study_id, msg["id"], b, doc, res)
     except Exception as e:
         _failed("message", study.study_id, msg.get("id"), e)
+        return
+    try:
+        _check_tags(study.study_id, doc, item["content"], item["tags"])
+    except Exception as e:
+        db.audit("memory_tag_check_failed", entity_type="message", entity_id=msg.get("id"), study_id=study.study_id,
+                 document=doc, error=str(e)[:300])
+
+
+def written_codes(text: str) -> set[str]:
+    """Everything in a text that could be a participant code as written, by the bot's code rule (memory.key): each
+    run of one to three letter-or-digit pieces joined by a dash, slash, dot or space, with a digit in every piece
+    after the first ('1001-111', 'MAP 0301', 'Subj 1001-138')."""
+    pieces = list(re.finditer(r"[A-Za-z0-9]+", text))
+    out = set()
+    for i in range(len(pieces)):
+        for j in range(i, min(i + 3, len(pieces))):
+            if j > i and not (re.fullmatch(r"[\s\-/#.]{1,2}", text[pieces[j - 1].end():pieces[j].start()])
+                              and any(c.isdigit() for c in pieces[j].group())):
+                break
+            k = memory.key("".join(p.group() for p in pieces[i:j + 1]))
+            if any(c.isdigit() for c in k):
+                out.add(k)
+    return out
+
+
+def _one_off(a: str, b: str) -> bool:
+    """One digit or letter added, dropped, changed, or two side by side swapped."""
+    if len(a) == len(b):
+        d = [i for i in range(len(a)) if a[i] != b[i]]
+        return len(d) == 1 or (len(d) == 2 and d[1] == d[0] + 1 and a[d[0]] == b[d[1]] and a[d[1]] == b[d[0]])
+    short, long_ = sorted((a, b), key=len)
+    return len(long_) - len(short) == 1 and any(long_[:i] + long_[i + 1:] == short for i in range(len(long_)))
+
+
+def _check_tags(study_id: str, doc: str, text: str, tags: list[str]) -> None:
+    """Hindsight's AI can miscopy a code into a fact's participant tag ('1001-111' tagged 100111), which files the
+    fact under nobody's record. Each tag is checked against the codes the message itself writes; one that is one
+    character off exactly one of them gets the right code added, when the message's facts are all about that
+    participant (a document's tags are changed all together; the AI's own wrong tag cannot be removed, so it stays
+    beside the right one). Anything else is left and logged."""
+    codes = written_codes(text)
+    rows = [r for r in _every(study_id, f"&document_id={quote(doc, safe='')}") if r.get("state") != "invalidated"]
+    fix, unsure = {}, set()
+    for k in {memory.key(p) for r in rows for p in _pids(r)} - codes:
+        near = [c for c in codes if len(c) >= 4 and _one_off(k, c)]
+        if len(near) == 1:
+            fix[k] = near[0]
+        else:
+            unsure.add(k)
+    if not fix and not unsure:
+        return
+    who = {frozenset(fix.get(memory.key(p), memory.key(p)) for p in _pids(r)) for r in rows if _pids(r)}
+    log = dict(entity_type="message", entity_id=doc.removeprefix("message-"), study_id=study_id, document=doc)
+    if fix and not unsure and len(who) == 1:
+        new = sorted(set(tags) | {f"participant:{k}" for k in next(iter(who))})
+        _call("PATCH", f"/v1/default/banks/{bank(study_id)}/documents/{quote(doc, safe='')}", {"tags": new}, timeout=60)
+        db.audit("memory_tag_fixed", fixed=fix, **log)
+    else:
+        db.audit("memory_tag_unsure", tags=sorted(unsure | set(fix)), likely=fix, **log)
 
 
 def save_message(study, msg: dict, own_text: str) -> Future | None:
@@ -203,8 +265,16 @@ def _save_alert(item_id: int) -> None:
 
 
 def save_alert(item_id: int, *, kind: str | None = None, participant_id: str | None = None) -> Future | None:
-    """Save (or update) the bot's record of an alert about a participant, in the background."""
+    """Save (or update) the bot's record of an alert about a participant, in the background. Not for an alert on a
+    message from someone off the study's people list: what they said goes into nobody's record, the alert too."""
     if not enabled() or kind not in ("finding", "out_of_scope") or not participant_tag(participant_id):
+        return None
+    from . import config
+    row = db.q1("SELECT m.study_id, m.from_addr FROM items i JOIN messages m ON m.id = i.first_message_id "
+                "WHERE i.id=?", (item_id,))
+    if row and not config.study(row["study_id"]).person_by_email(row["from_addr"]):
+        db.audit("memory_not_saved", entity_type="item", entity_id=item_id, study_id=row["study_id"],
+                 why="the alert's message is from someone not on the study's people list")
         return None
     return _submit(_save_alert, item_id)
 
@@ -225,8 +295,13 @@ def participant_tags(study_id: str, pid: str | None, timeout: float = 30) -> lis
         return []
     out, offset = [], 0
     while True:
-        res = _call("GET", f"/v1/default/banks/{bank(study_id)}/tags?q=participant:*&limit=500&offset={offset}",
-                    timeout=timeout)
+        try:
+            res = _call("GET", f"/v1/default/banks/{bank(study_id)}/tags?q=participant:*&limit=500&offset={offset}",
+                        timeout=timeout)
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:   # nothing saved for the study yet
+                return []
+            raise
         page = res.get("items") or []
         out += [t["tag"] for t in page if memory.key(t["tag"].split(":", 1)[1]) == k]
         offset += len(page)
@@ -363,8 +438,13 @@ def _every(study_id: str, extra: str = "") -> list[dict]:
     for state in ("valid", "invalidated"):
         offset = 0
         while True:
-            res = _call("GET", f"/v1/default/banks/{bank(study_id)}/memories/list?limit=500&offset={offset}"
-                               f"&state={state}{extra}", timeout=60)
+            try:
+                res = _call("GET", f"/v1/default/banks/{bank(study_id)}/memories/list?limit=500&offset={offset}"
+                                   f"&state={state}{extra}", timeout=60)
+            except requests.HTTPError as e:
+                if e.response is not None and e.response.status_code == 404:   # nothing saved for the study yet
+                    return []
+                raise
             page = res.get("items") or []
             out += page
             offset += len(page)

@@ -1,0 +1,9 @@
+{"story": "A code written as 'Subj 1001-138' is found when asked about later",
+ "messages": [
+  {"text": "Subj 1001-138: started carbamazepine 200 mg daily for trigeminal pain, per her neurologist.",
+   "chat": "room", "date": "2026-10-01 10:00",
+   "memory": {"1001-138": {"has": ["carbamazepine"]}}},
+  {"text": "Is any medicine 1001-138 takes a problem under the protocol?",
+   "chat": "direct", "date": "2026-10-08 09:00",
+   "answer_has": ["carbamazepine"]}
+ ]}

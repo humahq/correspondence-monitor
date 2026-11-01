@@ -1,0 +1,9 @@
+{"story": "A plan to try for a baby, months before screening",
+ "messages": [
+  {"text": "1001-107 told me today that she and her partner plan to try for a baby next year.",
+   "chat": "room", "date": "2026-05-12 15:00",
+   "memory": {"1001-107": {"has": ["baby|pregnan"]}}},
+  {"text": "1001-107 comes for Master Protocol screening next month. Is there anything about pregnancy or contraception that affects her eligibility?",
+   "chat": "direct", "date": "2026-10-01 09:00",
+   "answer_has": ["plan", "12 may|may 12"]}
+ ]}

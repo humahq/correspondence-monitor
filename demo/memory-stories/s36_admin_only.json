@@ -1,0 +1,6 @@
+{"story": "A monitoring-visit email about binders saves nothing",
+ "messages": [
+  {"text": "Hi John, the monitoring visit is moved to 12 Nov. Please have the regulatory binder and the delegation log ready. Thanks!",
+   "chat": "email", "subject": "Monitoring visit date", "from": "cra", "date": "2026-10-09 10:00",
+   "memory": {"unlinked": {"count": 0}}}
+ ]}

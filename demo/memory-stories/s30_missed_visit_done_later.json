@@ -1,0 +1,12 @@
+{"story": "A visit missed for flu, then done a week later",
+ "messages": [
+  {"text": "1001-134 missed her week 16 visit on 3 Sep, she was in bed with the flu.",
+   "chat": "room", "date": "2026-09-03 16:00",
+   "memory": {"1001-134": {"has": ["flu"]}}},
+  {"text": "1001-134's week 16 visit was done on 10 Sep, all procedures completed.",
+   "chat": "room", "date": "2026-09-10 16:00",
+   "memory": {"1001-134": {"has": ["10 sep|september 10|2026-09-10"]}}},
+  {"text": "Does 1001-134's week 16 visit count as a protocol deviation?",
+   "chat": "direct", "date": "2026-09-20 09:00",
+   "answer_has": ["flu|ill", "10 sep|september 10|2026-09-10"]}
+ ]}

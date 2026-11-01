@@ -1,0 +1,6 @@
+{"story": "A plan is kept as a plan",
+ "messages": [
+  {"text": "The PI plans to start 1001-132 on riluzole after her week 8 visit.",
+   "chat": "room", "date": "2026-10-05 10:00",
+   "memory": {"1001-132": {"has": ["plan"]}}}
+ ]}

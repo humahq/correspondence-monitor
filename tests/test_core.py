@@ -396,6 +396,49 @@ def test_a_test_message_without_a_date_always_gets_the_same_one():
     assert dates == {"Thu, 29 Oct 2026 09:00:00 -0400"}
 
 
+def test_a_story_file_is_several_messages_in_order_with_their_checks(tmp_path):
+    import json
+    from cormon import testbench
+
+    (tmp_path / "s1.json").write_text(json.dumps({"story": "gout", "messages": [
+        {"text": "1001-014 has gout", "memory": {"1001-014": {"has": ["gout"]}}},
+        {"text": "is colchicine a problem?", "chat": "direct", "answer_has": ["colchicine"]},
+        {"text": "lab note", "chat": "email", "subject": "labs"}]}))
+    (tmp_path / "single.json").write_text(json.dumps({"text": "MAP-0301 randomized", "expect": "eligibility"}))
+    cases = testbench.read_folder(tmp_path)
+    assert [c.name for c in cases] == ["s1.json#1", "s1.json#2", "s1.json#3", "single.json"]
+    assert [c.story for c in cases] == ["s1.json"] * 3 + [None]
+    assert [c.chat for c in cases] == ["room", "direct", None, "room"]
+    assert cases[0].checks == {"memory": {"1001-014": {"has": ["gout"]}}} and cases[3].checks == {}
+    assert cases[2].subject == "labs"
+
+
+def test_story_checks_read_the_answer_and_the_participants_memory(monkeypatch):
+    from types import SimpleNamespace
+    from cormon import hindsight, testbench
+
+    held = {"1001-014": [{"text": "She takes St. John\u2019s wort", "retired": False},
+                         {"text": "Born 1967", "retired": True}]}
+    monkeypatch.setattr(hindsight, "participant_facts", lambda study_id, pid: held.get(pid, []))
+    monkeypatch.setattr(hindsight, "overview", lambda study_id: {"unlinked": [{"text": "ankle swelling"}]})
+    study = SimpleNamespace(study_id="S")
+    case = testbench.Case(name="x", subject="s", checks={
+        "answer_has": ["ST. JOHN'S WORT", "29 oct|october 29"], "answer_lacks": ["1967"],
+        "memory": {"1001-014": {"has": ["john's wort"], "lacks": ["1967"], "count": 1},
+                   "1001-022": {"count": 0}, "unlinked": {"has": ["ankle"]}}})
+    case.result = {"answer": "Yes: reported on 29 Oct that she takes St. John's wort."}
+    assert all(k["ok"] for k in testbench.run_checks(study, case))
+    case.result = {"answer": ""}
+    failed = [k["check"] for k in testbench.run_checks(study, case) if not k["ok"]]
+    assert failed == ["answer has 'ST. JOHN'S WORT'", "answer has '29 oct|october 29'", "answer lacks '1967'"]
+
+    case.story, other = "a.json", testbench.Case(name="y", subject="s", story="b.json")
+    case.result = {"checks": [{"check": "c", "ok": True, "saw": ""}]}
+    other.result = {"checks": [{"check": "c", "ok": False, "saw": ""}]}
+    assert testbench.story_summary([case, other]) == {"checks": 2, "checks_passed": 1, "stories": 2,
+                                                       "stories_passed": 1, "failed_stories": ["b.json"]}
+
+
 def test_stitched_quote_is_accepted_only_when_every_piece_is_in_the_message():
     text = "Plan for MAP-2073: we'll randomize him tomorrow morning. His screening ECG is booked for Friday."
     stitched = "His screening ECG is booked for Friday. Plan for MAP-2073: we'll randomize him tomorrow morning."
@@ -3330,6 +3373,7 @@ def test_patient_memory_saves_a_listed_senders_message_with_who_said_it(monkeypa
     msg = {"id": 7, "from_addr": "johnrohit94@gmail.com", "channel": "email", "subject": "014",
            "sent_at": "2026-10-30T14:00:00+00:00", "thread_key": "t1", "attachments": []}
     hindsight.save_message(study, msg, "1001-014 had a gout flare last week.").result()
+    calls[:] = [c for c in calls if c[0] != "GET"]   # the participant-tag check reads the saved facts back
     assert [c[0] for c in calls] == ["PATCH", "POST"], "the bank is set up once, then the message is saved"
     assert calls[0][2]["updates"]["enable_observations"] is False
     item = calls[1][2]["items"][0]
@@ -3339,7 +3383,7 @@ def test_patient_memory_saves_a_listed_senders_message_with_who_said_it(monkeypa
     assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_saved' AND entity_id='7'")
 
     hindsight.save_message(study, dict(msg, id=8), "again").result()
-    assert [c[0] for c in calls[2:]] == ["POST"], "the bank settings are not sent again"
+    assert [c[0] for c in calls[2:] if c[0] != "GET"] == ["POST"], "the bank settings are not sent again"
 
 
 def test_patient_memory_skips_unknown_senders_and_is_off_by_default(monkeypatch):
@@ -3379,6 +3423,50 @@ def test_only_alerts_about_a_participant_are_remembered_and_test_banks_alone_are
     assert calls == []
     with pytest.raises(RuntimeError, match="not a test bank"):
         hindsight.clear_test_bank("NCT05842941")
+
+
+def test_an_alert_on_a_message_from_a_stranger_is_not_remembered(monkeypatch):
+    from cormon import hindsight
+    calls, _ = _memory_on(monkeypatch)
+    for mid, sender in ((31, "neighbour@example.org"), (32, "johnrohit94@gmail.com")):
+        db.ex("INSERT INTO messages (id, channel, external_id, thread_key, study_id, route, visibility, from_addr,"
+              " subject, body_text, headers, received_at, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              (mid, "email", f"e{mid}", f"t{mid}", "NCT05842941", "study", "direct", sender, "s", "1001-141 is "
+               "pregnant", "{}", db.now(), "processed"))
+        db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind,"
+              " polarity, title, tier, evidence, link_token, created_at, updated_at, participant_id)"
+              " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (mid, "NCT05842941", f"t{mid}", mid, mid, f"k{mid}",
+                                                         "finding", "problem", "x", "medium", "{}", f"l{mid}",
+                                                         db.now(), db.now(), "1001-141"))
+    assert hindsight.save_alert(31, kind="finding", participant_id="1001-141") is None
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_not_saved' AND entity_type='item' AND entity_id='31'")
+    hindsight.save_alert(32, kind="finding", participant_id="1001-141").result()
+    assert any(c[0] == "POST" and c[2]["items"][0]["document_id"] == "alert-32" for c in calls)
+
+
+def test_a_miscopied_participant_code_is_put_right_from_the_messages_own_words(monkeypatch):
+    from cormon import hindsight
+    assert {"1001111", "MAP0301", "1001138"} <= hindsight.written_codes("1001-111 and MAP 0301; Subj 1001-138.")
+    assert "1001111HAS" not in hindsight.written_codes("1001-111 has")
+    assert hindsight._one_off("100111", "1001111") and hindsight._one_off("1001127", "1001172")
+    assert not hindsight._one_off("1001", "1001139") and not hindsight._one_off("1001111", "1001111")
+
+    facts = [{"id": "f1", "document_id": "message-5", "mentioned_at": "2026-10-01",
+              "text": "1001-111 is on riluzole", "tags": ["study:S", "source:message", "participant:100111"]}]
+    calls = _memory_store(monkeypatch, facts)
+    hindsight._check_tags("S", "message-5", "1001-111 is on riluzole 50 mg", ["study:S", "source:message"])
+    patch = [c for c in calls if c[0] == "PATCH"]
+    assert patch and patch[0][1].endswith("/documents/message-5")
+    assert patch[0][2] == {"tags": ["participant:1001111", "source:message", "study:S"]}
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_tag_fixed'")
+
+    facts[:] = [dict(facts[0], tags=["participant:100111"]),
+                dict(facts[0], id="f2", tags=["participant:1001222"])]
+    calls.clear()
+    hindsight._check_tags("S", "message-5", "1001-111 nausea; 1001-222 fine", ["study:S"])
+    assert not [c for c in calls if c[0] == "PATCH"], "two participants in one message: tags change together, so left"
+    logged = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='memory_tag_unsure'")["details"])
+    assert logged["tags"] == ["100111"] and logged["likely"] == {"100111": "1001111"}
 
 
 def test_an_answer_is_given_the_participants_earlier_facts_with_when_and_who(monkeypatch):

@@ -1,0 +1,9 @@
+{"story": "A fall told by email, a follow-up in the group chat: both kept for the same participant",
+ "messages": [
+  {"text": "1001-108 had a fall at home on 30 Aug and bruised her right hip. X-ray showed no fracture. PI informed.",
+   "chat": "email", "subject": "1001-108 fall", "date": "2026-09-02 10:00",
+   "memory": {"1001-108": {"has": ["fall|fell", "hip"]}}},
+  {"text": "1001-108's hip is much better, she is walking without the cane again.",
+   "chat": "room", "date": "2026-10-10 11:00",
+   "memory": {"1001-108": {"has": ["fall|fell", "cane|better|walking"]}}}
+ ]}

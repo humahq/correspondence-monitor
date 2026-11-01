@@ -1,0 +1,12 @@
+{"story": "A visit booked, then moved: the later date is used",
+ "messages": [
+  {"text": "1001-112's week 8 visit is booked for 12 Oct.",
+   "chat": "room", "date": "2026-10-01 10:00",
+   "memory": {"1001-112": {"has": ["12 oct|october 12|2026-10-12"]}}},
+  {"text": "1001-112's week 8 visit moved to 19 Oct, her ride fell through.",
+   "chat": "room", "date": "2026-10-08 10:00",
+   "memory": {"1001-112": {"has": ["19 oct|october 19|2026-10-19"]}}},
+  {"text": "When is 1001-112's week 8 visit now, and what is done first at that visit?",
+   "chat": "direct", "date": "2026-10-16 09:00",
+   "answer_has": ["19 oct|october 19|2026-10-19"]}
+ ]}

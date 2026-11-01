@@ -1,0 +1,12 @@
+{"story": "A vomited dose and the site's follow-up, asked about when it happens again",
+ "messages": [
+  {"text": "1001-148 vomited about 20 minutes after this morning's dose. She did not take another one.",
+   "chat": "room", "date": "2026-09-10 11:00",
+   "memory": {"1001-148": {"has": ["vomit"]}}},
+  {"text": "Follow-up on 1001-148: PI advised taking the dose with food from now on; noted in her source documents.",
+   "chat": "room", "date": "2026-09-11 11:00",
+   "memory": {"1001-148": {"has": ["food"]}}},
+  {"text": "1001-148 vomited after her dose again today. What did we do last time, and does the protocol say to re-dose?",
+   "chat": "direct", "date": "2026-10-02 09:00",
+   "answer_has": ["food"]}
+ ]}
