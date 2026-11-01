@@ -114,12 +114,16 @@ def only_earlier(departure: dict) -> bool:
     return bool(qs) and all(is_earlier_quote(q) for q in qs)
 
 
-def record_lines(past: list[dict]) -> list[str]:
-    """The participant's earlier dates as plain lines, oldest first (for answering questions)."""
+def record_lines(past: list[dict], corrected: set[str] = frozenset()) -> list[str]:
+    """The participant's earlier dates as plain lines, oldest first (for answering questions). corrected: messages
+    a later report corrected (patient memory found it): their dates are marked, so the later report holds."""
     lines = []
     for h in past:
+        stale = " [from a message a later report corrected: the later report holds]" \
+            if str(h.get("message_id")) in corrected else ""
         for d in sorted(h["dates"], key=lambda d: (d.get("date") or "", d.get("time") or "")):
             if d.get("date"):
                 lines.append(f"{d.get('label') or d.get('kind')}: {d['date']}"
-                             + (f" {d['time']}" if d.get("time") else "") + f" ({h['when'] or 'earlier message'})")
+                             + (f" {d['time']}" if d.get("time") else "") + f" ({h['when'] or 'earlier message'})"
+                             + stale)
     return lines

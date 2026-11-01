@@ -396,6 +396,55 @@ def test_a_test_message_without_a_date_always_gets_the_same_one():
     assert dates == {"Thu, 29 Oct 2026 09:00:00 -0400"}
 
 
+def test_an_answer_using_an_earlier_fact_must_say_when_it_was_reported():
+    from cormon import answers
+    record = ["riluzole start: 2026-06-01 (10 Jun 2026 14:00)",
+              "earlier fact, reported on 14 Sep 2026 by John Rohit (Study coordinator): Participant 1001-101's GP "
+              "started colchicine 0.6 mg daily. (happened: 2026-09-14)"]
+    asked = "Is any medicine she is on a problem under the protocol?"
+    left = answers._unsourced("Colchicine is not named in the prohibited lists.", record, asked)
+    assert left == ["'colchicine' (reported on 14 Sep 2026 by John Rohit (Study coordinator))"]
+    for ok in ("The coordinator reported on 14 Sep 2026 that she takes colchicine.",
+               "On September 14 the coordinator said she takes colchicine.",
+               "She started colchicine (reported 2026-09-14)."):
+        assert answers._unsourced(ok, record, asked) == [], ok
+    assert answers._unsourced("Colchicine is fine.", record, "Is colchicine a problem?") == [], \
+        "the question named it: the answer need not cite memory"
+
+
+def test_dates_from_a_message_a_later_report_corrected_are_marked():
+    from cormon import memory
+    past = [{"message_id": 1, "when": "02 Oct 2026 10:00", "dates": [{"kind": "dose", "label": "missed dose",
+                                                                       "date": "2026-10-01"}]},
+            {"message_id": 2, "when": "03 Oct 2026 10:00", "dates": [{"kind": "visit", "label": "Week 4",
+                                                                       "date": "2026-10-03"}]}]
+    assert memory.record_lines(past, {"1"}) == [
+        "missed dose: 2026-10-01 (02 Oct 2026 10:00) [from a message a later report corrected: the later report holds]",
+        "Week 4: 2026-10-03 (03 Oct 2026 10:00)"]
+    assert memory.record_lines(past)[0] == "missed dose: 2026-10-01 (02 Oct 2026 10:00)"
+
+
+def test_code_counts_the_days_between_two_dates_the_record_gives():
+    from cormon import answers
+    backing = "riluzole start: 2026-06-01; Master Protocol screening: 2026-06-22"
+    assert answers.calculate("2026-06-22 - 2026-06-01", backing) == "2026-06-22 - 2026-06-01 = 21 days"
+    assert answers.calculate("2026-06-30 - 2026-06-01", backing) is None, "a date not in the record"
+    assert answers.calculate("2026-02-30 - 2026-06-01", backing + " 2026-02-30") is None
+    assert answers.calculate("3 x 40 = 120", "ULN 40, 3 times") == "3 * 40 = 120", "the AI's own '= 120' is redone"
+    assert answers.calculate("140 - 90 = 60", "ALT 140, now 90") == "140 - 90 = 50"
+
+
+def test_an_answers_numbers_may_come_from_the_message_date():
+    from cormon import answers
+    res = {"answer": "Yes: she is 54 on 29 Oct 2026.", "quotes": [],
+           "calculations": [{"what": "age", "expression": "2026 - 1972"}], "serious_event": False}
+    q = {"question": "Does she meet the age criterion?", "participant": "1001-109"}
+    record = ["earlier fact, reported on 20 Oct 2026 by John Rohit (Study coordinator): born 1972"]
+    args = (res, q, [], [], [], [], "", record)
+    assert not answers._proof(*args, [])["traced"]
+    assert answers._proof(*args, ["message date 29 October 2026"])["traced"]
+
+
 def test_a_story_file_is_several_messages_in_order_with_their_checks(tmp_path):
     import json
     from cormon import testbench
@@ -3513,9 +3562,9 @@ def test_a_later_report_replaces_an_earlier_fact_and_both_are_kept(monkeypatch):
         {"old": 1, "by": 2}, {"old": 2, "by": 3}, {"old": 3, "by": 1}]})
     lines = hindsight.recall_lines(config.study("NCT05842941"), "1001-014", "When was 014 born?", {"id": 9})
     assert lines == [
-        "replaced fact (a later report, on 20 Oct 2026, changed it), reported on 01 Mar 2025 by Ann (Study "
+        "NO LONGER TRUE (a later report, on 20 Oct 2026, changed it), reported on 01 Mar 2025 by Ann (Study "
         "coordinator): 1001014 was born in 1967",
-        "replaced fact (a later report, on 20 Oct 2026, changed it), reported on 10 Jan 2026 by Ann (Study "
+        "NO LONGER TRUE (a later report, on 20 Oct 2026, changed it), reported on 10 Jan 2026 by Ann (Study "
         "coordinator): 1001014 was born in 1970",
         "earlier fact, reported on 20 Oct 2026 by Bo (PI): 1001014 was born in 1972"]
     row = db.q1("SELECT details FROM audit_log WHERE action='memory_searched'")

@@ -5,5 +5,5 @@
    "memory": {"1001-172": {"has": ["john's wort|johns wort"]}, "1001-127": {"count": 0}}},
   {"text": "Is any medicine or supplement 1001-127 takes a problem under the protocol?",
    "chat": "direct", "date": "2026-10-07 09:00",
-   "answer_lacks": ["wort"]}
+   "answer_lacks": ["1001-172|capsules|on her own|she takes st|she started st|she is taking st"]}
  ]}

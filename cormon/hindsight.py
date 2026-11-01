@@ -328,7 +328,7 @@ def _who(r: dict) -> str:
 def _fact_line(r: dict, replaced_by: dict | None = None, corrected: dict | None = None) -> str:
     text, when = _parts(r)
     happened = f" (happened: {when})" if when else ""
-    kind = (f"replaced fact (a later report, on {_day(replaced_by)}, changed it)" if replaced_by
+    kind = (f"NO LONGER TRUE (a later report, on {_day(replaced_by)}, changed it)" if replaced_by
             else "earlier fact")
     fixed = f" [corrected by {corrected['by']} on {_day({'mentioned_at': corrected['ts']})}]" if corrected else ""
     return f"{kind}, reported on {_day(r)} by {_who(r)}: {text}{happened}{fixed}"
@@ -338,7 +338,8 @@ NEWER_SYSTEM = """You read the facts a clinical-trial study monitor holds about 
 report first. A later fact replaces an earlier one when both are about the same thing (a birth year, a diagnosis,
 a dose, a date, whether a medicine is still taken, a result) and the later one gives a different value, says the
 earlier one was wrong, or says it has stopped or ended. A fact that only adds detail, repeats it, or is about
-something else replaces nothing. List each replaced fact with the number of the fact that replaces it; list none
+something else replaces nothing. An event and what happened after it are both true and replace nothing: a visit
+missed and later done on another day, a problem and what was done about it. List each replaced fact with the number of the fact that replaces it; list none
 when nothing is replaced."""
 
 NEWER_SCHEMA = llm.obj({"replaced": {"type": "array", "items": llm.obj({
@@ -366,12 +367,17 @@ def _newest_wins(rows: list[dict]) -> dict[int, int]:
 
 
 def recall_lines(study, pid: str | None, query: str, msg: dict) -> list[str]:
+    return recall(study, pid, query, msg)[0]
+
+
+def recall(study, pid: str | None, query: str, msg: dict) -> tuple[list[str], set[str]]:
     """What memory holds about a participant that bears on a question, oldest first, one line per fact with when
-    it was reported and by whom. The message being answered is left out (its own words are read anyway). Only the
-    participant's own facts: a fact tagged to nobody or to someone else never comes back. A slow or failed search
-    gives nothing and is logged, so an answer is never held up by memory."""
+    it was reported and by whom; and the ids of the messages a later report corrected. The message being answered
+    is left out (its own words are read anyway). Only the participant's own facts: a fact tagged to nobody or to
+    someone else never comes back. A slow or failed search gives nothing and is logged, so an answer is never held
+    up by memory."""
     if not enabled() or not memory.key(pid):
-        return []
+        return [], set()
     seconds = float(settings.get("memory.search_seconds", 5))
     began = time.monotonic()
     try:
@@ -382,7 +388,7 @@ def recall_lines(study, pid: str | None, query: str, msg: dict) -> list[str]:
     except Exception as e:
         db.audit("memory_search_failed", entity_type="message", entity_id=msg.get("id"), study_id=study.study_id,
                  participant_id=pid, seconds=round(time.monotonic() - began, 2), error=str(e)[:300])
-        return []
+        return [], set()
     mine = str(msg.get("id"))
     rows = [r for r in found.get("results") or [] if (r.get("metadata") or {}).get("message_id") != mine]
     rows = sorted(rows[:MAX_FACTS], key=lambda r: r.get("mentioned_at") or "")
@@ -396,7 +402,9 @@ def recall_lines(study, pid: str | None, query: str, msg: dict) -> list[str]:
              participant_id=pid, facts=len(rows), seconds=round(time.monotonic() - began, 2),
              replaced=[{"old": rows[o].get("id"), "by": rows[b].get("id")} for o, b in newer.items()])
     fixed = _corrections(study.study_id, [r.get("id") for r in rows])
-    return [_fact_line(r, rows[newer[n]] if n in newer else None, fixed.get(r.get("id"))) for n, r in enumerate(rows)]
+    corrected = {(rows[n].get("metadata") or {}).get("message_id") for n in newer} - {None}
+    return ([_fact_line(r, rows[newer[n]] if n in newer else None, fixed.get(r.get("id"))) for n, r in enumerate(rows)],
+            corrected)
 
 
 # ---------------------------------------------------------------- the memory page (adminview.py)
