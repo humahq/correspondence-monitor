@@ -16,7 +16,7 @@ import operator
 import re
 import secrets
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
 
@@ -35,7 +35,9 @@ FIND_SYSTEM = """You read a message a clinical-trial site sent to the study moni
 that the study documents (protocol, lab manual, consent, visit schedule) or the participant's visit dates could
 answer: anything on how the study is run, for example visit windows and timing, what a visit includes,
 eligibility, dosing, medicines, samples, consent, deviations, adverse event reporting, records and data entry,
-monitoring, scales and scores, withdrawal and early termination.
+monitoring, scales and scores, withdrawal and early termination. Also list questions on what earlier messages
+reported about a participant (what happened to them, their medicines, allergies, results, events, visits,
+consent, who reported something and when): record_only is true for those, when they ask nothing about a rule.
 Leave out questions for a person rather than the documents (asking for kits, a call, a reply, whether an email
 arrived, who is covering), rhetorical questions, and questions the message itself already answers.
 Reword each question to stand alone, keeping every number, date and visit name and what the message reports that
@@ -56,6 +58,7 @@ not asked again in MESSAGE is not listed. harm is only about what MESSAGE report
 FIND_SCHEMA = llm.obj({"questions": {"type": "array", "items": llm.obj({
     "question": {"type": "string"},
     "participant": {"type": "string"},
+    "record_only": {"type": "boolean"},
     "harm": {"type": "boolean"}})},
     "harm": {"type": "boolean"}, "harm_participant": {"type": "string"}})
 
@@ -79,7 +82,8 @@ Rules:
   yes or no). For a participant, use the visit windows worked out by code in the record; do not redo that
   arithmetic. A sum of your own (a gap between visits, a total, a difference) goes in calculations, written with
   the protocol's or the record's own numbers ("84 - 14"), or for days between two dates with the dates as
-  YYYY-MM-DD ("2026-06-22 - 2026-06-01"); code works it out and checks each number, and you may give its result
+  YYYY-MM-DD ("2026-06-22 - 2026-06-01"), or for a date some days after another as the date and the days
+  ("2026-09-01 + 28"); code works it out and checks each number, and you may give its result
   in the answer. In the answer itself write dates as "14 Sep 2026". If the protocol does not state the answer directly but its numbers settle it,
   answerable is true: say it is not stated directly and give the numbers and the calculation. Check exceptions:
   a specific exception in the sections overrides the general rule, and the schedule's own visit days override a
@@ -102,10 +106,15 @@ Rules:
   check it. When two earlier facts disagree, the one reported later holds; mention the earlier one only if the
   question needs it. A fact marked NO LONGER TRUE was changed by a later report: it is false now; never use it,
   or a date marked as from a corrected message, as true. Answer from the fact that replaced it, and mention the
-  old one only when the question asks what changed or when the change matters, saying it was later corrected."""
+  old one only when the question asks what changed or when the change matters, saying it was later corrected.
+- record_used: each PARTICIPANT RECORD line the answer rests on, copied exactly. A question only on what
+  happened to the participant (is the nausea still ongoing, any allergies, who reported the seizure) is answered
+  from the record: answerable is true when the record settles it; when the record says nothing on it, answerable
+  is false and the answer says no earlier message reports it."""
 
 ANSWER_SCHEMA = llm.obj({
     "answerable": {"type": "boolean"},
+    "record_used": {"type": "array", "items": {"type": "string"}},
     "serious_event": {"type": "boolean"},
     "answer": {"type": "string"},
     "calculations": {"type": "array", "items": llm.obj({"what": {"type": "string"},
@@ -122,7 +131,8 @@ Rules:
   does not state this directly", where a date came from. Keep who reported an earlier fact about the
   participant and when ("the coordinator reported on 12 Oct that she has gout"): that is part of the answer.
 - Keep the participant's own calendar dates when the checked answer gives them; do not swap them for day numbers.
-- Use only facts in the CHECKED ANSWER and the PROTOCOL'S WORDS. Never add a number, a date or a rule of your own.
+- Use only facts in the CHECKED ANSWER, the PROTOCOL'S WORDS and the earlier messages' facts. Never add a
+  number, a date or a rule of your own.
 - When a serious event must be reported, say to whom and how fast, taken from the protocol's words.
 - No greeting and no sign-off."""
 
@@ -333,20 +343,32 @@ EXTREME_GAP = re.compile(r"\b(longest|maximum|max|most|shortest|minimum|least)\b
 INLINE_SUM = re.compile(r"(\d+(?:\.\d+)?(?:\s*[-+*/×−]\s*\d+(?:\.\d+)?)+)\s*=\s*(\d+(?:\.\d+)?)")
 
 
+def _given_date(iso: str, backing: str) -> date | None:
+    """The date, when the backing gives it: as 2026-09-01, or as "1 Sep", "01 Sept 2026", "September 1"."""
+    try:
+        d = date.fromisoformat(iso)
+    except ValueError:
+        return None
+    mon = f"{d:%b}"
+    written = rf"\b0?{d.day}(?:st|nd|rd|th)?\s+{mon}[a-z]*\.?(?!\w)|\b{mon}[a-z]*\.?\s+0?{d.day}(?!\d)"
+    return d if iso in backing or re.search(written, backing, re.I) else None
+
+
 def calculate(expression: str, backing: str) -> str | None:
     """A sum the AI asked for, worked out by code ("84 - 14 = 70"), when it is plain arithmetic on numbers found in
-    the protocol's words or the record, or days between two dates the record gives ("2026-06-22 - 2026-06-01").
-    None otherwise."""
+    the protocol's words or the record; days between two dates the record gives ("2026-06-22 - 2026-06-01"); or a
+    date the record gives plus or minus a number of days the backing gives ("2026-09-01 + 28"). None otherwise."""
     expr = expression.replace("−", "-").replace("×", "*").replace("÷", "/").strip()
     expr = re.sub(r"(?<=\d)\s*[xX]\s*(?=\d)", " * ", expr.split("=", 1)[0]).strip()   # code gives the result itself
     if m := re.fullmatch(r"(\d{4}-\d{2}-\d{2})\s*-\s*(\d{4}-\d{2}-\d{2})", expr):
-        if not all(d in backing for d in m.groups()):
+        later, earlier = (_given_date(d, backing) for d in m.groups())
+        return f"{expr} = {(later - earlier).days} days" if later and earlier else None
+    if m := re.fullmatch(r"(\d{4}-\d{2}-\d{2})\s*([+-])\s*(\d+)(?:\s*days?)?", expr, re.I):
+        day, sign, n = m.groups()
+        start = _given_date(day, backing)
+        if not start or n not in _norm_nums(backing):
             return None
-        try:
-            later, earlier = (date.fromisoformat(d) for d in m.groups())
-        except ValueError:
-            return None
-        return f"{expr} = {(later - earlier).days} days"
+        return f"{day} {sign} {n} days = {start + timedelta(days=int(n) * (1 if sign == '+' else -1)):%Y-%m-%d}"
     if not re.fullmatch(r"[\d\s+\-*/().]+", expr) or not _norm_nums(expr) <= _norm_nums(backing):
         return None
     try:
@@ -433,7 +455,7 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
     given = sched + [f"message date {reader._email_date(msg):%d %B %Y}"]   # numbers the AI was given
     found = _proof(res, q, secs, checklists, sources, visits, email, record, given)
     unsourced = _unsourced(found["text"], record, f"{q['question']} {email}")
-    if (not found["traced"] or unsourced) and found["proven"]:
+    if (not found["traced"] or unsourced) and (found["proven"] or found["from_record"]):
         loose = sorted(_norm_nums(found["text"]) - _norm_nums(found["backing"]), key=len)
         why = found["conflict"] or (f"These numbers in your answer are not in the protocol's words or the record: "
                                     f"{', '.join(loose)}. Give each one as a calculation from the protocol's or "
@@ -451,10 +473,13 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
         elif found["conflict"]:  # the AI keeps the wrong pair: code's own answer from the quoted rows
             found = dict(found, text=found["code_answer"], traced=True, sums=found["sums"][-1:])
     ask = "" if res["answerable"] else ask_back(q, found["text"], secs, email, record, use_cache)
-    # an answer that says the protocol is silent but gives its proven numbers is still shown
+    # an answer that says the protocol is silent but gives its proven numbers is still shown; one on what happened
+    # to the participant stands on the record lines it rests on
+    from_record = found["from_record"] if pid else []
     return {"question": q["question"], "participant": pid, "text": found["text"], "quotes": found["proven"][:4],
-            "ask": ask,
-            "sums": found["sums"], "found": bool(found["proven"]), "serious": bool(res["serious_event"]),
+            "ask": ask, "from_record": from_record,
+            "sums": found["sums"], "serious": bool(res["serious_event"]),
+            "found": bool(found["proven"] or (q.get("record_only") and res["answerable"] and from_record)),
             "traced": found["traced"], "picked": [i["id"] for i in secs + checklists],
             "read": [reader._heading(i) for i in secs + checklists], "record": record, "windows": sched,
             "chosen": [x for x in dict.fromkeys(picked_ids) if x in known and known[x]["kind"] == "section"]}
@@ -480,6 +505,15 @@ def ask_back(q: dict, said: str, secs: list[dict], email: str, record: list[str]
     if len(ask) < 15 or len(ask) > 300 or PERSONAL.search(ask) or not _numbers_traced(ask, backing):
         return ""
     return ask if ask.endswith("?") else ask.rstrip(".") + ". Can you tell me?"
+
+
+def record_used(cited: list[str], record: list[str]) -> list[str]:
+    """The record lines an answer cited that really are in the participant record, whole, in record order: the
+    proof for an answer on what happened, as protocol quotes are for a rule. A cited part of a line counts when it
+    is long enough to tell lines apart."""
+    flat = lambda s: " ".join(s.lower().split()).strip(" -.")  # noqa: E731
+    want = [flat(c) for c in cited if len(flat(c)) >= 20]
+    return [ln for ln in record if any(w in flat(ln) for w in want)][:6]
 
 
 def _proof(res: dict, q: dict, secs: list[dict], checklists: list[dict], sources: list[dict], visits: list[dict],
@@ -527,6 +561,7 @@ def _proof(res: dict, q: dict, secs: list[dict], checklists: list[dict], sources
                 conflict = f"Code finds the {extreme.group(1).lower()} gap is Day {a} to Day {b}: {g} days."
     backing += " " + " ".join(r for _, r in sums)
     return {"text": text, "proven": proven, "sums": sums, "backing": backing,
+            "from_record": record_used(res.get("record_used") or [], record),
             "traced": _numbers_traced(text, backing) and not conflict, "conflict": conflict,
             "code_answer": code_answer}
 
@@ -560,16 +595,19 @@ def _plain_said(a: dict, reader_role: str, use_cache: bool) -> str:
     """a["tone"] (a careful reader, see careful.py) adds that tone's wording rule to PLAIN_SYSTEM."""
     facts = "\n".join([a["text"]] + [f"{what}: {r}" for what, r in a.get("sums", [])])
     words = "\n".join(f"- {w}" for _, w in a["quotes"]) or "- none"
+    earlier = a.get("from_record") or []
     rule = careful.tone(a.get("tone"))
     try:
         said = _clean(llm.structured("answer_plain", PLAIN_SYSTEM + (f"\n{rule}" if rule else ""),
                                      f"READER: {reader_role}\n\nQUESTION: "
                                      f"{a['question']}\n\nCHECKED ANSWER:\n{facts}\n\nPROTOCOL'S WORDS:\n{words}"
+                                     + ("\n\nEARLIER MESSAGES' FACTS IT RESTS ON:\n"
+                                        + "\n".join(f"- {x}" for x in earlier) if earlier else "")
                                      + ("\n\nThis is a serious event." if a.get("serious") else ""),
                                      PLAIN_SCHEMA, "reply", use_cache=use_cache)["text"])
     except Exception:
         return a["text"]
-    backing = " ".join([facts, a["question"]] + [w for _, w in a["quotes"]])
+    backing = " ".join([facts, a["question"]] + [w for _, w in a["quotes"]] + earlier)
     lead = re.split(r"(?<=[.!?])\s", a["text"], maxsplit=1)[0]  # the direct answer: its numbers must all stay
     ok = said and _numbers_traced(said, backing) and _norm_nums(lead) <= _norm_nums(said)
     if ok and (added := outcheck.added_judgment(said, backing)):
@@ -602,6 +640,8 @@ def render(answers: list[dict], link: str | None = None, chat: bool = True, cra:
     more = ("" if not link else f"\n\n<{link}|Details and the protocol's words>" if chat
             else f"\n\nDetails and the protocol's words: {link}")
     end = footer(cra)
+    if any(a.get("from_record") and a.get("found") for a in answers):
+        end = end.replace("From the study documents.", "From the study documents and earlier messages.")
     return "\n\n".join(blocks) + more + (f"\n\n_{end}_" if chat else f"\n\n{end}")
 
 
@@ -617,6 +657,7 @@ def render_full(answers: list[dict]) -> str:
             lines += ["I could not work out a sure answer. These are the protocol's words on it:"] + words
         else:
             lines += [a["text"]] + [f"Worked out by code: {what}: {r}" for what, r in a.get("sums", [])] + words
+            lines += [f"From an earlier message: {x}" for x in a.get("from_record") or []]
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 

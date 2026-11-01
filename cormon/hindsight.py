@@ -289,11 +289,11 @@ def _submit(fn, *args) -> Future:
 def participant_tags(study_id: str, pid: str | None, timeout: float = 30) -> list[str]:
     """Every participant tag in the study's bank that means this participant. Hindsight's AI writes the code as
     it reads it ('1001-022' one time, '1001022' the next) and tags cannot be edited, so the spellings are matched
-    here with the same rule the bot matches codes with (memory.key)."""
-    k = memory.key(pid)
-    if not k:
+    here with the same rule the bot matches codes with (memory.key). A short form the site wrote ('212' for
+    1001-212) counts when it fits no other participant (memory.same_person)."""
+    if not memory.key(pid):
         return []
-    out, offset = [], 0
+    every, offset = [], 0
     while True:
         try:
             res = _call("GET", f"/v1/default/banks/{bank(study_id)}/tags?q=participant:*&limit=500&offset={offset}",
@@ -303,10 +303,13 @@ def participant_tags(study_id: str, pid: str | None, timeout: float = 30) -> lis
                 return []
             raise
         page = res.get("items") or []
-        out += [t["tag"] for t in page if memory.key(t["tag"].split(":", 1)[1]) == k]
+        every += [t["tag"] for t in page]
         offset += len(page)
         if not page or offset >= (res.get("total") or 0):
-            return out
+            break
+    keys = {memory.key(t.split(":", 1)[1]) for t in every}
+    mine = memory.same_person(pid, keys | memory.known_keys(study_id))
+    return [t for t in every if memory.key(t.split(":", 1)[1]) in mine]
 
 
 def _day(r: dict) -> str:
