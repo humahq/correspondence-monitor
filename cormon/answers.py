@@ -69,7 +69,8 @@ REPORTING_QUESTION = "This message reports serious harm to a participant: how mu
 
 PICK_SYSTEM = """You pick the parts of a study guide needed to answer a site's question: the sections and visit
 checklists whose rules decide it, for the question and for what the message reports (an event that happened can
-bring its own rules: reporting, deviations, exceptions). Include sections with exceptions to the rule asked about.
+bring its own rules: reporting, deviations, exceptions), and for what the participant record says that bears on
+the question (a medicine taken or stopped, an event, an unblinding). Include sections with exceptions to the rule asked about.
 At most 10 ids, the most decisive first. Use only ids from the index."""
 
 PICK_SCHEMA = llm.obj({"ids": {"type": "array", "items": {"type": "string"}}})
@@ -227,9 +228,10 @@ def stated_anchors(question: str, today: date) -> list[dict]:
     return [{"message_id": None, "when": "this conversation", "dates": dates, "events": []}] if dates else []
 
 
-def schedule(past: list[dict], visits: list[dict]) -> list[str]:
+def schedule(past: list[dict], visits: list[dict], asking: int | None = None) -> list[str]:
     """Each visit's window in calendar dates, counted by code from the participant's anchor dates, and the date a
-    visit was reported done when an earlier message gave it."""
+    visit was reported done when an earlier message gave it. asking: the message being answered, whose visit dates
+    may only be asked about ("can wk 12 be on 3 Jul?"), so they are never shown as done."""
     anchors: dict[str, tuple[date, str]] = {}
     done: dict[str, tuple[date, str]] = {}
     for h in past:
@@ -240,7 +242,7 @@ def schedule(past: list[dict], visits: list[dict]) -> list[str]:
             k = memory.anchor_kind(d)
             if k in ("baseline", "extension_start", "last_dose"):
                 anchors[k] = (day, h["when"])
-            if d.get("visit_id"):
+            if d.get("visit_id") and (asking is None or h["message_id"] != asking):
                 done[d["visit_id"]] = (day, h["when"])
     lines = []
     for v in visits:
@@ -424,14 +426,16 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
              for h in stated_anchors(q["question"], reader._email_date(msg).date())]
     visits = [i for i in items if i["kind"] == "visit"]
     facts, corrected = hindsight.recall(study, pid, q["question"], msg)
-    record = memory.record_lines(past, corrected) + facts
-    sched = schedule(past, visits)
+    # the message's own dates are read in the message: in the record they would look like what already happened
+    record = memory.record_lines([h for h in past if h["message_id"] != msg.get("id")], corrected) + facts
+    sched = schedule(past, visits, msg.get("id"))
     # the numbered sections themselves, not topic briefs: a brief cites dozens of sections, too many to quote from
     pickable = sources + visits
     known = {i["id"]: i for i in pickable}
     picked_ids = llm.structured("answer_pick", PICK_SYSTEM, "GUIDE INDEX (id | heading | what it covers):\n"
-                                + reader.menu(pickable) + f"\n\nTHE SITE'S MESSAGE:\n{email}\n\nQUESTION: "
-                                f"{q['question']}", PICK_SCHEMA, "pick", use_cache=use_cache)["ids"]
+                                + reader.menu(pickable) + f"\n\nTHE SITE'S MESSAGE:\n{email}"
+                                + ("\n\nPARTICIPANT RECORD:\n" + "\n".join(f"- {x}" for x in record) if record else "")
+                                + f"\n\nQUESTION: {q['question']}", PICK_SCHEMA, "pick", use_cache=use_cache)["ids"]
     picked = [known[x] for x in dict.fromkeys(picked_ids) if x in known][:10]
     usable = [s for s in sources if reader._usable(s)]
     picked += lexical(f"{q['question']} {email}", usable)

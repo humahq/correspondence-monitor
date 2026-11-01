@@ -3645,6 +3645,32 @@ def test_a_later_report_replaces_an_earlier_fact_and_both_are_kept(monkeypatch):
     assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_newer_failed'")
 
 
+def test_the_bots_own_alert_never_replaces_what_the_site_reported(monkeypatch):
+    from cormon import hindsight
+    rows = [{"text": "1001-302's last rifampin pill is on 20 Jul", "mentioned_at": "2026-07-08T13:05:00+00:00",
+             "metadata": {"message_id": "1", "sender": "Ann"}},
+            {"text": "the bot raised alert #4: still taking a strong CYP3A4 inducer",
+             "mentioned_at": "2026-07-15T11:00:00+00:00", "metadata": {"alert_id": "4", "message_id": "3"}},
+            {"text": "1001-302 stopped rifampin on 18 Jul", "mentioned_at": "2026-07-20T11:00:00+00:00",
+             "metadata": {"message_id": "5", "sender": "Ann"}}]
+    monkeypatch.setattr(hindsight.llm, "structured", lambda *a, **kw: {"replaced": [{"old": 1, "by": 2}]})
+    assert hindsight._newest_wins(rows) == {}
+    monkeypatch.setattr(hindsight.llm, "structured", lambda *a, **kw: {"replaced": [{"old": 1, "by": 3}]})
+    assert hindsight._newest_wins(rows) == {0: 2}
+
+
+def test_dates_the_question_asks_about_are_not_shown_as_done(monkeypatch):
+    from cormon import answers
+    past = [{"message_id": 1, "when": "14 Apr 2026 12:30",
+             "dates": [{"kind": "baseline", "label": "Baseline", "date": "2026-04-14"}]},
+            {"message_id": 2, "when": "29 Jun 2026 16:15",
+             "dates": [{"kind": "visit", "label": "Week 12 call", "date": "2026-07-03", "visit_id": "g:wk12"}]}]
+    wk12 = {"id": "g:wk12", "kind": "visit", "title": "Week 12", "text": "Week 12 (Phone). Day 84 window ± 3 days."}
+    monkeypatch.setattr(answers.reader, "window", lambda v: ("baseline", 81, 87))
+    assert "reported on" in answers.schedule(past, [wk12])[0]
+    assert "reported on" not in answers.schedule(past, [wk12], asking=2)[0]
+
+
 def test_an_admin_corrects_retires_and_links_facts_with_a_reason_and_nothing_is_deleted(monkeypatch):
     from cormon import config, hindsight
     store = {"f1": {"id": "f1", "text": "1001014 born in 1967 | When: 2025", "document_id": "message-3",

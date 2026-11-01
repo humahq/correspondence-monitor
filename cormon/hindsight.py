@@ -352,7 +352,8 @@ NEWER_SCHEMA = llm.obj({"replaced": {"type": "array", "items": llm.obj({
 def _newest_wins(rows: list[dict]) -> dict[int, int]:
     """{old fact: the later fact that replaces it} ("born 1967", later "born 1972"). Both are kept and shown; the
     AI says which facts are about the same thing, and code keeps a pair only when the replacing fact was reported
-    later. rows are oldest first."""
+    later. The bot's own record of an alert replaces nothing: it is the bot's reading of what the site reported, not
+    a new report. rows are oldest first."""
     if len(rows) < 2:
         return {}
     listed = "\n".join(f"{n}. reported {r.get('mentioned_at') or 'date unknown'}: {r['text'].split(' | ')[0]}"
@@ -361,7 +362,8 @@ def _newest_wins(rows: list[dict]) -> dict[int, int]:
     out = {}
     for p in pairs:
         old, by = p["old"] - 1, p["by"] - 1
-        if 0 <= old < by < len(rows) and (rows[old].get("mentioned_at") or "") < (rows[by].get("mentioned_at") or ""):
+        if 0 <= old < by < len(rows) and (rows[old].get("mentioned_at") or "") < (rows[by].get("mentioned_at") or "") \
+                and not (rows[by].get("metadata") or {}).get("alert_id"):
             out.setdefault(old, by)
     for old in list(out):   # a chain (1967, then 1970, then 1972) points at the newest
         while out[old] in out:
