@@ -57,9 +57,9 @@ else
   echo "no live tag yet: first release through the gate"
 fi
 
-# 4. The live study model is the one in the repo.
-diff -q <(git show "$SHA:studies/model/model.sql") <(remote "sudo sqlite3 'file:$LIVE/data/cormon.db?mode=ro' \
-  '.dump documents doc_pages rules allowances guide rule_decisions'") >/dev/null \
+# 4. The live study model is the one in the repo. Row order is not compared: import-model may store rows in another order.
+diff -q <(git show "$SHA:studies/model/model.sql" | LC_ALL=C sort) <(remote "sudo sqlite3 'file:$LIVE/data/cormon.db?mode=ro' \
+  '.dump documents doc_pages rules allowances guide rule_decisions'" | LC_ALL=C sort) >/dev/null \
   || stop "the live study model differs from studies/model/model.sql: export it, commit it and let the gate test it"
 echo "live study model matches studies/model/model.sql"
 
