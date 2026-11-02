@@ -164,12 +164,14 @@ def render_answers(page: dict) -> str:
     for a in json.loads(page["answers"]):
         quotes = "".join(f'<p class="muted">{_e(h)}</p><blockquote>{_e(w)}</blockquote>' for h, w in a["quotes"])
         sums = "".join(f"<li>{_e(what)}: {_e(r)}</li>" for what, r in a.get("sums", []))
+        earlier = "".join(f"<li>{_e(x)}</li>" for x in a.get("from_record") or [])
         blocks.append(f"""<h2>{_e(a['question'])}</h2>
 <p><b>Reply posted:</b> {_e(a.get('plain') or a['text'])}</p>
 <p><b>Full answer:</b> {_e(a['text'])}</p>
 {f'<p><b>Worked out by code</b></p><ul>{sums}</ul>' if sums else ''}
 <p><b>The protocol's words</b> (found word for word in the documents)</p>
 {quotes or '<p class="muted">None found.</p>'}
+{f'<p><b>From earlier messages</b> (what the bot remembers about the participant)</p><ul>{earlier}</ul>' if earlier else ''}
 {_answer_how(a)}""")
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Answer details</title>
 <style>{CSS}</style></head><body>

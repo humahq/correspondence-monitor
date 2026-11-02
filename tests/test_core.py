@@ -396,6 +396,89 @@ def test_a_test_message_without_a_date_always_gets_the_same_one():
     assert dates == {"Thu, 29 Oct 2026 09:00:00 -0400"}
 
 
+def test_an_answer_using_an_earlier_fact_must_say_when_it_was_reported():
+    from cormon import answers
+    record = ["riluzole start: 2026-06-01 (10 Jun 2026 14:00)",
+              "earlier fact, reported on 14 Sep 2026 by John Rohit (Study coordinator): Participant 1001-101's GP "
+              "started colchicine 0.6 mg daily. (happened: 2026-09-14)"]
+    asked = "Is any medicine she is on a problem under the protocol?"
+    left = answers._unsourced("Colchicine is not named in the prohibited lists.", record, asked)
+    assert left == ["'colchicine' (reported on 14 Sep 2026 by John Rohit (Study coordinator))"]
+    for ok in ("The coordinator reported on 14 Sep 2026 that she takes colchicine.",
+               "On September 14 the coordinator said she takes colchicine.",
+               "She started colchicine (reported 2026-09-14)."):
+        assert answers._unsourced(ok, record, asked) == [], ok
+    assert answers._unsourced("Colchicine is fine.", record, "Is colchicine a problem?") == [], \
+        "the question named it: the answer need not cite memory"
+
+
+def test_dates_from_a_message_a_later_report_corrected_are_marked():
+    from cormon import memory
+    past = [{"message_id": 1, "when": "02 Oct 2026 10:00", "dates": [{"kind": "dose", "label": "missed dose",
+                                                                       "date": "2026-10-01"}]},
+            {"message_id": 2, "when": "03 Oct 2026 10:00", "dates": [{"kind": "visit", "label": "Week 4",
+                                                                       "date": "2026-10-03"}]}]
+    assert memory.record_lines(past, {"1"}) == [
+        "missed dose: 2026-10-01 (02 Oct 2026 10:00) [from a message a later report corrected: the later report holds]",
+        "Week 4: 2026-10-03 (03 Oct 2026 10:00)"]
+    assert memory.record_lines(past)[0] == "missed dose: 2026-10-01 (02 Oct 2026 10:00)"
+
+
+def test_code_counts_the_days_between_two_dates_the_record_gives():
+    from cormon import answers
+    backing = "riluzole start: 2026-06-01; Master Protocol screening: 2026-06-22"
+    assert answers.calculate("2026-06-22 - 2026-06-01", backing) == "2026-06-22 - 2026-06-01 = 21 days"
+    assert answers.calculate("2026-06-30 - 2026-06-01", backing) is None, "a date not in the record"
+    assert answers.calculate("2026-02-30 - 2026-06-01", backing + " 2026-02-30") is None
+    assert answers.calculate("3 x 40 = 120", "ULN 40, 3 times") == "3 * 40 = 120", "the AI's own '= 120' is redone"
+    assert answers.calculate("140 - 90 = 60", "ALT 140, now 90") == "140 - 90 = 50"
+
+
+def test_code_works_out_a_date_some_days_after_one_the_record_gives():
+    from cormon import answers
+    backing = "reducing to 1 stick pack daily starting 1 Sept; resume within 28 days"
+    assert answers.calculate("2026-09-01 + 28", backing) == "2026-09-01 + 28 days = 2026-09-29"
+    assert answers.calculate("2026-09-01 + 28 days", backing) == "2026-09-01 + 28 days = 2026-09-29"
+    assert answers.calculate("2026-09-01 - 3", backing + " ± 3") == "2026-09-01 - 3 days = 2026-08-29"
+    assert answers.calculate("2026-09-02 + 28", backing) is None, "a date the record does not give"
+    assert answers.calculate("2026-09-01 + 30", backing) is None, "a number of days nothing gives"
+    assert answers.calculate("2026-09-29 - 2026-09-01", backing + " until 29 Sep 2026") == \
+        "2026-09-29 - 2026-09-01 = 28 days", "dates written in words count"
+
+
+def test_an_answer_on_what_happened_stands_on_the_record_lines_it_cites(monkeypatch):
+    from cormon import answers, hindsight, llm, memory
+    line = "earlier fact, reported on 14 Apr 2026 by John Rohit (Study coordinator): 1001-208 is allergic to penicillin"
+    monkeypatch.setattr(hindsight, "recall", lambda *a: ([line], set()))
+    monkeypatch.setattr(memory, "history", lambda *a, **kw: [])
+    said = {"answerable": True, "serious_event": False, "calculations": [], "quotes": [],
+            "answer": "Yes. John Rohit reported on 14 Apr 2026 that he is allergic to penicillin.",
+            "record_used": ["1001-208 is allergic to penicillin"]}
+    monkeypatch.setattr(llm, "structured", lambda task, *a, **kw: {"ids": []} if task == "answer_pick" else said)
+    msg = {"id": 5, "sent_at": "2026-04-20T10:00:00+00:00"}
+    q = {"question": "Does 1001-208 have any allergies?", "participant": "1001-208", "harm": False,
+         "record_only": True}
+    study = type("S", (), {"study_id": "S1", "raw": {}, "documents": []})()
+    a = answers.answer_one(study, msg, q, [], [], "any allergies for 1001-208?")
+    assert a["found"] and a["from_record"] == [line] and a["traced"]
+    assert "earlier messages" in answers.render([a]) and answers.NOT_FOUND not in answers.render([a])
+    assert not answers.answer_one(study, msg, dict(q, record_only=False), [], [], "")["found"], \
+        "a question on a rule still needs the protocol's words"
+    said["record_used"] = ["allergic to sulfa drugs, reported by the CRA"]
+    assert not answers.answer_one(study, msg, q, [], [], "")["found"], "a line that is not in the record"
+
+
+def test_an_answers_numbers_may_come_from_the_message_date():
+    from cormon import answers
+    res = {"answer": "Yes: she is 54 on 29 Oct 2026.", "quotes": [],
+           "calculations": [{"what": "age", "expression": "2026 - 1972"}], "serious_event": False}
+    q = {"question": "Does she meet the age criterion?", "participant": "1001-109"}
+    record = ["earlier fact, reported on 20 Oct 2026 by John Rohit (Study coordinator): born 1972"]
+    args = (res, q, [], [], [], [], "", record)
+    assert not answers._proof(*args, [])["traced"]
+    assert answers._proof(*args, ["message date 29 October 2026"])["traced"]
+
+
 def test_a_story_file_is_several_messages_in_order_with_their_checks(tmp_path):
     import json
     from cormon import testbench
@@ -3415,6 +3498,39 @@ def test_memory_finds_a_participant_however_the_code_was_written(monkeypatch):
     assert hindsight.participant_tags("S1", None) == []
 
 
+def test_a_short_code_the_site_wrote_is_the_one_participant_it_fits():
+    from cormon import memory
+    known = {"1001212", "1001213", "1002213"}
+    assert memory.same_person("1001-212", known | {"212"}) == {"1001212", "212"}
+    assert memory.same_person("212", known) == {"1001212", "212"}, "asked by the short form"
+    assert memory.same_person("1001-213", known | {"213"}) == {"1001213"}, "213 fits two participants"
+    assert memory.same_person("1001-212", {"12", "1001212"}) == {"1001212"}, "two characters are too few"
+    assert memory.same_person("1001-212", {"1212"}) == {"1001212", "1212"}
+    assert memory.same_person(None, known) == set()
+
+
+def test_dates_saved_under_a_short_code_are_the_participants():
+    from cormon import memory
+    memory.save("S1", "1001-211", {"id": 1, "sent_at": "2026-03-09T13:00:00+00:00"},
+                [{"label": "Baseline", "kind": "baseline", "date": "2026-03-09"}], [])
+    memory.save("S1", "211", {"id": 2, "sent_at": "2026-03-20T13:00:00+00:00"},
+                [{"label": "unscheduled visit", "kind": "visit", "date": "2026-03-20"}], [])
+    msg = {"id": 3, "sent_at": "2026-04-01T10:00:00+00:00"}
+    assert [h["message_id"] for h in memory.history("S1", "1001-211", msg)] == [1, 2]
+    assert [h["message_id"] for h in memory.history("S1", "211", msg)] == [1, 2], "a question naming 211"
+    memory.save("S1", "1002-211", {"id": 4, "sent_at": "2026-03-21T13:00:00+00:00"},
+                [{"label": "Baseline", "kind": "baseline", "date": "2026-03-21"}], [])
+    assert [h["message_id"] for h in memory.history("S1", "1001-211", msg)] == [1], "211 now fits two"
+
+
+def test_memory_finds_facts_tagged_with_a_short_code(monkeypatch):
+    from cormon import hindsight
+    tags = [{"tag": "participant:1001212"}, {"tag": "participant:212"}, {"tag": "participant:213"}]
+    _memory_on(monkeypatch, reply=lambda m, p: {"items": tags, "total": 3})
+    assert hindsight.participant_tags("S1", "1001-212") == ["participant:1001212", "participant:212"]
+    assert hindsight.participant_tags("S1", "1001-213") == ["participant:213"], "known from the question itself"
+
+
 def test_only_alerts_about_a_participant_are_remembered_and_test_banks_alone_are_emptied(monkeypatch):
     from cormon import hindsight
     calls, _ = _memory_on(monkeypatch)
@@ -3513,9 +3629,9 @@ def test_a_later_report_replaces_an_earlier_fact_and_both_are_kept(monkeypatch):
         {"old": 1, "by": 2}, {"old": 2, "by": 3}, {"old": 3, "by": 1}]})
     lines = hindsight.recall_lines(config.study("NCT05842941"), "1001-014", "When was 014 born?", {"id": 9})
     assert lines == [
-        "replaced fact (a later report, on 20 Oct 2026, changed it), reported on 01 Mar 2025 by Ann (Study "
+        "NO LONGER TRUE (a later report, on 20 Oct 2026, changed it), reported on 01 Mar 2025 by Ann (Study "
         "coordinator): 1001014 was born in 1967",
-        "replaced fact (a later report, on 20 Oct 2026, changed it), reported on 10 Jan 2026 by Ann (Study "
+        "NO LONGER TRUE (a later report, on 20 Oct 2026, changed it), reported on 10 Jan 2026 by Ann (Study "
         "coordinator): 1001014 was born in 1970",
         "earlier fact, reported on 20 Oct 2026 by Bo (PI): 1001014 was born in 1972"]
     row = db.q1("SELECT details FROM audit_log WHERE action='memory_searched'")
@@ -3527,6 +3643,32 @@ def test_a_later_report_replaces_an_earlier_fact_and_both_are_kept(monkeypatch):
     lines = hindsight.recall_lines(config.study("NCT05842941"), "1001-014", "q", {"id": 10})
     assert [x.split(",")[0] for x in lines] == ["earlier fact"] * 3, "without the check every fact is still given"
     assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_newer_failed'")
+
+
+def test_the_bots_own_alert_never_replaces_what_the_site_reported(monkeypatch):
+    from cormon import hindsight
+    rows = [{"text": "1001-302's last rifampin pill is on 20 Jul", "mentioned_at": "2026-07-08T13:05:00+00:00",
+             "metadata": {"message_id": "1", "sender": "Ann"}},
+            {"text": "the bot raised alert #4: still taking a strong CYP3A4 inducer",
+             "mentioned_at": "2026-07-15T11:00:00+00:00", "metadata": {"alert_id": "4", "message_id": "3"}},
+            {"text": "1001-302 stopped rifampin on 18 Jul", "mentioned_at": "2026-07-20T11:00:00+00:00",
+             "metadata": {"message_id": "5", "sender": "Ann"}}]
+    monkeypatch.setattr(hindsight.llm, "structured", lambda *a, **kw: {"replaced": [{"old": 1, "by": 2}]})
+    assert hindsight._newest_wins(rows) == {}
+    monkeypatch.setattr(hindsight.llm, "structured", lambda *a, **kw: {"replaced": [{"old": 1, "by": 3}]})
+    assert hindsight._newest_wins(rows) == {0: 2}
+
+
+def test_dates_the_question_asks_about_are_not_shown_as_done(monkeypatch):
+    from cormon import answers
+    past = [{"message_id": 1, "when": "14 Apr 2026 12:30",
+             "dates": [{"kind": "baseline", "label": "Baseline", "date": "2026-04-14"}]},
+            {"message_id": 2, "when": "29 Jun 2026 16:15",
+             "dates": [{"kind": "visit", "label": "Week 12 call", "date": "2026-07-03", "visit_id": "g:wk12"}]}]
+    wk12 = {"id": "g:wk12", "kind": "visit", "title": "Week 12", "text": "Week 12 (Phone). Day 84 window ± 3 days."}
+    monkeypatch.setattr(answers.reader, "window", lambda v: ("baseline", 81, 87))
+    assert "reported on" in answers.schedule(past, [wk12])[0]
+    assert "reported on" not in answers.schedule(past, [wk12], asking=2)[0]
 
 
 def test_an_admin_corrects_retires_and_links_facts_with_a_reason_and_nothing_is_deleted(monkeypatch):

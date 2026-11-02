@@ -157,8 +157,9 @@ def forget_participant(study_id: str, participant: str) -> int:
     memory); returns rows and facts removed. If patient memory cannot be reached it raises, after the dates are
     gone, so the person running it knows to run it again."""
     from . import hindsight, memory
-    n = db.changed("DELETE FROM patient_facts WHERE study_id=? AND participant_key=?",
-                   (study_id, memory.key(participant)))
+    keys = sorted(memory.same_person(participant, memory.known_keys(study_id)))
+    n = db.changed(f"DELETE FROM patient_facts WHERE study_id=? AND participant_key IN ({','.join('?' * len(keys))})",
+                   (study_id, *keys)) if keys else 0
     try:
         facts = hindsight.forget_participant(study_id, participant) if hindsight.used() else 0
     except Exception as e:

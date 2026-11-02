@@ -16,7 +16,7 @@ import operator
 import re
 import secrets
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
 
@@ -35,7 +35,9 @@ FIND_SYSTEM = """You read a message a clinical-trial site sent to the study moni
 that the study documents (protocol, lab manual, consent, visit schedule) or the participant's visit dates could
 answer: anything on how the study is run, for example visit windows and timing, what a visit includes,
 eligibility, dosing, medicines, samples, consent, deviations, adverse event reporting, records and data entry,
-monitoring, scales and scores, withdrawal and early termination.
+monitoring, scales and scores, withdrawal and early termination. Also list questions on what earlier messages
+reported about a participant (what happened to them, their medicines, allergies, results, events, visits,
+consent, who reported something and when): record_only is true for those, when they ask nothing about a rule.
 Leave out questions for a person rather than the documents (asking for kits, a call, a reply, whether an email
 arrived, who is covering), rhetorical questions, and questions the message itself already answers.
 Reword each question to stand alone, keeping every number, date and visit name and what the message reports that
@@ -56,6 +58,7 @@ not asked again in MESSAGE is not listed. harm is only about what MESSAGE report
 FIND_SCHEMA = llm.obj({"questions": {"type": "array", "items": llm.obj({
     "question": {"type": "string"},
     "participant": {"type": "string"},
+    "record_only": {"type": "boolean"},
     "harm": {"type": "boolean"}})},
     "harm": {"type": "boolean"}, "harm_participant": {"type": "string"}})
 
@@ -66,7 +69,8 @@ REPORTING_QUESTION = "This message reports serious harm to a participant: how mu
 
 PICK_SYSTEM = """You pick the parts of a study guide needed to answer a site's question: the sections and visit
 checklists whose rules decide it, for the question and for what the message reports (an event that happened can
-bring its own rules: reporting, deviations, exceptions). Include sections with exceptions to the rule asked about.
+bring its own rules: reporting, deviations, exceptions), and for what the participant record says that bears on
+the question (a medicine taken or stopped, an event, an unblinding). Include sections with exceptions to the rule asked about.
 At most 10 ids, the most decisive first. Use only ids from the index."""
 
 PICK_SCHEMA = llm.obj({"ids": {"type": "array", "items": {"type": "string"}}})
@@ -78,8 +82,10 @@ Rules:
 - answer: two to four short sentences in plain English. Lead with the direct answer (a number, a date range,
   yes or no). For a participant, use the visit windows worked out by code in the record; do not redo that
   arithmetic. A sum of your own (a gap between visits, a total, a difference) goes in calculations, written with
-  the protocol's or the record's own numbers ("84 - 14"); code works it out and checks each number, and you may
-  give its result in the answer. If the protocol does not state the answer directly but its numbers settle it,
+  the protocol's or the record's own numbers ("84 - 14"), or for days between two dates with the dates as
+  YYYY-MM-DD ("2026-06-22 - 2026-06-01"), or for a date some days after another as the date and the days
+  ("2026-09-01 + 28"); code works it out and checks each number, and you may give its result
+  in the answer. In the answer itself write dates as "14 Sep 2026". If the protocol does not state the answer directly but its numbers settle it,
   answerable is true: say it is not stated directly and give the numbers and the calculation. Check exceptions:
   a specific exception in the sections overrides the general rule, and the schedule's own visit days override a
   general statement about visit frequency. Each visit checklist says what its window counts from. Say which earlier message a date came from
@@ -94,14 +100,22 @@ Rules:
   answer, then answer the question itself. Do not judge the medical side (cause, relatedness, treatment).
 - If the record or message shows the participant has died or withdrawn, give no future visit dates.
 - An "earlier fact" in the record was reported in another message, perhaps another thread or long ago. Use one
-  only when it bears on the question. The answer must then say who reported it and on what date, in the
+  only when it bears on the question; one about the very thing asked (the same medicine, dose, consent, visit or
+  result, the reason a visit was missed, what was done the last time a problem happened) always bears on it and
+  must be used. The answer must then say who reported it and on what date, in the
   sentence that uses it ("The study coordinator reported on 12 Oct 2026 that she has gout."), so the reader can
   check it. When two earlier facts disagree, the one reported later holds; mention the earlier one only if the
-  question needs it. A "replaced fact" was changed by a later report: never use it as true; mention it only when
-  the question asks what changed or when the change matters, saying it was later corrected."""
+  question needs it. A fact marked NO LONGER TRUE was changed by a later report: it is false now; never use it,
+  or a date marked as from a corrected message, as true. Answer from the fact that replaced it, and mention the
+  old one only when the question asks what changed or when the change matters, saying it was later corrected.
+- record_used: each PARTICIPANT RECORD line the answer rests on, copied exactly. A question only on what
+  happened to the participant (is the nausea still ongoing, any allergies, who reported the seizure) is answered
+  from the record: answerable is true when the record settles it; when the record says nothing on it, answerable
+  is false and the answer says no earlier message reports it."""
 
 ANSWER_SCHEMA = llm.obj({
     "answerable": {"type": "boolean"},
+    "record_used": {"type": "array", "items": {"type": "string"}},
     "serious_event": {"type": "boolean"},
     "answer": {"type": "string"},
     "calculations": {"type": "array", "items": llm.obj({"what": {"type": "string"},
@@ -118,7 +132,8 @@ Rules:
   does not state this directly", where a date came from. Keep who reported an earlier fact about the
   participant and when ("the coordinator reported on 12 Oct that she has gout"): that is part of the answer.
 - Keep the participant's own calendar dates when the checked answer gives them; do not swap them for day numbers.
-- Use only facts in the CHECKED ANSWER and the PROTOCOL'S WORDS. Never add a number, a date or a rule of your own.
+- Use only facts in the CHECKED ANSWER, the PROTOCOL'S WORDS and the earlier messages' facts. Never add a
+  number, a date or a rule of your own.
 - When a serious event must be reported, say to whom and how fast, taken from the protocol's words.
 - No greeting and no sign-off."""
 
@@ -213,9 +228,10 @@ def stated_anchors(question: str, today: date) -> list[dict]:
     return [{"message_id": None, "when": "this conversation", "dates": dates, "events": []}] if dates else []
 
 
-def schedule(past: list[dict], visits: list[dict]) -> list[str]:
+def schedule(past: list[dict], visits: list[dict], asking: int | None = None) -> list[str]:
     """Each visit's window in calendar dates, counted by code from the participant's anchor dates, and the date a
-    visit was reported done when an earlier message gave it."""
+    visit was reported done when an earlier message gave it. asking: the message being answered, whose visit dates
+    may only be asked about ("can wk 12 be on 3 Jul?"), so they are never shown as done."""
     anchors: dict[str, tuple[date, str]] = {}
     done: dict[str, tuple[date, str]] = {}
     for h in past:
@@ -226,7 +242,7 @@ def schedule(past: list[dict], visits: list[dict]) -> list[str]:
             k = memory.anchor_kind(d)
             if k in ("baseline", "extension_start", "last_dose"):
                 anchors[k] = (day, h["when"])
-            if d.get("visit_id"):
+            if d.get("visit_id") and (asking is None or h["message_id"] != asking):
                 done[d["visit_id"]] = (day, h["when"])
     lines = []
     for v in visits:
@@ -283,6 +299,32 @@ def _numbers_traced(answer: str, backing: str) -> bool:
     return _norm_nums(answer) <= _norm_nums(backing)
 
 
+FACT_LINE = re.compile(r"^(?:earlier fact|NO LONGER TRUE)[^:]*?, reported on (\d{1,2}) (\w{3}) (\d{4}) by (.+?): (.*)$")
+PLAIN_WORDS = {"participant", "reported", "started", "taking", "stopped", "screening", "protocol", "medicine",
+               "medication", "monitoring", "coordinator", "research", "associate", "because", "before", "after",
+               "during", "visit", "study", "daily", "every", "today", "yesterday", "earlier", "should", "would",
+               "about", "their", "there", "which", "other"}
+
+
+def _unsourced(answer: str, record: list[str], asked: str) -> list[str]:
+    """Earlier facts from memory the answer uses (it has a telling word of the fact the question did not) without
+    the date the fact was reported: the reader cannot check them."""
+    words = lambda s: set(re.findall(r"[a-z][a-z'-]{5,}", s.lower())) - PLAIN_WORDS  # noqa: E731
+    said, low = words(answer), answer.lower()
+    out = []
+    for line in record:
+        m = FACT_LINE.match(line)
+        if not m:
+            continue
+        day, mon, year, who, fact = m.groups()
+        used = sorted((words(fact.split(" (happened:")[0]) - words(asked)) & said)
+        dated = re.search(rf"\b0?{int(day)}\s+{mon}|{mon}\w*\s+0?{int(day)}\b", answer, re.I) or \
+            f"{year}-{datetime.strptime(mon, '%b').month:02d}-{int(day):02d}" in low
+        if used and not dated:
+            out.append(f"'{used[0]}' (reported on {day} {mon} {year} by {who})")
+    return out
+
+
 _ARITH = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv}
 
 
@@ -303,10 +345,32 @@ EXTREME_GAP = re.compile(r"\b(longest|maximum|max|most|shortest|minimum|least)\b
 INLINE_SUM = re.compile(r"(\d+(?:\.\d+)?(?:\s*[-+*/×−]\s*\d+(?:\.\d+)?)+)\s*=\s*(\d+(?:\.\d+)?)")
 
 
+def _given_date(iso: str, backing: str) -> date | None:
+    """The date, when the backing gives it: as 2026-09-01, or as "1 Sep", "01 Sept 2026", "September 1"."""
+    try:
+        d = date.fromisoformat(iso)
+    except ValueError:
+        return None
+    mon = f"{d:%b}"
+    written = rf"\b0?{d.day}(?:st|nd|rd|th)?\s+{mon}[a-z]*\.?(?!\w)|\b{mon}[a-z]*\.?\s+0?{d.day}(?!\d)"
+    return d if iso in backing or re.search(written, backing, re.I) else None
+
+
 def calculate(expression: str, backing: str) -> str | None:
     """A sum the AI asked for, worked out by code ("84 - 14 = 70"), when it is plain arithmetic on numbers found in
-    the protocol's words or the record. None otherwise."""
+    the protocol's words or the record; days between two dates the record gives ("2026-06-22 - 2026-06-01"); or a
+    date the record gives plus or minus a number of days the backing gives ("2026-09-01 + 28"). None otherwise."""
     expr = expression.replace("−", "-").replace("×", "*").replace("÷", "/").strip()
+    expr = re.sub(r"(?<=\d)\s*[xX]\s*(?=\d)", " * ", expr.split("=", 1)[0]).strip()   # code gives the result itself
+    if m := re.fullmatch(r"(\d{4}-\d{2}-\d{2})\s*-\s*(\d{4}-\d{2}-\d{2})", expr):
+        later, earlier = (_given_date(d, backing) for d in m.groups())
+        return f"{expr} = {(later - earlier).days} days" if later and earlier else None
+    if m := re.fullmatch(r"(\d{4}-\d{2}-\d{2})\s*([+-])\s*(\d+)(?:\s*days?)?", expr, re.I):
+        day, sign, n = m.groups()
+        start = _given_date(day, backing)
+        if not start or n not in _norm_nums(backing):
+            return None
+        return f"{day} {sign} {n} days = {start + timedelta(days=int(n) * (1 if sign == '+' else -1)):%Y-%m-%d}"
     if not re.fullmatch(r"[\d\s+\-*/().]+", expr) or not _norm_nums(expr) <= _norm_nums(backing):
         return None
     try:
@@ -361,14 +425,17 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
     past += [dict(h, dates=[d for d in h["dates"] if d["kind"] not in known_anchors])
              for h in stated_anchors(q["question"], reader._email_date(msg).date())]
     visits = [i for i in items if i["kind"] == "visit"]
-    record = memory.record_lines(past) + hindsight.recall_lines(study, pid, q["question"], msg)
-    sched = schedule(past, visits)
+    facts, corrected = hindsight.recall(study, pid, q["question"], msg)
+    # the message's own dates are read in the message: in the record they would look like what already happened
+    record = memory.record_lines([h for h in past if h["message_id"] != msg.get("id")], corrected) + facts
+    sched = schedule(past, visits, msg.get("id"))
     # the numbered sections themselves, not topic briefs: a brief cites dozens of sections, too many to quote from
     pickable = sources + visits
     known = {i["id"]: i for i in pickable}
     picked_ids = llm.structured("answer_pick", PICK_SYSTEM, "GUIDE INDEX (id | heading | what it covers):\n"
-                                + reader.menu(pickable) + f"\n\nTHE SITE'S MESSAGE:\n{email}\n\nQUESTION: "
-                                f"{q['question']}", PICK_SCHEMA, "pick", use_cache=use_cache)["ids"]
+                                + reader.menu(pickable) + f"\n\nTHE SITE'S MESSAGE:\n{email}"
+                                + ("\n\nPARTICIPANT RECORD:\n" + "\n".join(f"- {x}" for x in record) if record else "")
+                                + f"\n\nQUESTION: {q['question']}", PICK_SCHEMA, "pick", use_cache=use_cache)["ids"]
     picked = [known[x] for x in dict.fromkeys(picked_ids) if x in known][:10]
     usable = [s for s in sources if reader._usable(s)]
     picked += lexical(f"{q['question']} {email}", usable)
@@ -389,25 +456,34 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
             + "\n\nVISIT WINDOWS WORKED OUT BY CODE:\n" + ("\n".join(f"- {x}" for x in sched) or "- none")
             + f"\n\nTHE SITE'S MESSAGE:\n{email}\n\nQUESTION TO ANSWER: {q['question']}")
     res = llm.structured("answer_question", ANSWER_SYSTEM, user, ANSWER_SCHEMA, "answer", use_cache=use_cache)
-    found = _proof(res, q, secs, checklists, sources, visits, email, record, sched)
-    if not found["traced"] and found["proven"]:
+    given = sched + [f"message date {reader._email_date(msg):%d %B %Y}"]   # numbers the AI was given
+    found = _proof(res, q, secs, checklists, sources, visits, email, record, given)
+    unsourced = _unsourced(found["text"], record, f"{q['question']} {email}")
+    if (not found["traced"] or unsourced) and (found["proven"] or found["from_record"]):
         loose = sorted(_norm_nums(found["text"]) - _norm_nums(found["backing"]), key=len)
         why = found["conflict"] or (f"These numbers in your answer are not in the protocol's words or the record: "
                                     f"{', '.join(loose)}. Give each one as a calculation from the protocol's or "
-                                    f"the record's numbers, or leave it out.")
-        fix = f"\n\nYOUR ANSWER:\n{json.dumps(res, ensure_ascii=False)}\n\n{why} Answer again in full."
+                                    f"the record's numbers, or leave it out." if loose else "")
+        if unsourced:
+            why += (" Your answer uses earlier facts without saying who reported them and when: "
+                    + "; ".join(unsourced) + ". Say it in the sentence that uses each one.")
+        fix = f"\n\nYOUR ANSWER:\n{json.dumps(res, ensure_ascii=False)}\n\n{why.strip()} Answer again in full."
         res2 = llm.structured("answer_question", ANSWER_SYSTEM, user + fix, ANSWER_SCHEMA, "answer",
                               use_cache=use_cache)
-        again = _proof(res2, q, secs, checklists, sources, visits, email, record, sched)
-        if again["traced"] and again["proven"]:
+        again = _proof(res2, q, secs, checklists, sources, visits, email, record, given)
+        if again["traced"] and again["proven"] and (not found["traced"] or len(
+                _unsourced(again["text"], record, f"{q['question']} {email}")) < len(unsourced)):
             res, found = res2, again
         elif found["conflict"]:  # the AI keeps the wrong pair: code's own answer from the quoted rows
             found = dict(found, text=found["code_answer"], traced=True, sums=found["sums"][-1:])
     ask = "" if res["answerable"] else ask_back(q, found["text"], secs, email, record, use_cache)
-    # an answer that says the protocol is silent but gives its proven numbers is still shown
+    # an answer that says the protocol is silent but gives its proven numbers is still shown; one on what happened
+    # to the participant stands on the record lines it rests on
+    from_record = found["from_record"] if pid else []
     return {"question": q["question"], "participant": pid, "text": found["text"], "quotes": found["proven"][:4],
-            "ask": ask,
-            "sums": found["sums"], "found": bool(found["proven"]), "serious": bool(res["serious_event"]),
+            "ask": ask, "from_record": from_record,
+            "sums": found["sums"], "serious": bool(res["serious_event"]),
+            "found": bool(found["proven"] or (q.get("record_only") and res["answerable"] and from_record)),
             "traced": found["traced"], "picked": [i["id"] for i in secs + checklists],
             "read": [reader._heading(i) for i in secs + checklists], "record": record, "windows": sched,
             "chosen": [x for x in dict.fromkeys(picked_ids) if x in known and known[x]["kind"] == "section"]}
@@ -433,6 +509,15 @@ def ask_back(q: dict, said: str, secs: list[dict], email: str, record: list[str]
     if len(ask) < 15 or len(ask) > 300 or PERSONAL.search(ask) or not _numbers_traced(ask, backing):
         return ""
     return ask if ask.endswith("?") else ask.rstrip(".") + ". Can you tell me?"
+
+
+def record_used(cited: list[str], record: list[str]) -> list[str]:
+    """The record lines an answer cited that really are in the participant record, whole, in record order: the
+    proof for an answer on what happened, as protocol quotes are for a rule. A cited part of a line counts when it
+    is long enough to tell lines apart."""
+    flat = lambda s: " ".join(s.lower().split()).strip(" -.")  # noqa: E731
+    want = [flat(c) for c in cited if len(flat(c)) >= 20]
+    return [ln for ln in record if any(w in flat(ln) for w in want)][:6]
 
 
 def _proof(res: dict, q: dict, secs: list[dict], checklists: list[dict], sources: list[dict], visits: list[dict],
@@ -480,6 +565,7 @@ def _proof(res: dict, q: dict, secs: list[dict], checklists: list[dict], sources
                 conflict = f"Code finds the {extreme.group(1).lower()} gap is Day {a} to Day {b}: {g} days."
     backing += " " + " ".join(r for _, r in sums)
     return {"text": text, "proven": proven, "sums": sums, "backing": backing,
+            "from_record": record_used(res.get("record_used") or [], record),
             "traced": _numbers_traced(text, backing) and not conflict, "conflict": conflict,
             "code_answer": code_answer}
 
@@ -513,16 +599,19 @@ def _plain_said(a: dict, reader_role: str, use_cache: bool) -> str:
     """a["tone"] (a careful reader, see careful.py) adds that tone's wording rule to PLAIN_SYSTEM."""
     facts = "\n".join([a["text"]] + [f"{what}: {r}" for what, r in a.get("sums", [])])
     words = "\n".join(f"- {w}" for _, w in a["quotes"]) or "- none"
+    earlier = a.get("from_record") or []
     rule = careful.tone(a.get("tone"))
     try:
         said = _clean(llm.structured("answer_plain", PLAIN_SYSTEM + (f"\n{rule}" if rule else ""),
                                      f"READER: {reader_role}\n\nQUESTION: "
                                      f"{a['question']}\n\nCHECKED ANSWER:\n{facts}\n\nPROTOCOL'S WORDS:\n{words}"
+                                     + ("\n\nEARLIER MESSAGES' FACTS IT RESTS ON:\n"
+                                        + "\n".join(f"- {x}" for x in earlier) if earlier else "")
                                      + ("\n\nThis is a serious event." if a.get("serious") else ""),
                                      PLAIN_SCHEMA, "reply", use_cache=use_cache)["text"])
     except Exception:
         return a["text"]
-    backing = " ".join([facts, a["question"]] + [w for _, w in a["quotes"]])
+    backing = " ".join([facts, a["question"]] + [w for _, w in a["quotes"]] + earlier)
     lead = re.split(r"(?<=[.!?])\s", a["text"], maxsplit=1)[0]  # the direct answer: its numbers must all stay
     ok = said and _numbers_traced(said, backing) and _norm_nums(lead) <= _norm_nums(said)
     if ok and (added := outcheck.added_judgment(said, backing)):
@@ -555,6 +644,8 @@ def render(answers: list[dict], link: str | None = None, chat: bool = True, cra:
     more = ("" if not link else f"\n\n<{link}|Details and the protocol's words>" if chat
             else f"\n\nDetails and the protocol's words: {link}")
     end = footer(cra)
+    if any(a.get("from_record") and a.get("found") for a in answers):
+        end = end.replace("From the study documents.", "From the study documents and earlier messages.")
     return "\n\n".join(blocks) + more + (f"\n\n_{end}_" if chat else f"\n\n{end}")
 
 
@@ -570,6 +661,7 @@ def render_full(answers: list[dict]) -> str:
             lines += ["I could not work out a sure answer. These are the protocol's words on it:"] + words
         else:
             lines += [a["text"]] + [f"Worked out by code: {what}: {r}" for what, r in a.get("sums", [])] + words
+            lines += [f"From an earlier message: {x}" for x in a.get("from_record") or []]
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 

@@ -80,7 +80,7 @@ for Eliot.
 Built (31 Oct): when a search finds two or more facts, one quick AI check (`memory_newer`) says which facts a later
 one replaces (same thing, a different value, or stopped). Code keeps a pair only when the replacing fact was
 reported later, and follows chains (1967, then 1970, then 1972) to the newest. Nothing is deleted: the old fact is
-still given to the answer, marked "replaced fact (a later report, on <date>, changed it)", and the answer must not
+still given to the answer, marked "NO LONGER TRUE (a later report, on <date>, changed it)", and the answer must not
 use it as true. The pairs are in the audit trail (`memory_searched`). If the check fails, every fact is still
 given with its date (`memory_newer_failed`). Test messages can now carry a `"date"`.
 Made-up check (`demo/test-hindsight-newer`): March 2025 "born 1967, takes St. John's wort every day"; October 2026
@@ -156,6 +156,24 @@ with no code) and on the answer as said to the person (`answer_has`, `answer_lac
   - the answer leaves out a fact it was given (re-consent on version 4; take the dose with food; the flu that
     explains a missed visit);
   - one asked back which regimen the participant is on, before using memory at all.
+- Then the answers (31 Oct):
+  - An answer that uses a word from an earlier fact (colchicine) but not the date it was reported is asked once
+    more, naming the fact (`_unsourced`).
+  - The number check counted only plain sums: days between two dates ("2026-06-22 - 2026-06-01") and sums the AI
+    wrote as "3 x 40 = 120" now count, and so does the message's own date. Right answers had been sent as "I
+    couldn't work out a sure answer".
+  - An earlier fact about the very thing asked must be used (the instructions say so).
+  - A fact a later report changed is shown as "NO LONGER TRUE", and the dates memory (memory.py) marks its dates
+    from that message: one answer had said 1001-115 missed a dose after the message saying it was 1001-116.
+  - The 'which fact is newer' check no longer treats "missed the visit" and "visit done a week later" as one
+    replacing the other.
+  - Two story checks were too strict and were fixed (a date written 2026-06-01; St. John's wort named by the
+    protocol itself).
+  Last two runs: 116 and 119 of 123 checks (94% and 97%), 39 and 41 of 44 stories. Runs differ by a few checks
+  because Hindsight's AI pulls out facts a little differently each time. Still failing: the re-consent answer
+  ignores "re-consented on version 4"; the vomiting answer leaves out "take the dose with food"; the missed-visit
+  answer sometimes leaves out the flu; Hindsight sometimes keeps a typo's wrong value beside the right one, and
+  in 2 of 7 runs saved "1001-111 has been on riluzole" with no participant at all.
 - Searches: 28, none failed or too slow, middle 1.4 s, slowest 3.4 s on the laptop. One search in a first trial
   run took over 5 s and was dropped, while Hindsight was busy saving the same message; not seen again.
 - Cost per message read (gpt-5.4-mini, $0.75 per million input, $0.075 cached, $4.50 output): about 5,400 input

@@ -16,8 +16,85 @@ Every item that is not done, grouped by when it gets done and who does it. The t
 left for each one.
 
 **1. Next project: hindsight (patient memory).** No checklist item waits on it, but the items in group 2 come after it.
-Plan in `docs/hindsight-plan.md` (issue #32): 7 build steps, about 7 to 8 days. The re-ranker timing test is done
-(31 Oct): about 1 second per patient search on a CPU, so no GPU or Cohere is needed. Server size: 4 GB (2 GB was too slow).
+Plan and test results in `docs/hindsight-plan.md` (issue #32).
+
+Status on 1 Nov 2026. Sources: the calls with Eliot on 28, 29 and 30 Oct (transcripts) and John's memory email
+to Eliot (28 Oct).
+
+Done:
+
+*Choosing and setting up Hindsight*
+- [x] Use Hindsight (open source, MIT), not our own build. If it lacks something, we send its makers a fix.
+  (call 29 Oct)
+- [x] Re-ranker: Hindsight's own CPU re-ranker, timed first on Google Cloud as Eliot asked (0 to 3 seconds is
+  fine). Result: about 1 second to search one patient's facts, worst 1.2 seconds, with 2,000 made-up facts. No GPU,
+  no GPU rental and no Cohere needed. (call 29 Oct)
+- [x] Server: 4 GB (e2-medium), about $24 a month. 2 GB was tested and was too slow.
+- [x] Security: Hindsight listens only on the machine itself (loopback) and needs a password. It refuses to stay
+  up if it answers without the password. (call 28 Oct: "hindsight's dangerous")
+- [x] Portable: the same setup runs on a laptop, with no cloud-only parts. (call 28 Oct)
+
+*Saving facts*
+- [x] Each message is saved to Hindsight at the same time as the normal check, not before it, so there is no
+  extra wait. (call 28 Oct)
+- [x] Only facts about patients are saved, not team logistics or names. (call 28 Oct; email)
+- [x] Each fact keeps who said it, their role, the date and the message it came from. (email)
+- [x] A fact with no clear patient code is linked to nobody, and listed on the memory page for a person to
+  link. (call 28 Oct; email)
+- [x] Patient codes written in different ways ("1001-022", "1001022", or just "022" when it matches only one
+  patient) all reach the same patient.
+- [x] Typos and corrections stay out of the record. "BP 500/10, sorry, 150/10" is kept as 150/10. (email)
+- [x] The bot's own alerts, and what happens to them, are saved for their patient. (call 30 Oct)
+
+*Using facts*
+- [x] Before answering a question about a patient, the bot searches that patient's facts. Facts from other
+  threads and from years before are found. (call 28 Oct)
+- [x] Eliot's gout example works: the answer uses the earlier fact and says who reported it and when.
+  Example: "The study coordinator reported on 29 Oct 2026 that she takes St. John's wort every day ... a
+  prohibited CYP3A4 inducer." (call 28 Oct)
+- [x] Newest fact wins, and the old one is kept. "Born 1967", then "born 1972": the bot uses 1972 and both are
+  kept. The old fact is marked "no longer true". (call 28 Oct)
+- [x] No leaks: one patient's facts never come back for another patient. (email)
+- [x] A slow or failed search never stops the answer: it goes out without memory, and the failure is logged.
+  (call 28 Oct: slow re-ranking "will time out")
+- [x] The bot can work out dates from facts, for example "started on 1 Sep, plus a 28-day washout, so 29 Sep".
+- [x] A question only about what earlier messages said ("what did the site report about her dose?") is answered
+  from memory, and the answer says it comes from an earlier message.
+
+*Memory page*
+- [x] An admin page lists each patient's facts, with who reported each one, when, and a link to the message.
+  (email)
+- [x] An admin can correct, retire, restore or link a fact. Each change needs a reason and goes in the audit
+  trail with the old and new words. Nothing is deleted. (email)
+
+*Logging, keeping and deleting*
+- [x] Every save, search, failure and change is in the audit trail.
+- [x] Facts are kept 7 years, then deleted by the daily purge. (call 30 Oct: "It can be seven years")
+- [x] One patient's facts can be forgotten, and a whole study's memory can be deleted (a second person must
+  approve).
+- [x] Facts are in the records export (`patient_memory.csv`).
+- [x] Hindsight's data is backed up every hour, and each backup is checked by restoring it.
+
+*Cost and tests*
+- [x] Cost: about a quarter of a cent per message, so about $2.70 for 1,000 messages. (call 30 Oct: "it really
+  should be pennies per message")
+- [x] Searches take about 1.4 seconds in the middle case and 3.4 seconds at worst on a laptop.
+- [x] Tests: 44 made-up stories (several messages, then a question), with 116 to 119 of 123 checks passed. Two
+  new sets the bot had never seen: 71%, then 80% (101 of 126). In the latest set only 1 failure was about memory;
+  the rest were how the answer reads the protocol.
+
+What is left:
+- [ ] Use memory when checking every new message, so alerts use it too, not only answers. (call 28 Oct: "when an
+  email comes through on a topic that's covered in a thread ... there could be patient context in there that you
+  would want to include", and "the first thing it does it makes a very quick hindsight call".) Today alerts use
+  only the older dates memory (visit windows, dose timing).
+- [ ] The AI knows "where you are in remediation": what was already done about an alert. (call 30 Oct) The bot's
+  alerts and their changes are saved to memory, but alert checks don't read them yet.
+- [ ] Long email threads: compress or summarize instead of cutting. (call 28 Oct: "We may have to do some
+  compression or summarization")
+- [ ] Turn memory on live, after Eliot approves settings version 61.
+- [ ] Questions for Eliot (email): can a fact from a private chat be used in a group chat? Who may correct facts,
+  admins only or coordinators too? Is OpenAI's patient-data agreement (BAA) in place?
 
 **2. After hindsight: closing alerts on the web page (DSP-01, DSP-02, DSP-04, and the "clear by reply" part of OUT-03).**
 Eliot decided this on 29 Oct. Alerts are no longer closed by email or chat reply. On the alert's web page, the person picks one:

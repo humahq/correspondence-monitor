@@ -106,7 +106,7 @@ class SimTeams:
             ext = d.get("id") or f"sim:{p.name}"
             out.append(Inbound(
                 channel="teams", external_id=ext,
-                thread_ref=d.get("reply_to") or ext,
+                thread_ref=d.get("thread") or d.get("reply_to") or ext,
                 from_addr=(d.get("from_email") or "").lower() or None,
                 from_name=d.get("from_name"), subject=d.get("subject"),
                 body_text=d["text"],

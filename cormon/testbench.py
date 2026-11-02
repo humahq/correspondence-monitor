@@ -262,13 +262,21 @@ def _build(study, case: Case) -> bytes:
     return bytes(msg)
 
 
+_direct_chats: dict[tuple[str, str], str] = {}   # (story, sender): the private chat's first message
+
+
 def _post_chat(study, case: Case, inbox: Path) -> str:
-    """Drop the case into the chat simulator; returns the message's external id."""
+    """Drop the case into the chat simulator; returns the message's external id. A story's private chat messages
+    from one sender are one conversation, as they are in Teams, so a follow-up ("and for 1001-225?") has the
+    messages before it."""
     (name, addr), = getaddresses([_sender(study, case.sender)[0]])
     ext = f"test-chat:{time.time_ns()}"
+    chat = (case.story, addr) if case.story and case.chat == "direct" else None
+    first = _direct_chats.setdefault(chat, ext) if chat else None
     (inbox / f"case-{time.time_ns()}.json").write_text(json.dumps({
         "id": ext, "study_id": study.study_id, "channel": case.chat, "from_email": addr, "from_name": name,
-        "text": case.body, "sent_at": _sent(case.date).isoformat()}))
+        "text": case.body, "sent_at": _sent(case.date).isoformat(),
+        **({"thread": f"chat:{first}"} if first else {})}))
     return ext
 
 

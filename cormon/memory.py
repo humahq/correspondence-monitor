@@ -28,6 +28,32 @@ def key(pid: str | None) -> str:
     return re.sub(r"[^A-Z0-9]", "", (pid or "").upper())
 
 
+def short_for(s: str, k: str) -> bool:
+    """s is code k written short, as sites often do: its last three or more characters ('212' for 1001-212)."""
+    return len(s) >= 3 and len(k) - len(s) >= 2 and k.endswith(s) and any(c.isdigit() for c in s)
+
+
+def known_keys(study_id: str) -> set[str]:
+    """Every participant the bot has dates or alerts for in the study."""
+    return {r["participant_key"] for r in db.q("SELECT DISTINCT participant_key FROM patient_facts WHERE study_id=?",
+                                               (study_id,))} | \
+        {key(r["participant_id"]) for r in db.q("SELECT DISTINCT participant_id FROM items WHERE study_id=? AND "
+                                                "participant_id IS NOT NULL", (study_id,))} - {""}
+
+
+def same_person(pid: str | None, keys: set[str]) -> set[str]:
+    """The keys, of `keys` and pid's own, that mean pid's participant: their full code and each short form of it
+    that fits no other participant ('212' is 1001-212 unless 1002-212 is known too). Asked by a short form, the
+    full code it fits, when only one fits."""
+    k = key(pid)
+    if not k:
+        return set()
+    keys = set(keys) | {k}
+    longer = lambda s: {x for x in keys if short_for(s, x)}  # noqa: E731
+    full = next(iter(longer(k))) if len(longer(k)) == 1 else k
+    return {k, full} | {s for s in keys if longer(s) == {full}}
+
+
 def save(study_id: str, pid: str | None, msg: dict, dates: list[dict], events: list[dict]) -> None:
     """Record one message's dates for a participant (a rerun of the message replaces them)."""
     k = key(pid)
@@ -48,18 +74,23 @@ def _instant(s: str | None) -> datetime | None:
 
 
 def history(study_id: str, pid: str | None, msg: dict, *, include_current: bool = False) -> list[dict]:
-    """Earlier messages' facts about a participant, oldest first; each with the message it came from."""
-    k = key(pid)
-    if not k:
+    """Earlier messages' facts about a participant, oldest first; each with the message it came from. Facts saved
+    under a short form of the code count (same_person)."""
+    keys = sorted(same_person(pid, known_keys(study_id)))
+    if not keys:
         return []
     now = _instant(msg.get("sent_at")) or datetime.now(timezone.utc)
     out = []
-    for r in db.q("SELECT * FROM patient_facts WHERE study_id=? AND participant_key=? ORDER BY sent_at, id",
-                  (study_id, k)):
+    for r in db.q(f"SELECT * FROM patient_facts WHERE study_id=? AND participant_key IN ({','.join('?' * len(keys))})"
+                  " ORDER BY sent_at, id", (study_id, *keys)):
         if r["message_id"] == msg.get("id") and not include_current:
             continue
         when = _instant(r["sent_at"])
         if when and (when > now + timedelta(minutes=1) or when < now - timedelta(days=KEEP_DAYS)):
+            continue
+        if out and out[-1]["message_id"] == r["message_id"]:  # one message naming the code both ways
+            out[-1]["dates"] += db.unjs(r["dates"], [])
+            out[-1]["events"] += db.unjs(r["events"], [])
             continue
         out.append({"message_id": r["message_id"], "when": local_time(r["sent_at"]) if r["sent_at"] else "",
                     "dates": db.unjs(r["dates"], []), "events": db.unjs(r["events"], [])})
@@ -114,12 +145,16 @@ def only_earlier(departure: dict) -> bool:
     return bool(qs) and all(is_earlier_quote(q) for q in qs)
 
 
-def record_lines(past: list[dict]) -> list[str]:
-    """The participant's earlier dates as plain lines, oldest first (for answering questions)."""
+def record_lines(past: list[dict], corrected: set[str] = frozenset()) -> list[str]:
+    """The participant's earlier dates as plain lines, oldest first (for answering questions). corrected: messages
+    a later report corrected (patient memory found it): their dates are marked, so the later report holds."""
     lines = []
     for h in past:
+        stale = " [from a message a later report corrected: the later report holds]" \
+            if str(h.get("message_id")) in corrected else ""
         for d in sorted(h["dates"], key=lambda d: (d.get("date") or "", d.get("time") or "")):
             if d.get("date"):
                 lines.append(f"{d.get('label') or d.get('kind')}: {d['date']}"
-                             + (f" {d['time']}" if d.get("time") else "") + f" ({h['when'] or 'earlier message'})")
+                             + (f" {d['time']}" if d.get("time") else "") + f" ({h['when'] or 'earlier message'})"
+                             + stale)
     return lines
