@@ -127,6 +127,12 @@ people:
     email: peter@huma.ai
     roles: [tester]
     sites: ["*"]
+  # Peter as the sponsor for testing: alert and escalation emails reach his inbox through plus addressing.
+  - id: peter-sponsor
+    name: Peter Brown (sponsor test)
+    email: peter+NCT05842941-sponsor@huma.ai
+    roles: [cra, clinops_lead]
+    sites: ["*"]
   - id: eliot-tester
     name: Eliot Levitt
     email: eliot@huma.ai

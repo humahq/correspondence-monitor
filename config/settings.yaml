@@ -13,7 +13,8 @@ system:
 chat:
   # A quick "give me a moment" when someone asks the bot something in chat, before the slow read.
   receipt: true
-  receipt_text: "Thanks for reaching out. Give me a moment while I check the study documents."
+  # One of these is picked at random each time; empty: the texts in cormon/pipeline.py (RECEIPTS).
+  receipt_texts: []
 
 matching:
   # Forwarded or attached content about events older than this is treated as historical (no alert),

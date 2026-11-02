@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import re
 from concurrent.futures import ThreadPoolExecutor
 
@@ -296,7 +297,14 @@ def _acknowledge(study: Study, msg: dict, summary: dict, trial_related: bool) ->
     summary["acknowledged"] = text
 
 
-RECEIPT = "Thanks for reaching out. Give me a moment while I check the study documents."
+RECEIPTS = (  # one picked at random each time
+    "Thanks for reaching out. Give me a moment while I check the study documents.",
+    "Got it. Checking the study documents now.",
+    "On it. Give me a moment to look this up in the study documents.",
+    "Thanks. Let me check the study documents and get back to you.",
+    "One moment while I look through the study documents.",
+    "Thanks for your message. I'm checking the study documents now.",
+)
 RECEIPT_MINUTES = 5
 _INSTRUCTION = re.compile(r"\b(?:cleared|disregard|ignore (?:this|that|it|#?\d+)|resolved|never ?mind)\b", re.I)
 
@@ -322,7 +330,7 @@ def _receipt(study: Study, msg: dict) -> int | None:
         return None   # still working on the message that got the last one
     db.set_state(key, db.now())
     oid = routing.enqueue(purpose="chat_received", channel="teams", destination="teams_study_channel",
-                          body=settings.get("chat.receipt_text") or RECEIPT, message_id=msg["id"],
+                          body=random.choice(settings.get("chat.receipt_texts") or RECEIPTS), message_id=msg["id"],
                           study_id=study.study_id,
                           meta={"target": {"space": m.group(2), "thread": m.group(1), "key": "study_channel"}})
     if not outbox.is_paused():
