@@ -2579,6 +2579,7 @@ def test_numbers_marked_unconfirmed_make_no_brief_rule():
 # ---------------------------------------------------------------- doctors: careful.py, rooms.py
 
 DOC, CRC, CRA, LEAD = "eliot@huma.ai", "johnrohit94@gmail.com", "johnernest978@gmail.com", "john@huma.ai"
+SPONSOR = "peter+NCT05842941-sponsor@huma.ai"   # a second CRA and ClinOps lead: gets the private report too
 
 
 def _rooms(monkeypatch, members=None, channel=None):
@@ -2635,8 +2636,26 @@ def _alert(text, frm=CRC, space="spaces/G", visibility="group", thread="T1", tie
     return item_id, rows
 
 
+def _low_to_cra_only(monkeypatch):
+    """Low alerts email the CRA alone, so the ClinOps leads are told by the private report."""
+    from cormon import config
+    real = config.routing()
+    low = [{k: v for k, v in e.items() if k != "cc_roles"} for e in real["tiers"]["low"]]
+    monkeypatch.setattr(config, "routing", lambda: dict(real, tiers=dict(real["tiers"], low=low)))
+
+
+def test_a_low_alert_emails_the_first_cra_and_copies_every_clinops_lead(monkeypatch):
+    _rooms(monkeypatch, {"spaces/G": [CRC]})
+    _ai(monkeypatch)
+    _, rows = _alert("G-701-001 baseline CSF drawn at 11:00, first dose was 9:00.")
+    mail = [r for r in rows if r["channel"] == "email"]
+    assert [(r["purpose"], r["to_addrs"]) for r in mail] == [("email_cra", [CRA])]
+    assert set(mail[0]["cc_addrs"]) == {LEAD, SPONSOR}
+
+
 def test_an_alert_about_a_doctor_in_the_chat_is_not_posted_there_but_sent_privately(monkeypatch):
     from cormon import outbox, webview
+    _low_to_cra_only(monkeypatch)
     _rooms(monkeypatch, {"spaces/G": [DOC, CRC]})
     calls = _ai(monkeypatch)
     asked = _decide(monkeypatch, {"explicit": 0.95})
@@ -2645,14 +2664,15 @@ def test_an_alert_about_a_doctor_in_the_chat_is_not_posted_there_but_sent_privat
     assert len(chat) == 1 and chat[0]["status"] == "withheld" and chat[0]["meta"]["careful"]["about"] == ["Eliot Levitt"]
     assert not calls and len(asked) == 1   # one Decisions call, no chat model
     mail = {(r["purpose"], r["to_addrs"][0], r["status"]) for r in rows if r["channel"] == "email"}
-    assert mail == {("email_cra", CRA, "queued"), ("careful_report_clinops_lead", LEAD, "queued")}  # CRA not twice
+    assert mail == {("email_cra", CRA, "queued"), ("careful_report_clinops_lead", LEAD, "queued"),
+                    ("careful_report_cra", SPONSOR, "queued")}  # CRA not twice
     report = next(r for r in rows if r["purpose"] == "careful_report_clinops_lead")
     assert "not posted in any chat" in report["body"] and "Eliot Levitt (Principal investigator)" in report["body"]
     assert "Baseline CSF was drawn after the first dose." in report["body"]
     logged = [(r["action"], db.unjs(r["details"])) for r in db.q("SELECT action, details FROM audit_log WHERE action IN"
               " ('careful_check','post_withheld_careful','reported_privately') ORDER BY id")]
     assert [a for a, _ in logged] == ["careful_check", "post_withheld_careful", "reported_privately",
-                                      "reported_privately"]
+                                      "reported_privately", "reported_privately"]
     assert logged[0][1]["decision"] == "withhold" and logged[0][1]["named"] == ["Eliot Levitt"]
     assert logged[2][1]["to"] == CRA and logged[2][1]["already_emailed"]
     how = webview._how(items.get(item_id), items.get(item_id)["evidence"])
@@ -2660,7 +2680,7 @@ def test_an_alert_about_a_doctor_in_the_chat_is_not_posted_there_but_sent_privat
     sent = []
     monkeypatch.setattr(outbox, "_adapter", lambda ch: type("A", (), {"send": lambda s, r: sent.append(r["id"]) or {}})())
     outbox.dispatch()
-    assert chat[0]["id"] not in sent and len(sent) == 2   # a withheld post is never sent
+    assert chat[0]["id"] not in sent and len(sent) == 3   # a withheld post is never sent
 
 
 def _decide(monkeypatch, scores):
@@ -2678,6 +2698,7 @@ def _decide(monkeypatch, scores):
 
 def test_an_alert_is_kept_from_a_doctors_chat_only_when_it_is_about_the_doctors_own_actions(monkeypatch):
     from cormon import careful
+    _low_to_cra_only(monkeypatch)
     _rooms(monkeypatch, {"spaces/G": [DOC, CRC]})
     calls = _decide(monkeypatch, {"explicit": 0.01, "exam": 0.03})
     _, rows = _alert("G-701-002 baseline CSF drawn at 10:40, first dose was 9:15.")
@@ -2707,7 +2728,8 @@ def test_an_alert_is_kept_from_a_doctors_chat_only_when_it_is_about_the_doctors_
     _ai(monkeypatch, careful_doctor=RuntimeError("LLM call failed"))
     _, rows = _alert("G-701-003 baseline CSF drawn at 11:00, first dose was 9:00.", thread="T2")
     assert next(r for r in rows if r["channel"] == "teams")["status"] == "withheld"
-    assert {r["purpose"] for r in rows if r["channel"] == "email"} == {"email_cra", "careful_report_clinops_lead"}
+    assert {r["purpose"] for r in rows if r["channel"] == "email"} == {"email_cra", "careful_report_clinops_lead",
+                                                                        "careful_report_cra"}
 
 
 def test_a_doctor_writing_or_named_in_the_message_does_not_by_itself_keep_the_alert_out(monkeypatch):
@@ -2833,6 +2855,7 @@ def test_a_doctor_asking_in_a_group_gets_a_calm_answer(monkeypatch):
 
 def test_a_doctor_1_on_1_with_a_problem_gets_a_calm_reply_and_the_alert_goes_privately(monkeypatch):
     from cormon import config, pipeline
+    _low_to_cra_only(monkeypatch)
     study = config.study("NCT05842941")
     _rooms(monkeypatch, {"spaces/D": [DOC]})
     calls = _ai(monkeypatch, careful_check={"ok": True, "about": [], "why": "Polite thanks."})
@@ -2840,7 +2863,8 @@ def test_a_doctor_1_on_1_with_a_problem_gets_a_calm_reply_and_the_alert_goes_pri
                            frm=DOC, space="spaces/D", visibility="direct")
     assert not [r for r in rows if r["channel"] == "teams"]   # nothing in any group chat, as before
     assert {(r["purpose"], r["to_addrs"][0]) for r in rows} == {("email_cra", CRA),
-                                                               ("careful_report_clinops_lead", LEAD)}
+                                                               ("careful_report_clinops_lead", LEAD),
+                                                               ("careful_report_cra", SPONSOR)}
     report = next(r for r in rows if r["purpose"] == "careful_report_clinops_lead")
     assert "told the bot about it in a 1-on-1 chat" in report["body"]
     msg = capture.message(items.get(item_id)["first_message_id"])
@@ -3377,7 +3401,7 @@ def test_a_question_to_the_bot_gets_a_quick_receipt_but_listening_statements_and
 
     first = ask("What is the Week 12 window?")
     row = db.q1("SELECT * FROM outbox WHERE id=?", (first,))
-    assert row["purpose"] == "chat_received" and row["body"] == pipeline.RECEIPT and sent == [first]
+    assert row["purpose"] == "chat_received" and row["body"] in pipeline.RECEIPTS and sent == [first]
     assert db.unjs(row["meta"])["target"]["space"] == "spaces/dm1"
     assert ask("And Week 24?") is None                                     # still on the first question
     db.ex("INSERT INTO outbox(purpose, channel, destination, body, meta, created_at) VALUES"

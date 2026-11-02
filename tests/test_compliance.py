@@ -1528,7 +1528,8 @@ def test_an_unacknowledged_safety_message_goes_up_the_chain_then_to_a_phone(monk
     assert seq[0] == ("email-safety-to-medical-monitor", "john+medicalmonitor@huma.ai")
     assert ("email-safety-escalation", "john+pvbackup@huma.ai") == seq[1]
     assert ("email-safety-escalation", "john@huma.ai") == seq[2]
-    assert seq[3] == ("email-safety-phone", "john+safetyoncall@huma.ai") and seq[4][1] == "ops@huma.ai"
+    assert ("email-safety-escalation", "peter+NCT05842941-sponsor@huma.ai") == seq[3]   # the second ClinOps lead
+    assert seq[4] == ("email-safety-phone", "john+safetyoncall@huma.ai") and seq[5][1] == "ops@huma.ai"
     assert sum(1 for t, _ in seq if t == "email-safety-phone") == 4         # the terminus and 3 reminders
     assert items.get(iid)["next_step_at"] is None                         # then it stops
     dev = db.q("SELECT details FROM audit_log WHERE action='safety_ack_deviation'")
