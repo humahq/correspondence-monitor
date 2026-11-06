@@ -7,9 +7,6 @@ sponsor: Columbia University (funded by the National Institute on Aging)
 
 # Mail to bot+<address_tag>@huma.ai is routed to this study.
 address_tag: NCT04098666
-monitor_signature: |-
-  MAP Correspondence Monitor
-  (automated message from the study monitoring service; it does not review safety information)
 
 documents:
   - id: protocol

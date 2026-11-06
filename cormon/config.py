@@ -143,7 +143,7 @@ def load_study(path: Path) -> Study:
         title=raw.get("title", ""),
         sponsor=raw.get("sponsor", ""),
         address_tag=str(raw.get("address_tag", raw["study_id"])),
-        monitor_signature=raw.get("monitor_signature", "Correspondence Monitor"),
+        monitor_signature=raw.get("monitor_signature") or settings.bot_signature(),
         documents=raw.get("documents", []),
         roles=raw.get("roles", []),
         sites=raw.get("sites", []),

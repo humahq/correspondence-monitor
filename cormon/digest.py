@@ -64,7 +64,7 @@ def build(since: datetime, until: datetime, study_ids: list[str] | None = None) 
         studies_out.append({"study_id": sid, "short_name": e["short_name"], "groups": groups})
     tz = ZoneInfo(settings.get("digest.timezone", "America/New_York"))
     notes = gaps_and_late(since, until, study_ids)
-    footer = f"Sent by the correspondence monitor. It does not review safety information. {SAFETY_NOTICE}"
+    footer = f"Sent by {settings.bot_name()}. It does not review safety information. {SAFETY_NOTICE}"
     if notes:
         footer = "Gaps and late messages in this window:\n" + "\n".join(f"- {n}" for n in notes) + "\n\n" + footer
     return {

@@ -411,11 +411,22 @@ Use `--as NAME` (or `CORMON_OPERATOR`) to set the identity recorded for an actio
 
 ## Going live
 
+The name, avatar and email sign-off are per deployment. Put them in an untracked `config/settings.local.yaml` (never committed; keep it on the server, where a release leaves it in place), not in `config/settings.yaml`:
+
+```yaml
+bot:
+  name: ""         # this deployment's name (e.g. "Study monitor"); empty uses that
+  avatar_url: ""   # an image URL for the admin header; empty keeps the plain mark
+  signature: ""    # the whole email sign-off; empty uses the name + the automated-message disclaimer
+```
+
+The Google Chat app's own name and avatar are set in the Cloud console (**Google Chat API → Configuration**), per project; the settings here keep email, the admin pages and ops warnings in step with it.
+
 ### Gmail with the app password (simplest; same as the scheduler)
 
 1. `gcloud auth login` as someone who can read the `kol-gmail-bot-app-password` secret in `optical-depth-506808-t0` (or set `CORMON_GMAIL_APP_PASSWORD` in `.env`).
 2. `cormon auth imap` checks the login.
-3. Add `bot+NCT04098666@huma.ai` under Gmail → Settings → Accounts → **Send mail as** (signed in as bot@huma.ai).
+3. Add `bot+NCT04098666@huma.ai` under Gmail → Settings → Accounts → **Send mail as** (signed in as bot@huma.ai), and give it the deployment's bot name.
 4. `cormon config set settings channels.email imap`, then `cormon run`.
 
 The inbox is shared with the scheduler, so only mail sent to a `bot+<study>` address or to the general address `bot+clinical@huma.ai` is read, and nothing in the inbox is marked or moved. Mail that arrived before the first run is ignored.
@@ -424,7 +435,7 @@ The inbox is shared with the scheduler, so only mail sent to a `bot+<study>` add
 
 1. In a GCP project on the huma.ai Workspace, enable the **Gmail API**. Create an OAuth client of type **Desktop app** (consent screen: *Internal*) and save the JSON as `secrets/gmail_client.json`.
 2. `cormon auth gmail` and sign in as bot@huma.ai. The token is saved to `secrets/gmail_token.json`.
-3. In Gmail (as the bot) go to Settings → Accounts → **Send mail as** and add `bot+NCT04098666@huma.ai` as an alias, so replies leave from the study address. `cormon gmail send-as` lists what is configured.
+3. In Gmail (as the bot) go to Settings → Accounts → **Send mail as** and add `bot+NCT04098666@huma.ai` as an alias, with the deployment's bot name, so replies leave from the study address. `cormon gmail send-as` lists what is configured; `cormon gmail add-aliases` also keeps each alias's display name in step with `bot.name`.
 4. Set `channels.email: gmail` in `config/settings.yaml`.
 
 ### Google Chat
@@ -432,7 +443,7 @@ The inbox is shared with the scheduler, so only mail sent to a `bot+<study>` add
 The bot posts and reads as bot@huma.ai. The Chat API and People API are already on in project optical-depth-506808-t0.
 
 1. In Google Chat (as bot@huma.ai or anyone), create a space, for example **MAP study alerts**. Add bot@huma.ai and the people who should see alerts.
-2. In the Cloud console, open **Google Chat API → Configuration**. Give the app a name (e.g. "Study monitor"), an avatar URL and a description. Leave **interactive features** off. Save.
+2. In the Cloud console, open **Google Chat API → Configuration**. Give the app a name (e.g. "Study monitor"), an avatar URL and a description. Leave **interactive features** off. Save. Set the same name and avatar in this deployment's `config/settings.local.yaml` (see Going live above) so email and the admin pages agree.
 3. Under **APIs & Services → Credentials**, create an **OAuth client ID** of type **Desktop app** (consent screen: *Internal*). Save the JSON as `secrets/gchat_client.json`.
 4. Run `cormon auth gchat` and sign in as **bot@huma.ai**. The token is saved to `secrets/gchat_token.json`.
 5. Run `cormon chat-spaces`. Put the space name (`spaces/...`) as `space:` for both `study_channel` and `alert_channel` in `studies/NCT04098666/study.yaml`.

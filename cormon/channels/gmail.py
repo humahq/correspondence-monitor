@@ -116,13 +116,24 @@ class GmailChannel:
         ref = (hits.get("messages") or [None])[0]
         return {"external_ref": ref["id"], "rfc_message_id": row["rfc_message_id"]} if ref else None
 
-    def send_as_addresses(self) -> list[str]:
+    def _send_as(self) -> list[dict]:
         resp = self.svc.users().settings().sendAs().list(userId="me").execute()
-        return [s["sendAsEmail"].lower() for s in resp.get("sendAs", [])]
+        return resp.get("sendAs", [])
+
+    def send_as_addresses(self) -> list[str]:
+        return [s["sendAsEmail"].lower() for s in self._send_as()]
 
     def ensure_send_as(self, address: str) -> str:
-        if address.lower() in self.send_as_addresses():
-            return "already configured"
-        self.svc.users().settings().sendAs().create(
-            userId="me", body={"sendAsEmail": address, "treatAsAlias": True}).execute()
-        return "created"
+        """Create the study alias and keep its display name on the deployment's bot name. Gmail can take the
+        From name from here, so email, the admin pages and the Chat app name agree."""
+        name = settings.bot_name()
+        found = next((s for s in self._send_as() if s["sendAsEmail"].lower() == address.lower()), None)
+        if found is None:
+            self.svc.users().settings().sendAs().create(
+                userId="me", body={"sendAsEmail": address, "displayName": name, "treatAsAlias": True}).execute()
+            return "created"
+        if found.get("displayName") != name:
+            self.svc.users().settings().sendAs().patch(
+                userId="me", sendAsEmail=address, body={"displayName": name}).execute()
+            return "display name updated"
+        return "already configured"

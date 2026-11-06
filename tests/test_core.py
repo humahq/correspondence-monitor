@@ -2518,7 +2518,8 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
     from cormon import adminview, config, settings, webview, weblogin
     adminview._loaded["at"] = 0.0
     conf = {"web.login.enabled": True, "web.login.client_id": "cid", "web.base_url": "https://mon.example",
-            "web.admin.emails": ["Peter@huma.ai"]}
+            "web.admin.emails": ["Peter@huma.ai"], "bot.name": "Mira Belle",
+            "bot.avatar_url": "https://example.test/mira.png"}
     real = settings.get
     monkeypatch.setattr(settings, "get", lambda k, d=None: conf.get(k, real(k, d)))
     study = next(iter(config.studies()))
@@ -2581,6 +2582,7 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
         assert status == 403 and "not on the admin list" in body
         status, head, page = get("/admin/messages/7", "peter@huma.ai")
         assert status == 200 and 'id="root"' in page and "default-src 'self'" in head["Content-Security-Policy"]
+        assert "<title>Mira Belle admin</title>" in page and 'data-bot-name="Mira Belle"' in page
         assert get("/admin/static/app.js", "peter@huma.ai")[0] == 200
         assert get("/admin/static/../settings.py", "peter@huma.ai")[0] == 404
         week = data("/admin/api/home")
@@ -2666,6 +2668,7 @@ def test_admin_pages_open_only_for_the_admin_list_and_show_what_the_bot_did(monk
         assert notice["alert"]["id"] == 3 and [(s["channel"], s["to"], s["text"]) for s in notice["sent"]] == [
             ("email", "cra@x.org", "The Week 8 visit was late.")]
         assert talk[2]["kind"] == "Answer" and talk[2]["text"] == "See <https://mon.example/answers/a|the details>"
+        assert talk[2]["who"] == "Mira Belle"
         open_alerts = data("/admin/api/alerts")["rows"]
         assert [a["title"] for a in open_alerts] == ["Week 8 visit late"]
         assert open_alerts[0]["type"]["label"] == "Protocol problem"

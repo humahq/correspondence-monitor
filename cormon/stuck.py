@@ -103,8 +103,10 @@ def warn(log=print) -> int | None:
         return None
     to = _ops({p["study_id"] for p in new})
     body = "These need a look:\n\n" + "\n".join(f"- {p['what']}" for p in new)
+    count = len(new)
     oid = routing.enqueue(purpose="ops_warning", channel="email", destination="email", body=body,
-                          subject=f"Study monitor: {len(new)} thing{'s' if len(new) > 1 else ''} need a look",
+                          subject=f"{settings.bot_name()}: {count} thing{'s' if count > 1 else ''} "
+                                  f"{'need' if count > 1 else 'needs'} a look",
                           from_addr=settings.get("mailbox.address"), to=to) if to else None
     for p in new:
         db.set_state(f"warned:{p['key']}", db.now())

@@ -691,7 +691,9 @@ def _post(study: Study, msg: dict, text: str, files: list[dict] | None = None) -
     meta = {"thread_key": msg["thread_key"], "in_reply_to": msg.get("rfc_message_id"),
             "references": (msg.get("refs") or []) + ([msg["rfc_message_id"]] if msg.get("rfc_message_id") else []),
             "gmail_thread": msg["thread_key"].split(":", 1)[1], **({"files": files} if files else {})}
-    return routing.enqueue(purpose="question_answer", channel="email", destination="email", body=text,
+    # An email reply ends like the alerts do: the deployment's sign-off, with its automated-message disclaimer.
+    body = f"{text}\n\n{study.monitor_signature}"
+    return routing.enqueue(purpose="question_answer", channel="email", destination="email", body=body,
                            subject=subject if subject.lower().startswith("re:") else f"Re: {subject}",
                            message_id=msg["id"], from_addr=routing.from_alias(study, msg), to=[sender], meta=meta,
                            study_id=study.study_id)

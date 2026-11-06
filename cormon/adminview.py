@@ -454,7 +454,8 @@ def conversation(m: dict) -> list[dict]:
                     "kind": PURPOSE.get(o["purpose"], o["purpose"]), "channel": "email" if o["channel"] == "email"
                     else "chat", "to": to or _dest(o["destination"]), "status": o["status"]}
             if o["purpose"] in REPLIES:
-                out.append({"side": "bot", "who": "Study monitor", "small": o["purpose"] == "chat_received", **sent})
+                out.append({"side": "bot", "who": settings.bot_name(), "small": o["purpose"] == "chat_received",
+                            **sent})
                 continue
             key = o["item_id"] or f"o{o['id']}"
             if key not in notices:
@@ -630,10 +631,13 @@ def shell(email: str) -> str:
     """The one HTML page; the React app reads the path and asks /admin/api/... for the data."""
     v = int(max((WEB / f).stat().st_mtime for f in STATIC))
     scripts = "".join(f'<script src="/admin/static/{f}?v={v}"></script>' for f in STATIC if f.endswith(".js"))
+    name = html.escape(settings.bot_name())
+    avatar = html.escape(settings.bot_avatar(), quote=True)
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
-            f'<title>Study monitor admin</title><link rel="stylesheet" href="/admin/static/admin.css?v={v}">'
-            f'</head><body data-email="{email.replace(chr(34), "")}"><div id="root"></div>{scripts}</body></html>')
+            f'<title>{name} admin</title><link rel="stylesheet" href="/admin/static/admin.css?v={v}">'
+            f'</head><body data-email="{email.replace(chr(34), "")}" data-bot-name="{name}"'
+            f' data-bot-avatar="{avatar}"><div id="root"></div>{scripts}</body></html>')
 
 
 def static(path: str) -> tuple[bytes, str] | None:

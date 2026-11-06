@@ -17,6 +17,9 @@ load_dotenv(ROOT / ".env")
 
 CONFIG_DIR = ROOT / "config"
 SETTINGS_FILE = CONFIG_DIR / "settings.yaml"
+# Deployment-specific settings (the bot's name, avatar and signature, for example). Not in the repository:
+# each customer deployment keeps its own. Values here win over settings.yaml, key by key.
+LOCAL_FILE = CONFIG_DIR / "settings.local.yaml"
 
 
 def load_yaml(path: Path) -> Any:
@@ -24,15 +27,27 @@ def load_yaml(path: Path) -> Any:
         return yaml.safe_load(fh) or {}
 
 
+def _merge(base: dict, override: dict) -> dict:
+    """Override wins; dictionaries merge key by key so a local file can set just one setting."""
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            base[key] = _merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
 @lru_cache(maxsize=1)
 def settings() -> dict:
     """A copy in another folder (CORMON_HOME) takes its llm: section (models, efforts) from the code's own
     settings, so an old copy never runs on models the project has moved away from. CORMON_MODEL and the other
-    CORMON_* variables still override it for one run."""
+    CORMON_* variables still override it for one run. settings.local.yaml holds this deployment's own values."""
     data = load_yaml(SETTINGS_FILE)
     main = CODE_ROOT / "config" / "settings.yaml"
     if ROOT.resolve() != CODE_ROOT and main.exists():
         data["llm"] = load_yaml(main).get("llm", {})
+    if LOCAL_FILE.exists():
+        _merge(data, load_yaml(LOCAL_FILE))
     return data
 
 
@@ -47,6 +62,23 @@ def get(path: str, default: Any = None) -> Any:
             return default
         node = node[part]
     return node
+
+
+def bot_name() -> str:
+    """The deployment's name for the bot, in email, the admin pages and ops warnings."""
+    return get("bot.name") or "Study monitor"
+
+
+def bot_avatar() -> str:
+    return get("bot.avatar_url") or ""
+
+
+def bot_signature() -> str:
+    """The default email sign-off. A deployment can set the whole block with bot.signature."""
+    return get("bot.signature") or (
+        f"{bot_name()}\n"
+        "(automated message from the study monitoring service; it does not review safety information)"
+    )
 
 
 def feature(name: str) -> bool:
