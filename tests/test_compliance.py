@@ -1280,6 +1280,27 @@ def test_every_commit_must_name_a_task_that_exists():
     assert len(gate.task_problems(found)) == 1, "offline only the form is checked"
 
 
+def test_a_commit_merged_by_a_numbered_pull_request_names_that_task(tmp_path, monkeypatch):
+    import subprocess
+
+    from cormon import gate
+
+    def git(*a):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=tmp_path, check=True,
+                       capture_output=True)
+    git("init", "-q", "-b", "main")
+    git("commit", "-q", "--allow-empty", "-m", "start (#1)")
+    git("tag", "live")
+    git("checkout", "-q", "-b", "side")
+    git("commit", "-q", "--allow-empty", "-m", "Bot identity")
+    git("checkout", "-q", "main")
+    git("commit", "-q", "--allow-empty", "-m", "Unnamed on main")
+    git("merge", "-q", "--no-ff", "side", "-m", "Merge pull request #55 from x/side")
+    monkeypatch.setattr(gate, "REPO", tmp_path)
+    problems = gate.task_problems(gate.commits("live"))
+    assert len(problems) == 1 and "Unnamed on main" in problems[0], problems
+
+
 def test_the_gate_runs_every_set_when_matching_settings_change():
     from cormon import config, gate
 
