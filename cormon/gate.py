@@ -312,13 +312,23 @@ TASK_REF = re.compile(r"(?<![\w/&])#(\d+)\b")
 
 
 def commits(base: str, head: str = "HEAD") -> list[dict] | None:
-    """The commits in base..head with their messages; None when base is not known."""
+    """The commits in base..head with their messages; None when base is not known. A commit a merge brought in
+    also carries the merge's message ("merged_by"), so "Merge pull request #55" counts for the commits in it."""
     try:
         _git("rev-parse", "--verify", f"{base}^{{commit}}")
     except subprocess.CalledProcessError:
         return None
-    out = _git("log", "--format=%H%x1f%s%x1f%B%x1e", f"{base}..{head}")
-    return [dict(zip(("sha", "subject", "body"), c.strip("\n").split("\x1f", 2))) for c in out.split("\x1e") if c.strip()]
+    out = _git("log", "--format=%H%x1f%P%x1f%s%x1f%B%x1e", f"{base}..{head}")
+    found = [dict(zip(("sha", "parents", "subject", "body"), c.strip("\n").split("\x1f", 3)))
+             for c in out.split("\x1e") if c.strip()]
+    by_sha = {c["sha"]: c for c in found}
+    for m in found:
+        parents = m.pop("parents").split()
+        if len(parents) > 1:
+            for sha in _git("rev-list", f"{parents[0]}..{parents[1]}").split():
+                if sha in by_sha:
+                    by_sha[sha]["merged_by"] = by_sha[sha].get("merged_by", "") + "\n" + (m["body"] or m["subject"])
+    return found
 
 
 def _github_task(n: int) -> bool:
@@ -343,7 +353,8 @@ def task_problems(found: list[dict], exists=None, pr: int | None = None) -> list
     known: dict[int, bool] = {}
     problems = []
     for c in found:
-        refs = sorted({int(n) for n in TASK_REF.findall(c["body"] or c["subject"])} | ({pr} if pr else set()))
+        text = (c["body"] or c["subject"]) + c.get("merged_by", "")
+        refs = sorted({int(n) for n in TASK_REF.findall(text)} | ({pr} if pr else set()))
         if not refs:
             problems.append(f"{c['sha'][:8]} {c['subject'][:70]!r} names no task (add e.g. '#12' for issue 12)")
             continue
