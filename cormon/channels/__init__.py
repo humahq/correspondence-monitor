@@ -68,7 +68,7 @@ def study_for_person(addr: str | None, known_only: bool = False) -> str | None:
 
 
 def teams_channel():
-    """The chat channel: Microsoft Teams (graph), Google Chat (gchat) or the simulator."""
+    """The chat channel: Microsoft Teams (graph), Google Chat (gchat), a local Mattermost or the simulator."""
     mode = settings.get("channels.teams", "sim")
     _only_live("teams", mode)
     if ("teams", mode) not in _cache:
@@ -80,6 +80,10 @@ def teams_channel():
             from .gchat import GoogleChatChannel
 
             _cache[("teams", mode)] = GoogleChatChannel()
+        elif mode == "mattermost":
+            from .mattermost import MattermostChannel
+
+            _cache[("teams", mode)] = MattermostChannel()
         elif mode == "sim":
             from .sim import SimTeams
 

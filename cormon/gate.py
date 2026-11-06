@@ -239,7 +239,7 @@ def run(name: str, out: Path) -> int:
     _keep_cache(home)
     bad = check(name, spec, got)
     result = {"set": name, "what": spec["what"], "passed": not bad, "below": bad, "scores": got,
-              "marks": spec.get("marks")}
+              "marks": spec.get("marks"), "ai_use": ai_use()}
     (out / "gate.json").write_text(json.dumps(result, indent=1, default=str))
     text = summary_md(result)
     print("\n" + text)
@@ -249,12 +249,27 @@ def run(name: str, out: Path) -> int:
     return 0 if not bad else 1
 
 
+def ai_use() -> dict:
+    """This run's AI calls and tokens (what it cost), and the answers taken from the kept ones (free)."""
+    from . import llm
+    total = {k: sum(u[k] for u in llm.USAGE.values()) for k in ("calls", "input", "cached_input", "output")}
+    return {**total, "reused": llm.REUSED["answers"], "by_model": {m: dict(u) for m, u in llm.USAGE.items()}}
+
+
+def _tokens(n: int) -> str:
+    return f"{n / 1e6:.1f} M" if n >= 1e6 else f"{n / 1e3:.0f} k" if n >= 1e3 else str(n)
+
+
 def summary_md(r: dict) -> str:
     shown = ", ".join(f"{k} {_pct(v)}" for k, v in r["scores"].items() if k not in ("strangers", "wrong_ones"))
     lines = [f"### {'PASSED' if r['passed'] else 'FAILED'}: {r['set']} ({r['what']})", "", f"Scores: {shown}"]
     lines += [f"- {b}" for b in r["below"]]
     if r["scores"].get("wrong_ones"):
         lines.append(f"Wrong: {', '.join(r['scores']['wrong_ones'])}")
+    if u := r.get("ai_use"):
+        lines.append(f"AI use: {u['calls']} paid calls ({_tokens(u['input'])} input tokens, of them "
+                     f"{_tokens(u['cached_input'])} at the cheaper cached price; {_tokens(u['output'])} output), "
+                     f"{u['reused']} answers taken free from the kept ones")
     return "\n".join(lines)
 
 
@@ -369,14 +384,16 @@ def main(argv: list[str] | None = None) -> None:
                 reused = same_code_passed()
             except Exception as e:  # GitHub not reachable: the sets run
                 print(f"could not look for a passed pull request run ({e}); running the sets", file=sys.stderr)
+        kept = []
         if reused:
             print(f"the AI sets {sets} passed on exactly this code in pull request run {reused}; not run again",
                   file=sys.stderr)
-            sets = []
+            sets, kept = [], sets
         print(json.dumps(sets))
         if os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
-                fh.write(f"sets={json.dumps(sets)}\n")
+                # kept_sets, from_run: the pull request run whose kept AI answers become main's (no AI calls)
+                fh.write(f"sets={json.dumps(sets)}\nkept_sets={json.dumps(kept)}\nfrom_run={reused or ''}\n")
     elif a.cmd == "tasks":
         found = commits(a.base, a.head)
         if found is None:

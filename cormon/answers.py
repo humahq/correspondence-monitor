@@ -20,7 +20,8 @@ from datetime import date, datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
 
-from . import capture, careful, conversation, db, guide, hindsight, llm, memory, outcheck, reader, routing, settings
+from . import (capture, careful, conversation, db, guide, hindsight, llm, memory, outcheck, privacy, reader, routing,
+               settings)
 from .compliance import sha256
 from .config import Study
 
@@ -734,6 +735,8 @@ def answer_message(study: Study, msg: dict, email: str, use_cache: bool = True,
         if judged := outcheck.added_judgment(a["plain"], backing):  # recorded to measure; not blocked yet
             db.audit("answer_judgment_flagged", entity_type="message", entity_id=msg.get("id"),
                      study_id=study.study_id, question=a["question"], problems=judged)
+    if settings.feature("privacy_check"):
+        privacy.screen(study, msg, answers, use_cache)
     return answers
 
 

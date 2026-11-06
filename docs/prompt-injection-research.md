@@ -199,6 +199,54 @@ dropped. This is how harm 1 happens.
 8. **Watch it live.** A weekly list for the admins of every message flagged in step 4, and every "please check"
    raised by steps 2, 3 and 5, so we see attacks being honed (NCSC: attackers "hone their attack").
 
+## Built so far (5 Nov 2026, after the 4 Nov call)
+
+Eliot's decisions on the call: a permission passed on from someone else is never accepted ("I'll need to hear that
+directly from the sponsor"), and three layers: a ready-made detector first, then our own rules, then the research
+idea (a second look that never sees the email) as the last line.
+
+**Layer 2, a claim is not a permission (built, not live).** The scope step now marks each claim of permission in an
+email, on whose word it rests and what it excuses (no new AI call). Code (`reader._second_hand`) then refuses it
+unless the sender is that person or holds that role: the participant's alert says "confirm it directly with ...",
+or, when nothing else was raised, the claim is its own "please check". gpt-5.4-mini, `--study NCT05842941`:
+
+| Set | Before | After |
+|---|---|---|
+| 41 hold-out tricks | 34 right, real problem missed 4 times | 32 right, missed once (t11, no claim in it) |
+| 20 practice tricks | 16 right, missed once | 16 right, missed 0 |
+| 100 DNL emails | 83 and 80 right; recall 98% and 95%, precision 95% | 81 right; recall 98.3%, precision 95.2% |
+
+A first wording raised two false alerts on the 100 ("the PI reviewed and says all within normal range"; "after the
+required interval"); the wording now says a report of what someone found as part of their job is not a permission,
+and the rerun raised none. Time: the scope step about 0.4 s longer per email.
+
+**Layer 1, a ready-made detector (measured, not built).** `demo/trick-detector/run.py`, on our own machine, no AI:
+ProtectAI deberta v2 flagged 21 of 89 trick messages (the "ignore all previous instructions" kind; none of the
+"the sponsor said it's fine" kind) and 20 of 1,220 normal messages, at 35 ms a message (ONNX). It needs about
+850 MB of memory, too much next to Hindsight on the 4 GB server, and an 8-bit copy stops working (1 of 89 caught).
+Meta Prompt Guard 2 (22M, about 90 MB) flagged 4 of 89 trick messages and 0 of 1,220 normal ones, at 27 ms a
+message. It is safe but catches almost nothing of ours: our tricks are "someone said it's fine", not "ignore your
+instructions". To build (decided 5 Nov, as Eliot asked): the ONNX copy (about 150 MB with onnxruntime, no torch),
+as an extra alarm only. A flagged email is handled with care and the CRA told; it never clears anything. Our trick
+set is mostly quiet tricks we wrote; real attackers also send the blunt kind it is made for.
+
+**Layer 3, a second look that never sees the email (built, not live).** `reader._blind_look`: while the first
+reading runs, the judge reads the same protocol sections again with only the email's single facts (the scope
+step's statements), with claims of permission and the email's own summary taken out. When the first reading raised
+nothing for a participant, a departure the second look finds, confirmed by a check that also never sees the email
+and with its protocol words found, goes out as "please check". Switch: `checker.blind_look` (on), `CORMON_BLIND=0`.
+
+| Set | Layer 2 only | Layers 2 and 3 |
+|---|---|---|
+| 41 hold-out tricks | 32 right, missed once (t11) | 32 right, missed once (t11) |
+| 20 practice tricks | 16 right, missed 0 | 16 right, missed 0 |
+| 100 DNL emails | 81 right | 80 right: one added alert (x29, an SAE not yet reported after four days) |
+
+A first version also spoke when the first reading had already raised a problem, and read "no need to treat this as
+an adverse event" as a fact: three extra alerts on the tricks. Both fixed. t11 is not a trick miss: without the
+email, the check still reads "amendments may require re-consent" as not settling it. Cost: one more judge call per
+participant per email (107 on the 100 emails), run alongside the first, so little added time.
+
 ## What it costs
 
 - Steps 1, 2 and 4: about a day of work. No running cost to speak of.

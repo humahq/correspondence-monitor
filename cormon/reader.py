@@ -10,6 +10,8 @@
    it left unchecked, numbers outside its own ranges and a reviewer's notes.
 4. Every finding is confirmed: its protocol quote must be found in the sections, and a second reading must agree;
    one the second reading rejects but whose protocol words are found goes out as "please check" (checker.disputed).
+The judge and the second reading also get what patient memory holds about the participant (other threads), so a
+message can be judged against what was reported before; a finding must still rest on this email's own words.
 """
 from __future__ import annotations
 
@@ -25,7 +27,7 @@ from zoneinfo import ZoneInfo
 from dateutil import parser as dtparser
 from dateutil.relativedelta import relativedelta
 
-from . import guide, ingest, llm, memory, settings, textutil
+from . import guide, hindsight, ingest, llm, memory, settings, textutil
 from .config import Study
 from .matching import Finding
 
@@ -34,6 +36,18 @@ NOT_CHECKABLE = {"background", "statistics", "admin"}
 DATE_KINDS = ["baseline", "date_of_birth", "screening", "consent", "randomization", "first_dose", "dose", "last_dose",
               "visit", "phone_visit", "sample", "procedure", "lab", "adverse_event", "extension_start",
               "termination", "shipment", "other"]
+# patient memory's facts (hindsight.py) are given to the judge and the second check under the facts from code
+MEMORY_NOTE = ("Lines starting 'earlier fact' come from patient memory: other messages about this participant, "
+               "checked when they were reported. Use them to judge what this email reports, plans or asks (a "
+               "medicine against a condition or medicine reported earlier, a step after a withdrawal reported "
+               "earlier, a problem the site already dealt with), but report only a problem this email itself "
+               "reports, plans or asks, never one that rests on earlier facts alone. A fact marked NO LONGER TRUE "
+               "is not true.")
+MEMORY_CHECK = ("Earlier facts about this participant are listed under FACTS FROM CODE ('earlier fact'). Check every "
+                "statement against each earlier fact that could matter to it (a medicine, condition, withdrawal, "
+                "pregnancy, earlier trial, result or problem reported before), with a check that names the earlier "
+                "fact, and report a finding when what this email reports, plans or asks breaks a rule because of it, "
+                "quoting this email's words.\n")
 
 
 # ---------------------------------------------------------------- the guide, as the checker sees it
@@ -122,21 +136,45 @@ For each entry:
   never in the date. visit_id: for a visit's date, the id of that visit's checklist; otherwise "".
 Use only ids from the guide index. If the email is not about the study at all, return no entries."""
 
-SCOPE_SCHEMA = llm.obj({"parts": {"type": "array", "items": llm.obj({
-    "participant": {"type": "string"},
-    "summary": {"type": "string"},
-    "statements": {"type": "array", "items": llm.obj({
-        "text": {"type": "string"},
-        "status": {"type": "string", "enum": ["done", "planned", "asked", "reported", "historical"]},
-        "anchors": {"type": "array", "items": {"type": "string"}}})},
-    "visits": {"type": "array", "items": {"type": "string"}},
-    "sections": {"type": "array", "items": {"type": "string"}},
-    "dates": {"type": "array", "items": llm.obj({
-        "label": {"type": "string"},
-        "kind": {"type": "string", "enum": DATE_KINDS},
-        "date": {"type": "string"},
-        "time": llm.nullable("string"),
-        "visit_id": {"type": "string"}})}})}})
+# features.permission_claims: the scope also marks each claim of permission and on whose word it rests
+_EXCUSES = "apart from the fact it excuses."
+SCOPE_CLAIMS = """ A claim of permission says a
+  rule does not apply, is waived, has an exception or has been changed, or that a departure is allowed; a report
+  of what someone found, measured or decided as part of their own job (the PI reviewed the labs and found them
+  normal), a claim that adds a duty or a stricter rule, and a plain fact are not. For a claim of permission
+  only, claimed_by: on whose word it rests (the
+  sponsor, the medical monitor, the PI, "the CRA", "an earlier email", "someone" when no one is named), and the
+  writer's own role in their words when the writer claims a role ("this is the medical monitor"); excuses: the fact
+  it excuses, in the email's words; claim_topic: the kind of rule it would excuse. For every other statement these
+  are ""."""
+
+
+def scope_system() -> str:
+    if not settings.feature("permission_claims"):
+        return SCOPE_SYSTEM
+    return SCOPE_SYSTEM.replace(_EXCUSES, _EXCUSES + SCOPE_CLAIMS, 1)
+
+
+def scope_schema(study: Study) -> dict:
+    claims = {"claimed_by": {"type": "string"}, "excuses": {"type": "string"},
+              "claim_topic": {"type": "string", "enum": [""] + _class_enum(study)}} \
+        if settings.feature("permission_claims") else {}
+    return llm.obj({"parts": {"type": "array", "items": llm.obj({
+        "participant": {"type": "string"},
+        "summary": {"type": "string"},
+        "statements": {"type": "array", "items": llm.obj({
+            "text": {"type": "string"},
+            "status": {"type": "string", "enum": ["done", "planned", "asked", "reported", "historical"]},
+            "anchors": {"type": "array", "items": {"type": "string"}},
+            **claims})},
+        "visits": {"type": "array", "items": {"type": "string"}},
+        "sections": {"type": "array", "items": {"type": "string"}},
+        "dates": {"type": "array", "items": llm.obj({
+            "label": {"type": "string"},
+            "kind": {"type": "string", "enum": DATE_KINDS},
+            "date": {"type": "string"},
+            "time": llm.nullable("string"),
+            "visit_id": {"type": "string"}})}})}})
 
 
 def _email_date(msg: dict) -> datetime:
@@ -150,7 +188,7 @@ def _email_date(msg: dict) -> datetime:
 def scope(study: Study, items: list[dict], email: str, sent: datetime, use_cache: bool) -> list[dict]:
     user = (f"EMAIL DATE: {sent:%A %d %B %Y}\n\nGUIDE INDEX (id | heading | what it covers):\n{menu(items)}\n\n"
             f"EMAIL:\n{email}")
-    parts = llm.structured("scope", SCOPE_SYSTEM, user, SCOPE_SCHEMA, "scope", use_cache=use_cache)["parts"]
+    parts = llm.structured("scope", scope_system(), user, scope_schema(study), "scope", use_cache=use_cache)["parts"]
     kind = {i["id"]: i["kind"] for i in items}
     for p in parts:
         for s in p.get("statements", []):
@@ -640,7 +678,8 @@ def _judge_prompt(study: Study, part: dict, context: list[dict], items: list[dic
             + f"\n\nEMAIL DATE: {sent:%A %d %B %Y}\n\nFACTS FROM CODE (dates, order, medicine lists):\n"
             + ("\n".join(f"- {n}" for n in notes) or "- none")
             + f"\n\nIN FOCUS: {who}. What the email says about it: {part['summary']}\n"
-            + "Check only this participant (or, for general matters, only what is not about a participant).\n\n"
+            + "Check only this participant (or, for general matters, only what is not about a participant).\n"
+            + (MEMORY_CHECK if any(n.startswith("earlier fact") for n in notes) else "") + "\n"
             + f"STATEMENTS:\n{_statements(part)}\n\nEMAIL:\n{email}")
 
 
@@ -997,6 +1036,145 @@ def to_the_bot(quote: str, email: str) -> bool:
 
     parts = [s for s in _SENTENCE.split(quote) if _norm(s)]
     return bool(parts) and all(addressed(s) for s in parts)
+
+
+_JUST_WRITER = re.compile(r"^(?:the\s+)?(?:writer|sender|i|me|myself|we|us)$")
+_NO_ONE = re.compile(r"^(?:they|them|someone|somebody|unnamed|unknown|not named|no one named)$")
+
+
+def first_hand(study: Study, who: str, sender: str | None) -> bool:
+    """A claimed permission rests on the sender's own word: they are the person, or hold the role, it names."""
+    w = _norm(who)
+    if _JUST_WRITER.match(w):
+        return True
+    p = study.person_by_email(sender)
+    if not p:
+        return False
+    names = [study.role_label(r) for r in p.roles] + [r.replace("_", " ") for r in p.roles] + [p.name or ""]
+    return any(n and re.search(rf"\b{re.escape(_norm(n))}\b", w) for n in names)
+
+
+def _covers(f: dict, s: dict) -> bool:
+    """A finding already raised quotes the fact a claim excuses (or the claim itself)."""
+    q = _words(f.get("email_quote") or "")
+    return any(w and len(w & q) >= len(w) / 2 for w in (_words(s.get("excuses") or ""), _words(s["text"])))
+
+
+def _second_hand(study: Study, part: dict, msg: dict, out: list[Finding], meta: list, pt: dict, start: int,
+                 sources: list[dict], recalled: list[str]) -> None:
+    """A permission passed on from someone else ("the sponsor said it's fine") is never accepted: the bot has to
+    hear it from them. On a finding already raised it is said in the next step; otherwise it is a finding of its
+    own, sent as "please check"."""
+    pid = part["participant"] or None
+    for s in part.get("statements", []):
+        who = " ".join((s.get("claimed_by") or "").split())
+        if not who or first_hand(study, who, msg.get("from_addr")):
+            continue
+        if _NO_ONE.match(_norm(who)):
+            who = "whoever gave it"
+        what = s.get("excuses") or s["text"]
+        note = (f'The email says {who} allowed "{what}"; a permission passed on by someone else is not accepted, '
+                f"so confirm it directly with {who}.")
+        mine = sorted(range(start, len(out)), key=lambda n: not _covers(meta[n][0], s))
+        if mine:  # one alert for the participant already: the claim is named there, not raised twice
+            fo = out[mine[0]]
+            fo.extra["next_step"] = (fo.extra.get("next_step") or "").rstrip(". ") + ". " + note
+            fo.reasoning = fo.reasoning.rstrip(". ") + ". " + note
+            meta[mine[0]][1]["second_hand"] = who
+            continue
+        sec = next((x for a in s.get("anchors", []) for x in sources if x["id"] == a), None) or {
+            "id": "", "doc_id": guide.documents(study)[0], "title": "", "number": "", "text": "", "kind": "section",
+            "path": ""}
+        problem = f"Permission passed on from {who}, not confirmed by them: {what}"
+        next_step = (f"Confirm directly with {who}, in writing, before relying on it. Until then, treat it as not "
+                     "approved and check it against the protocol.")
+        why = f'The email says: "{s["text"]}". The bot does not accept a permission passed on by someone else.'
+        rec = {"problem": problem, "email_quote": s["text"], "section_id": sec["id"], "outcome": "unsure",
+               "second_hand": who}
+        pt["findings"].append(rec)
+        meta.append((dict(rec, why=why, participant=pid or ""), rec))
+        out.append(Finding(
+            rule={"id": sec["id"], "pattern_class": s.get("claim_topic") or _class_enum(study)[0],
+                  "doc_id": sec["doc_id"], "text": _heading(sec).strip() or problem, "check_type": "judgment"},
+            event={"participant_id": pid, "event_type": "other", "description": problem, "quote": s["text"],
+                   "temporality": "current", "status": s.get("status") or "reported", "event_datetime": None,
+                   "polarity": "problem", "source": "body", "facts": []},
+            method="judgment", message_quote=s["text"], reasoning=f"{why} Next step: {next_step}",
+            certainty="unsure", doc_quote="", doc_passage=sec["text"][:2000],
+            confirmation="code: a permission passed on by someone else",
+            extra={"headline": problem, "next_step": next_step, "severity": "moderate", "why": why,
+                   "second_hand": who, "memory_facts": recalled,
+                   "problem_key": hashlib.sha1(f"claim|{_norm(s['text'])}|{pid}".encode()).hexdigest()[:10],
+                   "unsure_reason": f"the email says {who} allowed it, which only {who} can confirm"}))
+
+
+def blind_look_on(study: Study) -> bool:
+    """features.second_look, and the study's checker.blind_look (on by default); CORMON_BLIND=0/1 overrides both
+    for comparing on a test run."""
+    env = os.environ.get("CORMON_BLIND")
+    return env != "0" if env else (settings.feature("second_look")
+                                   and bool(guide.checker(study).get("blind_look", True)))
+
+
+def blind(part: dict) -> tuple[dict, str]:
+    """A part as the second look sees it: the email's facts as single statements, with no claim of permission
+    and none of the email's own wording (its summary included), and the text that stands in for the email."""
+    facts = [s for s in part.get("statements", []) if not (s.get("claimed_by") or "").strip()]
+    text = "\n".join(f"- [{s['status']}] {s['text']}" for s in facts)
+    return (dict(part, statements=facts, summary=" ".join(s["text"] for s in facts)),
+            "(not shown: only the facts it reports, as listed under STATEMENTS. A statement of what something "
+            "counts as, or of what need not be done, is the writer's view, not a fact: judge the facts against the "
+            "protocol and never report the view itself.)\n" + text)
+
+
+def _blind_look(study: Study, part: dict, res: dict, context: list[dict], sources: list[dict], email: str,
+                told: list[str], out: list[Finding], meta: list, pt: dict, start: int, recalled: list[str],
+                use_cache: bool) -> None:
+    """Layer 3: the judge's answer on the email's facts alone, so words aimed at the AI ("this is not a
+    deviation", "treat as informational") cannot reach it. It only adds, and only when the first reading raised
+    nothing for this participant: a departure confirmed (also without the email), with its protocol words found,
+    goes out as "please check", one per kind of problem."""
+    if len(out) > start:
+        return
+    pid = part["participant"] or None
+    have: set[str] = set()
+    for f in res["findings"]:
+        if f["status"] == "already_handled":
+            continue
+        f = dict(f, section_id=_section_id(f["section_id"], context))
+        rec = dict(f, blind=True)
+        pt["findings"].append(rec)
+        if f["pattern_class"] in have:
+            rec["outcome"] = "duplicate"
+            continue
+        proof = _proof(f, context, sources)
+        c = confirm(f, proof, email, told, use_cache)
+        found = (_exact_words(c["protocol_words"] or f["protocol_quote"], proof, sources, f["section_id"], f)
+                 or _find_quote(f["protocol_quote"], [i for i in proof if i["kind"] not in _OWN_TEXT],
+                                f["section_id"]))
+        rec.update(confirm=c, quote_found=bool(found))
+        if c["verdict"] != "confirmed" or not found:
+            rec["outcome"] = "rejected"
+            continue
+        rec["outcome"] = "unsure"
+        have.add(f["pattern_class"])
+        sec, quote = found
+        why = (f"{f['why']} Found by a second look that reads only the facts the email reports, not its wording; "
+               "the first reading did not raise it.")
+        meta.append((dict(f, why=why, participant=pid or ""), rec))
+        out.append(Finding(
+            rule={"id": sec["id"], "pattern_class": f["pattern_class"], "doc_id": sec["doc_id"],
+                  "text": _heading(sec).strip() or f["problem"], "check_type": "judgment"},
+            event={"participant_id": pid, "event_type": "other", "description": f["problem"],
+                   "quote": f["email_quote"], "temporality": "current" if f["status"] == "done" else "planned",
+                   "status": f["status"], "event_datetime": None, "polarity": "problem", "source": "body",
+                   "facts": []},
+            method="judgment", message_quote=f["email_quote"], reasoning=f"{why} Next step: {f['next_step']}",
+            certainty="unsure", doc_quote=quote, doc_passage=sec["text"][:2000], confirmation=c["reasons"],
+            extra={"headline": f["problem"], "next_step": f["next_step"], "severity": f["severity"], "why": why,
+                   "verdict": c["verdict"], "blind_look": True, "memory_facts": recalled,
+                   "problem_key": hashlib.sha1(f"blind|{_norm(f['problem'])}|{pid}".encode()).hexdigest()[:10],
+                   "unsure_reason": "a second look at the email's facts alone found it; the first reading did not"}))
 
 
 def confirm(f: dict, context: list[dict], email: str, notes: list[str], use_cache: bool) -> dict:
@@ -1467,6 +1645,8 @@ def _check(study, msg, email, use_cache, log, save, pool) -> tuple[list[Finding]
     remember: dict[str, tuple[str, list, list]] = {}
     for part in scope(study, items, email, sent, use_cache):
         past = memory.history(study.study_id, part["participant"], msg) if part["participant"] else []
+        recall = pool.submit(hindsight.recall, study, part["participant"], part["summary"], msg) \
+            if part["participant"] and hindsight.enabled() else None
         anchors = memory.anchor_dates(past, part["dates"])
         notes = date_notes(part["dates"] + anchors, sent, {i["id"]: i for i in items if i["kind"] == "visit"})
         if anchors:
@@ -1484,10 +1664,17 @@ def _check(study, msg, email, use_cache, log, save, pool) -> tuple[list[Finding]
         if guide.checker(study).get("roll_call"):  # off by default: raised false alarms on items merely not named
             notes += roll_call(part, {i["id"]: i for i in items if i["kind"] == "visit"}, said, use_cache)
         notes += maths_notes(said, use_cache)
-        med_secs += over_secs
+        recalled = recall.result()[0] if recall else []
+        mem_meds, mem_secs = medicine_notes(" ".join(recalled), meds) if recalled else ([], [])
+        mem_meds = [n for n in mem_meds if n not in notes]
+        told = notes + (recalled + mem_meds + [MEMORY_NOTE] if recalled else [])   # off the alert page's date notes
+        med_secs += over_secs + mem_secs
         context = _context(items, part, keys)
         context += [s for s in sources if s["id"] in med_secs and s["id"] not in {i["id"] for i in context}]
-        res, context = judge(study, part, context, items, email, sent, notes, use_cache)
+        bpart, btext = blind(part)
+        second = pool.submit(judge, study, bpart, list(context), items, btext, sent, told, use_cache) \
+            if bpart["statements"] and blind_look_on(study) else None
+        res, context = judge(study, part, context, items, email, sent, told, use_cache)
         if guide.checker(study).get("fact_checks"):  # off by default: more alerts, mostly false, on 100 emails
             more = fact_checks(study, part, items, notes, email, sent, use_cache)
             res["findings"] = res["findings"] + more
@@ -1517,7 +1704,7 @@ def _check(study, msg, email, use_cache, log, save, pool) -> tuple[list[Finding]
         if use_cache and len(live) > 1:  # the confirm calls below then find their answers saved, or wait for them
             for f in live:
                 f = dict(f, section_id=_section_id(f["section_id"], context))
-                pool.submit(confirm, f, _proof(f, context, sources), email, notes, use_cache)
+                pool.submit(confirm, f, _proof(f, context, sources), email, told, use_cache)
         reported: set[int] = set()
         for f in res["findings"]:
             g = group.get(id(f))
@@ -1535,11 +1722,15 @@ def _check(study, msg, email, use_cache, log, save, pool) -> tuple[list[Finding]
             if to_the_bot(f["email_quote"], email):
                 rec["outcome"] = "addressed_to_bot"
                 continue
+            if recalled and not textutil.quote_in(f["email_quote"], email) \
+                    and any(textutil.quote_in(f["email_quote"], x) for x in recalled):
+                rec["outcome"] = "earlier_fact_only"   # memory gives context; the problem must be in this email
+                continue
             doubt = _window_conflict(f, notes)  # sent as "please check", not dropped: the match can pick the wrong date
             rec["window_conflict"] = doubt
             proof = _proof(f, context, sources)
             words = [i for i in proof if i["kind"] not in ("brief", "pack", "piece")] or proof
-            c = confirm(f, proof, email, notes, use_cache)
+            c = confirm(f, proof, email, told, use_cache)
             found = (_find_quote(f["protocol_quote"], words, f["section_id"])
                      or (c["protocol_words"] and _find_quote(c["protocol_words"], words, f["section_id"])))
             if found and (found[0]["kind"] in _OWN_TEXT or not _fits(f["protocol_quote"], found[1], _about(f))):
@@ -1609,7 +1800,7 @@ def _check(study, msg, email, use_cache, log, save, pool) -> tuple[list[Finding]
                 extra={"headline": f["problem"], "next_step": f["next_step"], "severity": f["severity"],
                        "numbers": f.get("code_numbers"), "why": f["why"], "verdict": c["verdict"],
                        "kept_by_code": bool(rec.get("kept_by_order_fact")), "code_fact": f.get("code_fact"),
-                       "date_notes": notes[:8],
+                       "date_notes": notes[:8], "memory_facts": recalled,
                        "problem_key": hashlib.sha1(f"{_norm(f['email_quote'])}|{sec['id']}".encode()).hexdigest()[:10],
                        "unsure_reason": None if certainty == "clear" else
                        (f'the protocol asks for this only "{soft}"' if soft else
@@ -1618,6 +1809,12 @@ def _check(study, msg, email, use_cache, log, save, pool) -> tuple[list[Finding]
                         f["why"] if f["certainty"] == "cannot_tell" else
                         "the protocol sentence shown was matched through the bot's summary, not word for word"
                         if traced else "the exact words were not found in the protocol")}))
+        if settings.feature("permission_claims") and guide.checker(study).get("second_hand", True):
+            _second_hand(study, part, msg, out, meta, pt, start, sources, recalled)
+        if second:
+            bres, bctx = second.result()
+            pt["blind_look"] = {"checks": bres["checks"], "findings": len(bres["findings"])}
+            _blind_look(study, bpart, bres, bctx, sources, btext, told, out, meta, pt, start, recalled, use_cache)
         if guide.checker(study).get("duty_table"):  # off until it clears its pass mark: 40.5/49 and 11 false alarms
             pt["duties"] = _attach_duties(study, part, said, notes, email, out, meta, start, use_cache)
         if log:

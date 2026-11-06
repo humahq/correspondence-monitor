@@ -1288,6 +1288,27 @@ def test_the_gate_runs_every_set_when_matching_settings_change():
     assert gate._llm_block("web:\n  host: a\n") == gate._llm_block("web:\n  host: b\n")
 
 
+def test_a_merge_passes_its_pull_requests_kept_answers_on_and_each_run_says_what_it_cost(tmp_path, monkeypatch):
+    from cormon import gate, llm
+
+    out = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+    monkeypatch.setattr(gate, "changed_files", lambda base: ["cormon/answers.py"])
+    monkeypatch.setattr(gate, "llm_settings_changed", lambda base: False)
+    monkeypatch.setattr(gate, "plan", lambda files, changed: ["questions"])
+    monkeypatch.setattr(gate, "same_code_passed", lambda: 4217)
+    gate.main(["plan", "--reuse-pr"])
+    assert "sets=[]" in out.read_text() and 'kept_sets=["questions"]' in out.read_text()
+    assert "from_run=4217" in out.read_text()
+
+    monkeypatch.setattr(llm, "USAGE", {"m": {"calls": 3, "input": 2_500_000, "cached_input": 1_000_000,
+                                             "output": 40_000}})
+    monkeypatch.setitem(llm.REUSED, "answers", 97)
+    text = gate.summary_md({"set": "questions", "what": "q", "passed": True, "below": [],
+                            "scores": {"wrong": 0.01}, "ai_use": gate.ai_use()})
+    assert "3 paid calls (2.5 M input tokens" in text and "97 answers taken free" in text
+
+
 def test_on_the_server_the_name_is_the_admins_own_sign_in(monkeypatch):
     from cormon import cli
 
@@ -1811,7 +1832,8 @@ def test_every_code_file_is_tied_to_a_test_set_or_known_to_need_none():
     cfg = gate.gates()
     tied = {p for s in cfg["sets"].values() for p in gate._flat(s["when"])} | set(cfg["all_when"])
     none_needed = {  # operator tools, records, alerts and pages: covered by the code tests only
-        "__init__", "adminview", "backup", "cli", "compare", "corrections", "coverage", "digest", "drift", "export",
+        "__init__", "adminview", "backup", "chatdemo", "cli", "compare", "corrections", "coverage", "digest", "drift",
+        "export",
         "notes", "prune", "senders", "settings", "stuck", "timing", "watchdog", "weblogin", "webview",
         "outbox",   # its AI set (the trick emails) is left out for now
         "hindsight"}  # off in the AI sets until its own memory set (docs/hindsight-plan.md, step 8)

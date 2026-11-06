@@ -1,4 +1,5 @@
-"""OpenAI wrapper: structured JSON output, temperature 0, cached by input hash.
+"""OpenAI (and Claude or Gemini, for a model whose name starts "claude" or "gemini") wrapper: structured JSON
+output, temperature 0, cached by input hash.
 
 The cache is what makes the same message reach the same judgment on repeated
 runs; `use_cache=False` forces a fresh call (operator re-run).
@@ -34,8 +35,57 @@ def client():
     return _client
 
 
+_gemini = None
+
+
+def gemini_client():
+    """Gemini through Google's OpenAI-compatible endpoint: the same calls and JSON schemas as OpenAI's."""
+    global _gemini
+    if _gemini is None:
+        from openai import OpenAI
+
+        if not os.environ.get("GEMINI_API_KEY"):
+            raise RuntimeError("GEMINI_API_KEY is not set (put it in .env)")
+        _gemini = OpenAI(base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                         api_key=os.environ["GEMINI_API_KEY"],
+                         timeout=settings.get("llm.timeout_seconds", 90), max_retries=0)
+    return _gemini
+
+
+_anthropic = None
+
+
+def anthropic_client():
+    global _anthropic
+    if _anthropic is None:
+        from anthropic import Anthropic
+
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise RuntimeError("ANTHROPIC_API_KEY is not set (put it in .env)")
+        _anthropic = Anthropic(timeout=settings.get("llm.timeout_seconds", 90), max_retries=0)
+    return _anthropic
+
+
+def _claude(model: str, system: str, user: str, schema: dict, effort: str | None):
+    """One Claude call whose answer must fit the schema, at the same effort as the OpenAI models'. Returns (data,
+    usage in the OpenAI shape the token counts read). Current Claude models take no temperature."""
+    from types import SimpleNamespace
+
+    config: dict[str, Any] = {"format": {"type": "json_schema", "schema": schema}}
+    if effort:
+        config["effort"] = effort
+    resp = anthropic_client().messages.create(model=model, max_tokens=32000, system=system,
+                                              messages=[{"role": "user", "content": user}], output_config=config)
+    data = json.loads(next(b.text for b in resp.content if b.type == "text"))
+    u = resp.usage
+    cached = getattr(u, "cache_read_input_tokens", 0) or 0
+    return data, SimpleNamespace(prompt_tokens=u.input_tokens + cached, completion_tokens=u.output_tokens,
+                                 prompt_tokens_details=SimpleNamespace(cached_tokens=cached))
+
+
 # tokens used by calls that reached the model (cache hits use none), by model: for cost reports
 USAGE: dict[str, dict[str, int]] = {}
+REUSED = {"answers": 0}   # calls answered from the cache instead
 
 
 def _count(model: str, usage) -> None:
@@ -96,13 +146,14 @@ def structured(
         json.dumps([model, temperature, system, user, schema] + ([effort] if effort else [])
                    + ([f"sample {_sample.get()}"] if _sample.get() else []), sort_keys=True).encode()
     ).hexdigest()
-    log = functools.partial(ailog.record, task, "chat.completions", model,
+    log = functools.partial(ailog.record, task, "messages" if model.startswith("claude") else "chat.completions", model,
                             {"effort": effort} if reasoning else {"temperature": temperature, "seed": seed},
                             {"system": system, "user": user, "schema_name": schema_name, "schema": schema})
     mine = None
     while use_cache:
         row = db.q1("SELECT response FROM llm_cache WHERE key=?", (key,))
         if row:
+            REUSED["answers"] += 1
             timing.llm_call(task, model, 0, cached=True)
             log(row["response"], cached=True)
             return json.loads(row["response"])
@@ -194,8 +245,12 @@ def _call(task, model, system, user, schema, schema_name, key, temperature, seed
     began = time.perf_counter()
     for attempt in range(4):
         try:
-            resp = client().chat.completions.create(**kwargs)
-            data = json.loads(resp.choices[0].message.content)
+            if model.startswith("claude"):
+                data, usage = _claude(model, system, user, schema, effort)
+                resp = type("Resp", (), {"usage": usage})
+            else:
+                resp = (gemini_client() if model.startswith("gemini") else client()).chat.completions.create(**kwargs)
+                data = json.loads(resp.choices[0].message.content)
             _count(model, getattr(resp, "usage", None))
             break
         except Exception as e:  # network, rate limit, malformed output
@@ -223,6 +278,7 @@ def decide(task: str, input: str | list[dict], questions: list[dict], *, use_cac
     if use_cache:
         row = db.q1("SELECT response FROM llm_cache WHERE key=?", (key,))
         if row:
+            REUSED["answers"] += 1
             timing.llm_call(task, model, 0, cached=True)
             log(row["response"], cached=True)
             return json.loads(row["response"])

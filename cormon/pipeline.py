@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import random
 import re
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from dateutil import parser as dtparser
@@ -502,12 +504,51 @@ def first_writer_while_absent(msg: dict) -> str | None:
 def process(msg_id: int, *, use_cache: bool = True, rerun: bool = False, actor: str = "system") -> dict:
     timing.start(msg_id)
     status = "error"
+    stop = (lambda: None) if rerun else _typing(msg_id)
     try:
         summary = _process(msg_id, use_cache=use_cache, rerun=rerun, actor=actor)
         status = "processed"
         return summary
     finally:
+        stop()
         timing.finish(status)
+
+
+TYPING_SECONDS = 4   # when the chat does not say how long it shows "is typing" (Mattermost: 5 s by default)
+
+
+def _typing(msg_id: int):
+    """"cormon is typing..." while the bot works on a chat message sent to it, where the chat can show it
+    (Mattermost), until the bot posts there or is done. Returns the function that stops it."""
+    from .channels import teams_channel
+
+    try:
+        msg = capture.message(msg_id)
+        m = re.fullmatch(r"teams:(spaces/[^/]+)/threads/([^/]+)", msg.get("thread_key") or "")
+        chat = teams_channel() if m and capture.turn(msg) in ("direct", "addressed") else None
+        if not hasattr(chat, "typing"):
+            return lambda: None
+    except Exception:
+        return lambda: None
+    room, root = m.group(1), m.group(2)
+    in_thread = not (msg.get("external_id") or "").endswith(f"/{root}.{root}")   # a reply: they are in the thread
+    since, started, done = db.now(), time.time(), threading.Event()
+
+    def answered() -> bool:
+        return bool(db.q1("SELECT 1 FROM outbox WHERE channel='teams' AND status='sent' AND purpose!='chat_received'"
+                          " AND created_at>=? AND json_extract(meta, '$.target.space')=?", (since, room)))
+
+    def beat():
+        every = getattr(chat, "typing_seconds", None) or TYPING_SECONDS
+        while not done.is_set() and not answered():
+            try:
+                chat.typing(room, root if in_thread else None, since=started)
+            except Exception:
+                return
+            done.wait(every)
+
+    threading.Thread(target=beat, daemon=True).start()
+    return done.set
 
 
 def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
@@ -754,7 +795,7 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
                 numbers=f.extra.get("numbers"), detail=said[id(f)].get("detail"),
                 why=f.extra.get("why"), verdict=f.extra.get("verdict"), kept_by_code=f.extra.get("kept_by_code"),
                 code_fact=f.extra.get("code_fact"), date_notes=f.extra.get("date_notes"),
-                hours_until=lead["hours"], triage_facts=lead["facts"],
+                memory_facts=f.extra.get("memory_facts") or None, hours_until=lead["hours"], triage_facts=lead["facts"],
                 additional=[{"rule_id": c["f"].rule["id"], "rule_text": c["f"].rule["text"],
                              "doc_id": c["f"].rule["doc_id"], "doc_title": study.doc(c["f"].rule["doc_id"])["title"],
                              "doc_quote": c["f"].doc_quote, "doc_page": c["f"].doc_page,

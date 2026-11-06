@@ -10,6 +10,7 @@ secrets/
 *.egg-info/
 practice/
 sandbox/
+chat-demo/
 results/
 practice2/
 practice3/

@@ -15,8 +15,9 @@ IMAGE="ghcr.io/vectorize-io/hindsight:1.1.0@sha256:50311d02b4d5d2b7c5242bd336edf
 KEY_FILE="$ROOT/secrets/hindsight_key"
 DOCKER=(docker)
 [ "$(id -u)" = 0 ] || [ "$(uname)" = Darwin ] || DOCKER=(sudo docker)
+[ "${CONTAINER:-}" = podman ] && DOCKER=(podman)   # CONTAINER=podman ./deploy/hindsight.sh, next to the local chat
 
-if ! command -v docker >/dev/null; then
+if [ "${DOCKER[0]}" = docker ] && ! command -v docker >/dev/null; then
   [ "$(uname)" = Linux ] || { echo "install Docker Desktop first" >&2; exit 1; }
   apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io >/dev/null
 fi

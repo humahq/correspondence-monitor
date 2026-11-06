@@ -6,7 +6,7 @@ import hashlib
 import re
 from email.utils import make_msgid
 
-from . import capture, careful, config, db, drafting, items, phi, senders, settings
+from . import capture, careful, config, db, drafting, items, phi, privacy, senders, settings
 from .compliance import records
 from .config import Person, Study
 
@@ -277,6 +277,20 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
             if e["destination"] in ("clearing_list", "digest"):
                 db.audit("routed", entity_type="item", entity_id=it["id"], study_id=study.study_id,
                          destination=e["destination"])
+    facts = [x for it in [item] + others for x in (it["evidence"] or {}).get("memory_facts") or []] \
+        if settings.feature("privacy_check") else []
+
+    def private(body: str, who: list, space: str | None = None) -> bool:
+        """An alert read with patient memory is held for a person when a reader may not hear what it says."""
+        before = privacy.seen({"id": 1 << 62, "channel": "teams", "thread_key": f"teams:{space}/threads/-"},
+                              item["participant_id"]) if facts and space else ""
+        hit = privacy.alert_problem(study, body, facts, who, details=privacy.details_shown([item] + others),
+                                    before=before)
+        if hit:
+            db.audit("alert_held_privacy", entity_type="item", entity_id=item_id, study_id=study.study_id,
+                     readers=sorted({g["id"] for _, g in who}), **hit)
+        return bool(hit)
+
     for entry in entries:
         dest = entry["destination"]
         topic = entry.get("topic", topic_default)
@@ -288,10 +302,13 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
             tpl = drafting.select(topic, axis, "teams", item["tier"])
             _, body = drafting.render(tpl, context(None))
             target = group_thread(msg) or teams_target(study, dest)
+            who = privacy.in_room(study, target["space"]) if facts and target.get("space") else \
+                [("the channel's members", privacy.unknown())]
             created.append(enqueue(
                 purpose=f"teams_{axis}", channel="teams", destination=dest, body=body, item_id=item_id,
                 template_id=tpl["id"], meta={"target": target, "thread_key": item["thread_key"],
                                                 "item_ids": [item_id] + [it["id"] for it in others]},
+                status="held" if private(body, who, target.get("space")) else "queued",
                 study_id=study.study_id, again=force and actor != "system"))
             continue
         if dest == "email":
@@ -314,6 +331,8 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
                     meta["references"] = (msg.get("refs") or []) + [msg["rfc_message_id"]]
                     meta["gmail_thread"] = msg["thread_key"].split(":", 1)[1] if msg["channel"] == "email" else None
                 status = "queued" if (item["send_draft"] or item["kind"] == "out_of_scope") else "held"
+                if private(body, [(a, privacy.group_of(study, a)) for a in [addr] + cc]):
+                    status = "held"
                 created.append(enqueue(
                     purpose=f"email_{axis}", channel="email", destination="email", body=body,
                     subject=subject, item_id=item_id, template_id=tpl["id"],

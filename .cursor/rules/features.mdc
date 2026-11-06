@@ -1,0 +1,13 @@
+---
+description: New features are off on the live bot until John switches them on; how to switch one on
+alwaysApply: true
+---
+
+# New features: off on live until John says so
+
+- Every new feature gets a switch under `features:` in `config/settings.yaml`, set to `false`, and is read with
+  `settings.feature("name")`. With the switch off, the bot must behave exactly as the live version.
+- Add every new feature to the table in `docs/features.md`. The Mattermost demo turns every switch on by itself.
+- When John says "yes, put this feature in the live bot" (or similar), follow the steps in `docs/features.md`:
+  set the switch to `true`, update the table, run the tests, commit with an issue number and push. John runs
+  `deploy/release.sh` himself. Never deploy.
