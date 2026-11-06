@@ -35,6 +35,13 @@ memory:
   # A search slower than this is given up (and logged): the answer goes out without memory.
   search_seconds: 5
 
+# New features, each off on the live bot until John says "yes, put it in the live bot" (docs/features.md).
+# Patient memory's switch is memory.enabled above.
+features:
+  permission_claims: false   # "Dr. Smith said it's fine": a permission passed on by someone else is not accepted
+  second_look: false         # a second reading of the email's facts only, so words aimed at the AI can't hide a problem
+  privacy_check: false       # who may hear what, before an answer or alert using patient memory goes out
+
 llm:
   temperature: 0
   seed: 7
@@ -46,6 +53,7 @@ llm:
     ingest_links: medium
     ingest_brief: medium
     read_confirm: medium
+    privacy_check: medium   # the last check before an answer on a participant: who may hear what
   # The documents are read once by the strong model; every email is read by the fast one.
   models:
     default: gpt-5.4-mini

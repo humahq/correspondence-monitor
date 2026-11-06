@@ -64,8 +64,27 @@ participant's facts only (by tag; facts tagged to nobody or someone else never c
 the answer with who reported it and when, and the answer must say both ("The study coordinator reported on 29 Oct
 2026 that she takes St. John's wort every day"). The message being answered is left out. A search over
 `memory.search_seconds` (5) or an error gives no facts, is logged (`memory_search_failed`) and the answer still goes
-out; every search is logged (`memory_searched`, with the number of facts and seconds). Checking for problems
-(reader, alerts) does not use memory yet.
+out; every search is logged (`memory_searched`, with the number of facts and seconds).
+Alerts too (4 Nov; Eliot, 2 Nov: "even in a group chat" it must relate to everything memory holds, and "censor
+itself before it opens its mouth"): when the reader checks a message about a participant, it searches that
+participant's facts at the same time and gives them to the judge and the second check, with an instruction to
+check every statement against them. The code's prohibited-medicine scan also runs over the earlier facts. A finding
+must still quote this message: one whose quote is only in an earlier fact is dropped (`earlier_fact_only`). The
+facts are kept off the alert page. A message with no earlier facts gets the same prompt as before.
+Before anyone hears an answer or alert that rests on memory, the privacy check (`cormon/privacy.py`,
+`config/privacy.yaml`) compares it with who will read it: an answer is reworded (or the safe reply sent), an alert
+is held for a person. The check on an alert also reads what its details page says (the AI's reasoning, the
+second check, the next step), and an alert with an unlisted reader is held by code.
+Made-up check of the privacy check (`demo/privacy-check`, gpt-5.4-mini, two runs each): after a general rewording
+of the guide, the first 36 cases scored 35/36 and 36/36 (private facts stopped 31/32, normal facts let through
+40/40). A fresh set of 21 written afterwards scored 21/21 and 20/21; its one miss (an outsider in the room) is now
+held by code. The open miss: an STI told to the medical monitor alongside an unrelated rash (once in two runs).
+Made-up check (`demo/memory-alerts`, 9 two-message stories, two runs): with memory, St. John's wort then first
+dose, riluzole started 11 days before randomization, and a prior ALS trial 15 days before baseline were caught in
+both runs; labs drawn after a withdrawal were caught in one run of two; itraconazole (named only loosely in the EDC
+guide, in no protocol medicine list) was missed. The 4 controls (medicine stopped long before, HIV on a permitted
+medicine, stable riluzole, gout) raised nothing. Without memory none of the 5 was caught. The privacy check sent
+all 5 real alert emails to the CRA and held one that named HIV.
 Made-up check (`demo/test-hindsight-answers`, 4 messages in two chats): a group-chat note that 1001-014 takes
 St. John's wort (no date); later, in a private chat, "is any medicine she is on now a problem?". With memory: "Yes.
 The study coordinator reported on 29 Oct 2026 that she takes St. John's wort every day ... a prohibited strong
@@ -185,7 +204,9 @@ Total: about 7 to 8 days.
 
 ## Still open (from the email)
 
-1. Can a fact said in a private chat be used in a group chat?
+1. Can a fact said in a private chat be used in a group chat? Answered by Eliot, 2 Nov: yes, memory is used in
+   every chat, but "there has to be a censorship step at the end": the bot considers who it is speaking to and
+   says only what they may know (built: the privacy check, `cormon/privacy.py`, roles in `config/privacy.yaml`).
 2. Who corrects facts: admins only, or coordinators too?
 3. Are facts kept as long as messages?
 4. Is OpenAI's patient-data agreement (BAA) in place?

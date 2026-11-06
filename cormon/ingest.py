@@ -1369,7 +1369,7 @@ def import_model(src: Path, reason: str, actor: str = "operator", only: list[str
                 cur = c.execute(f"INSERT OR IGNORE INTO main.{tbl} ({names}) SELECT {names} FROM model.{tbl}{where}",
                                 args)
                 counts[tbl] = cur.rowcount
-            for sid in studies if not tables or "rules" in tables else []:
+            for sid in studies if has("state") and (not tables or "rules" in tables) else []:
                 c.execute("INSERT OR REPLACE INTO main.state (key, value) SELECT key, value FROM model.state "
                           "WHERE (key LIKE 'ingest:%' OR key LIKE 'allowances:%') AND key LIKE ?", (f"%{sid}%",))
     finally:

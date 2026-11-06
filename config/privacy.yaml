@@ -1,0 +1,64 @@
+# Who may hear what about a participant (Eliot, Nov 2 and Nov 4). Patient memory (hindsight.py) keeps everything
+# anyone has reported; what the bot says is the control. Before an answer that uses earlier facts goes out, every
+# person who will read it (everyone in the chat room, or the email's recipients) is placed in a group by their study
+# roles, and anything one of them may not hear is taken out and replaced by what is appropriate to say
+# ("please ask the site investigator to review this participant's history"), without the private reason.
+#
+# Eliot, Nov 4: the rule is about who the patient is, not how sensitive the illness is. The sponsor and CRO don't
+# work for the clinic and have no BAA with it, so outside the care team a participant is only their study ID, never
+# a name or anything else that shows who they are. Health facts that bear on how the study is run (HIV often decides
+# eligibility) are fine for them by ID. Once the conversation has shown who the participant is, the bot adds nothing
+# about their health (privacy.py checks what the readers already saw).
+#
+# A person with roles in two groups gets the wider one. Anyone the study does not list (a room member with no study
+# role, an outside address) is `unknown`.
+#
+# A study changes a group, or adds one, by its id with a `privacy:` list in its study.yaml, for example
+#   privacy:
+#     - { id: study_team, roles: [cra, clinops_lead, tester, data_manager] }
+# Group order is from widest to narrowest; `everything: true` means the group may hear anything about a participant,
+# so a room with only those people in it is not checked (no AI call).
+
+# What anyone with a study role may hear, whatever their group.
+shared: >-
+  The study's own disease (ALS) and that the participant takes part in this or an earlier trial; the procedures,
+  tests and scales the protocol requires (for example C-SSRS, ECG, lumbar puncture, safety labs) and whether they
+  were done, by study ID.
+
+groups:
+  - id: care_team
+    label: site care team
+    roles: [pi, sub_investigator, crc]
+    everything: true
+    may_hear: >-
+      Anything about a participant, including who they are: diagnoses, history, results, medicines, adverse events
+      and what other site staff reported.
+
+  - id: safety
+    label: safety reviewers
+    roles: [medical_monitor, pv_backup, safety_on_call]
+    may_hear: >-
+      By study ID only, never who the participant is: what is needed to review the participant's safety on the
+      study: adverse events and serious adverse events, their dates, severity, cause, treatment and outcome, and
+      the diagnoses, results, medicines and habits (alcohol, drugs) that bear on them. Never facts about relatives
+      or other people, or personal and family matters; not conditions or history unrelated to a safety question.
+
+  - id: study_team
+    label: sponsor and CRO study team
+    roles: [cra, clinops_lead, tester]
+    may_hear: >-
+      By study ID only, never who the participant is: what is needed to run the study: visit dates and windows;
+      eligibility and the facts that decide it; health facts that bear on how the study is run or on the
+      participant's safety in it, such as a diagnosis, its history and treatment, a result, a medicine and why it
+      is taken, when the protocol, a drug interaction, a safety check, a study procedure or a report the protocol
+      requires makes it matter, however sensitive it is (for example HIV or hepatitis status, mental health); deviations;
+      consent and withdrawal status; that a reportable event happened (an adverse event, a pregnancy, a hospital
+      stay), what caused it and what the protocol says to do. Never facts about relatives or other people, or
+      personal and family matters (relationships, family events or arguments, who knows what), even inside a
+      sentence they may otherwise hear; and not health facts with no bearing on the study.
+
+unknown:
+  label: someone the study does not list
+  may_hear: >-
+    Nothing about any participant: not their study ID, visits, dates, health, history or results. Study rules
+    from the documents only.

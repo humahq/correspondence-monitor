@@ -74,6 +74,8 @@ sets:
       - cormon/conversation.py
       - cormon/outcheck.py
       - cormon/careful.py
+      - cormon/privacy.py
+      - config/privacy.yaml
       - cormon/ingest.py
       - cormon/config.py
       - cormon/db.py

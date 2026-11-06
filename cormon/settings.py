@@ -49,6 +49,13 @@ def get(path: str, default: Any = None) -> Any:
     return node
 
 
+def feature(name: str) -> bool:
+    """A new feature's switch (features: in settings.yaml, docs/features.md): off unless switched on.
+    CORMON_TEST_FEATURES (names separated by commas, or "all") switches features on for a test run."""
+    wanted = {x.strip() for x in os.environ.get("CORMON_TEST_FEATURES", "").split(",") if x.strip()}
+    return bool(get(f"features.{name}", False)) or name in wanted or "all" in wanted
+
+
 def resolve(rel: str | Path) -> Path:
     p = Path(rel)
     return p if p.is_absolute() else ROOT / p

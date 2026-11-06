@@ -126,6 +126,15 @@ def _person(d: dict) -> Person:
     )
 
 
+def _chat_rooms(raw: dict) -> dict:
+    """The study's chat rooms: study.yaml's, or with a local Mattermost the rooms mattermost.rooms gives it
+    ({study_channel: {space: spaces/<id>, name: ...}}), so the demo never posts to the real rooms."""
+    teams = raw.get("teams", {}) or {}
+    if settings.get("channels.teams") != "mattermost":
+        return teams
+    return dict((settings.get("mattermost.rooms") or {}).get(raw["study_id"]) or {})
+
+
 def load_study(path: Path) -> Study:
     raw = load_yaml(path)
     return Study(
@@ -140,7 +149,7 @@ def load_study(path: Path) -> Study:
         sites=raw.get("sites", []),
         people=[_person(p) for p in raw.get("people", [])],
         pattern_classes=raw.get("pattern_classes", []),
-        teams=raw.get("teams", {}) or {},
+        teams=_chat_rooms(raw),
         triage=raw.get("triage", []) or [],
         dir=path.parent,
         raw=raw,
@@ -205,7 +214,8 @@ def _rel(p: Path) -> str:
 
 
 # What the release gate tests (CFG-02): on the live copy these change only through GitHub and deploy/release.sh.
-TESTED_FILES = ("config/triage.yaml", "config/routing.yaml", "config/templates.yaml", "config/careful.yaml")
+TESTED_FILES = ("config/triage.yaml", "config/routing.yaml", "config/templates.yaml", "config/careful.yaml",
+                "config/privacy.yaml")
 TESTED_SETTINGS = ("llm", "matching")
 GATED = ("{} changes what the release gate tests (CFG-02), so on the live bot it changes only through GitHub: "
          "commit it, let the gate pass, then deploy/release.sh puts it in place")

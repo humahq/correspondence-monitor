@@ -878,6 +878,12 @@ def cmd_test(args):
     sys.exit(testbench.main(args.folder, args.out, args.study))
 
 
+def cmd_chat_demo(args):
+    """Run the bot on the local Mattermost (the cormon-chat repo), in its own copy: nothing real is read or sent."""
+    from . import chatdemo
+    sys.exit(chatdemo.main(args.chat, args.fresh, args.team))
+
+
 def cmd_compare(args):
     """Score the same test folder three ways: the bot's rules, the full documents, and a plain rule list."""
     from . import compare
@@ -1197,6 +1203,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("folder"); s.add_argument("--out", help="folder for results.csv and summary.json")
     s.add_argument("--study", help="study id the messages are about (default: the first study)")
     s.set_defaults(fn=cmd_test)
+
+    s = sub.add_parser("chat-demo", help="run the bot on the local Mattermost (cormon-chat), in its own copy")
+    s.add_argument("--chat", default="~/Documents/cormon-chat", help="the cormon-chat repo (default: %(default)s)")
+    s.add_argument("--team", help="the Mattermost team, one per customer demo (default: the team in bot.yaml)")
+    s.add_argument("--fresh", action="store_true", help="start the team's demo database again (forgets its messages)")
+    s.set_defaults(fn=cmd_chat_demo)
 
     s = sub.add_parser("compare", help="score a test folder against the rules, the full documents and a rule list")
     s.add_argument("folder"); s.add_argument("--out", help="folder for table.txt, per_case.csv and summary.json")

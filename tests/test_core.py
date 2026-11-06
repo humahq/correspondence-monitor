@@ -704,6 +704,132 @@ def test_google_chat_reads_spaces_and_direct_messages_and_posts_alerts(monkeypat
     assert chat_text("<p>a</p><p>b</p>") == "a\n\nb"
 
 
+class _FakeMattermost:
+    def __init__(self, posts):
+        self.posts, self.posted = posts, []
+
+    def _reply(self, data):
+        from types import SimpleNamespace
+        return SimpleNamespace(json=lambda: data, raise_for_status=lambda: None, status_code=200, content=b"")
+
+    def get(self, url, params=None, timeout=None):
+        path = url.split("/api/v4", 1)[1]
+        if path == "/users/me":
+            return self._reply({"id": "bot", "username": "cormon"})
+        if path.startswith("/users/me/teams/"):
+            return self._reply([{"id": "S1", "type": "P"}, {"id": "dm1", "type": "D"}])
+        if path == "/users/me/teams":
+            return self._reply([{"id": "team"}])
+        if path.startswith("/users/"):
+            uid = path.rsplit("/", 1)[1]
+            return self._reply({"id": uid, "email": f"{uid}@demo.local", "first_name": uid.upper()})
+        cid = path.split("/")[2]
+        return self._reply({"posts": {p["id"]: p for p in self.posts.get(cid, [])}})
+
+    def post(self, url, json=None, timeout=None, **kw):
+        self.posted.append((url, json))
+        return self._reply(dict(json, id="new1") if isinstance(json, dict) else {"id": "dm9"})
+
+
+def test_mattermost_reads_rooms_and_direct_chats_named_like_google_chat(monkeypatch):
+    import time
+    from cormon import config, settings
+    from cormon.channels.mattermost import MattermostChannel
+
+    study = config.study("NCT04098666")
+    monkeypatch.setattr(study, "teams", {"study_channel": {"space": "spaces/S1"}})
+    monkeypatch.setattr(config, "studies", lambda: {study.study_id: study})
+    people = {"crc@demo.local": "rohit@site.org"}
+    real = settings.get
+    monkeypatch.setattr(settings, "get", lambda k, d=None: people if k == "mattermost.people" else real(k, d))
+    db.set_state("mattermost_since", "1791800000000")
+    post = lambda pid, user, t, **kw: dict({"id": pid, "channel_id": "S1", "user_id": user, "create_at": t,
+                                            "message": "BP 168/92, randomizing at 3pm"}, **kw)
+    fake = _FakeMattermost({
+        "S1": [post("p1", "crc", 1791800300000), post("p2", "bot", 1791800400000),
+               post("p3", "pi", 1791800500000, root_id="p1", message="@cormon is that ok?"),
+               post("p4", "pi", 1791800600000, delete_at=1791800700000)],
+        "dm1": [post("d1", "cra", 1791800800000, channel_id="dm1")]})
+    got = MattermostChannel(session=fake, url="http://mm").fetch()
+    assert [i.external_id for i in got] == ["spaces/S1/messages/p1.p1", "spaces/S1/messages/p1.p3",
+                                            "spaces/S1/messages/p4.p4", "spaces/dm1/messages/d1.d1"]
+    assert got[0].visibility == "channel" and got[0].study_id == "NCT04098666" and got[0].from_addr == "rohit@site.org"
+    assert got[1].thread_ref == got[0].thread_ref == "spaces/S1/threads/p1" and got[1].reply_to_external == got[1].thread_ref
+    assert got[1].headers == {"_cormon_mentions": ["cormon"], "_cormon_to_bot": True}
+    assert got[2].deleted_at and got[3].visibility == "direct" and got[3].from_addr == "cra@demo.local"
+
+    res = MattermostChannel(session=fake, url="http://mm").send({
+        "body": '<p><b>Please check</b> #3 · <a href="https://x/items/3">details</a></p>',
+        "meta": {"target": {"space": "spaces/S1", "thread": "spaces/S1/threads/p1"}}})
+    url, body = fake.posted[0]
+    assert url.endswith("/api/v4/posts") and body["channel_id"] == "S1" and body["root_id"] == "p1"
+    assert body["message"] == "**Please check** #3 · [details](https://x/items/3)"
+    assert res["external_ref"] == "spaces/S1/messages/p1.new1"        # a reply in the thread p1 started
+
+    assert MattermostChannel(session=fake, url="http://mm").direct_space("ROHIT@site.org") == "spaces/dm9"
+    assert fake.posted[-1] == ("http://mm/api/v4/channels/direct", ["bot", "crc@demo.local"])
+    monkeypatch.setattr(settings, "get", lambda k, d=None: "other-customer" if k == "mattermost.team" else real(k, d))
+    assert MattermostChannel(session=fake, url="http://mm").fetch() == []    # another team's demo: not read
+    mm = MattermostChannel(session=fake, url="http://mm")
+    mm.typing("spaces/S1", "p1")
+    assert fake.posted[-1] == ("http://mm/api/v4/users/bot/typing", {"channel_id": "S1", "parent_id": "p1"})
+    n, started = len(fake.posted), time.time()
+    mm.send({"purpose": "chat_received", "body": "One moment", "meta": {"target": {"space": "spaces/S1"}}})
+    mm.typing("spaces/S1", since=started)                                  # the quick receipt: still typing
+    mm.send({"purpose": "question_answer", "body": "Days 105-119", "meta": {"target": {"space": "spaces/S1"}}})
+    mm.typing("spaces/S1", since=started)                                  # answered: no more typing
+    assert [u.rsplit("/", 1)[1] for u, _ in fake.posted[n:]] == ["posts", "typing", "posts"]
+
+
+def test_the_demo_page_lists_the_teams_and_makes_safe_team_names(monkeypatch, tmp_path):
+    from cormon import chatdemo
+
+    assert chatdemo.slug("Acme Pharma") == "acme-pharma-demo"
+    assert chatdemo.slug("  Big Co. demo ") == "big-co-demo" and chatdemo.slug("!!!") == ""
+    (tmp_path / "bot.yaml").write_text("team: huma-demo\n")
+    demo = chatdemo.Demo(tmp_path, tmp_path)
+    monkeypatch.setattr(demo, "teams", lambda: [{"name": "huma-demo", "label": "Huma demo"},
+                                                {"name": "x-demo", "label": "<b>X</b>"}])
+    page = demo.page()
+    assert "The bot is here" in page and 'value="x-demo"' in page and "&lt;b&gt;X&lt;/b&gt;" in page
+    assert "crc-x," in page and "crc, pi" in page                       # each team's own logins
+
+    bot = {"team": "huma-demo", "people": {"cra@demo.local": "cra@site.org"}}
+    assert chatdemo.people(bot, "huma-demo") == {"cra@demo.local": "cra@site.org"}
+    assert chatdemo.people(bot, "acme-pharma-demo") == {"cra-acme-pharma@demo.local": "cra@site.org"}
+    assert chatdemo.tag("very-long-customer-name-demo", "huma-demo") == "-very-long-c"
+    assert len("medmonitor" + chatdemo.tag("very-long-customer-name-demo", "huma-demo")) <= 22
+
+
+def test_the_bot_shows_typing_while_it_works_on_a_chat_message_to_it(monkeypatch):
+    import time
+    from cormon import capture, channels, pipeline
+
+    shown = []
+    chat = type("Chat", (), {"typing": lambda self, room, root, since=None: shown.append((room, root))})()
+    monkeypatch.setattr(channels, "teams_channel", lambda: chat)
+    monkeypatch.setattr(pipeline, "TYPING_SECONDS", 0.01)
+    msgs = {1: {"channel": "teams", "thread_key": "teams:spaces/D1/threads/p1", "external_id": "spaces/D1/messages/p1.p1",
+                "visibility": "direct"},
+            2: {"channel": "teams", "thread_key": "teams:spaces/G1/threads/p1", "external_id": "spaces/G1/messages/p1.p2",
+                "visibility": "group"}}
+    monkeypatch.setattr(capture, "message", lambda i: msgs[i])
+    monkeypatch.setattr(capture, "turn", lambda m: "direct" if m["visibility"] == "direct" else "quiet")
+    stop = pipeline._typing(1)
+    end = time.time() + 5
+    while len(shown) < 3 and time.time() < end:
+        time.sleep(0.01)
+    stop()
+    time.sleep(0.1)
+    n = len(shown)
+    time.sleep(0.1)
+    assert n >= 3 and len(shown) == n and shown[0] == ("spaces/D1", None)    # kept up, then stopped
+    shown.clear()
+    pipeline._typing(2)()                                                   # a group chat not to the bot: nothing
+    time.sleep(0.05)
+    assert shown == []
+
+
 def test_site_named_in_the_message_wins_over_the_senders_site(monkeypatch):
     from cormon import config, pipeline
 
@@ -965,6 +1091,104 @@ def test_reader_flags_unchecked_statements_and_repeated_findings():
     b = dict(a, section_id="s2", problem="St John's wort washout too short: 9 days instead of 14")
     c = {"email_quote": "ECG done after the dose", "section_id": "s3", "problem": "ECG done after dosing"}
     assert reader.same_problem(a, b) and not reader.same_problem(a, c)
+
+
+def test_a_permission_passed_on_from_someone_else_is_never_accepted():
+    from cormon import config, reader
+    from cormon.matching import Finding
+    s = config.study("NCT05842941")
+    crc, mm = "johnrohit94@gmail.com", "john+medicalmonitor@huma.ai"
+    assert not reader.first_hand(s, "the sponsor", crc)
+    assert not reader.first_hand(s, "the medical monitor (the writer)", crc)   # a coordinator posing as the monitor
+    assert reader.first_hand(s, "the medical monitor (the writer)", mm)
+    assert reader.first_hand(s, "the writer", crc)
+    assert not reader.first_hand(s, "the PI", "someone@outside.org")
+    sec = {"id": "g:6.1", "doc_id": "regimen_g", "title": "Dosing", "number": "6.1", "text": "Dose at the clinic.",
+           "kind": "section", "path": ""}
+    claim = {"text": "The sponsor gave us a standing exception for home dosing at Week 4.", "status": "reported",
+             "anchors": ["g:6.1"], "claimed_by": "the sponsor", "excuses": "dosed at home at Week 4",
+             "claim_topic": "study_drug"}
+    plain = {"text": "Week 4 visit done on 12 Oct.", "status": "done", "anchors": [], "claimed_by": "",
+             "excuses": "", "claim_topic": ""}
+    part = {"participant": "1001-540", "statements": [plain, claim]}
+    out, meta, pt = [], [], {"findings": []}
+    reader._second_hand(s, part, {"from_addr": crc}, out, meta, pt, 0, [sec], [])
+    assert len(out) == 1 and out[0].certainty == "unsure" and out[0].rule["pattern_class"] == "study_drug"
+    assert "confirm directly with the sponsor" in out[0].extra["next_step"].lower()
+    assert pt["findings"][0]["second_hand"] == "the sponsor"
+    raised = Finding(rule={}, event={}, method="judgment", message_quote="dosed at home at Week 4",
+                     reasoning="Home dosing at Week 4 is not allowed.", extra={"next_step": "Record a deviation."})
+    out, meta = [raised], [({"email_quote": "He was dosed at home at Week 4", "problem": "home dose"}, {})]
+    reader._second_hand(s, part, {"from_addr": crc}, out, meta, {"findings": []}, 0, [sec], [])
+    assert len(out) == 1                                        # the problem was already raised: said there instead
+    assert "confirm it directly with the sponsor" in out[0].extra["next_step"] and meta[0][1]["second_hand"]
+    assert '"dosed at home at Week 4"' in out[0].extra["next_step"]
+    out = []
+    reader._second_hand(s, dict(part, statements=[dict(claim, claimed_by="they")]), {"from_addr": crc}, out, [],
+                        {"findings": []}, 0, [sec], [])
+    assert out[0].extra["headline"].startswith("Permission passed on from whoever gave it")
+    out = []
+    reader._second_hand(s, dict(part, statements=[dict(claim, claimed_by="the medical monitor")]),
+                        {"from_addr": mm}, out, [], {"findings": []}, 0, [sec], [])
+    assert not out                                              # the monitor's own word is first-hand
+
+
+def test_the_second_look_sees_only_the_facts_and_only_adds(monkeypatch):
+    from cormon import config, reader
+    s = config.study("NCT05842941")
+    sec = {"id": "g:9.2", "doc_id": "regimen_g", "title": "Consent", "number": "9.2", "kind": "section", "path": "",
+           "text": "Participants must be re-consented on the new version before any further study procedures."}
+    plain = {"text": "Week 16 visit done today before re-consent on version 4.", "status": "done", "anchors": [],
+             "claimed_by": "", "excuses": "", "claim_topic": ""}
+    claim = {"text": "Legal said this is informational only.", "status": "reported", "anchors": [],
+             "claimed_by": "Legal", "excuses": "not re-consented", "claim_topic": "consent"}
+    part = {"participant": "DNL-1030", "summary": "Informational only; no record needed.",
+            "statements": [plain, claim]}
+    bpart, text = reader.blind(part)
+    assert bpart["statements"] == [plain] and "informational" not in (bpart["summary"] + text).lower()
+    f = {"problem": "Week 16 procedures done before re-consent", "email_quote": plain["text"], "section_id": "g:9.2",
+         "protocol_quote": sec["text"], "why": "The new consent version was not signed.", "next_step": "Re-consent.",
+         "status": "done", "pattern_class": "consent", "severity": "major"}
+    verdict = {"v": "confirmed"}
+    monkeypatch.setattr(reader, "confirm", lambda *a, **k: {"verdict": verdict["v"], "reasons": "r",
+                                                            "protocol_words": sec["text"]})
+    out, meta, pt = [], [], {"findings": []}
+    reader._blind_look(s, bpart, {"findings": [f]}, [sec], [sec], text, [], out, meta, pt, 0, [], True)
+    assert len(out) == 1 and out[0].certainty == "unsure" and out[0].extra["blind_look"]
+    assert out[0].doc_quote and "second look" in out[0].reasoning
+    reader._blind_look(s, bpart, {"findings": [f, dict(f, problem="Also no re-consent")]}, [sec], [sec], text, [],
+                       out, meta, {"findings": []}, 0, [], True)
+    assert len(out) == 1                                        # the first reading raised something: it stays quiet
+    out = []
+    reader._blind_look(s, bpart, {"findings": [f, dict(f, problem="Also no re-consent")]}, [sec], [sec], text, [],
+                       out, [], {"findings": []}, 0, [], True)
+    assert len(out) == 1                                        # one alert per kind of problem
+    out = []
+    verdict["v"] = "rejected"
+    reader._blind_look(s, bpart, {"findings": [f]}, [sec], [sec], text, [], out, [], {"findings": []}, 0, [], True)
+    assert not out                                              # the check without the email turned it down
+    monkeypatch.setenv("CORMON_BLIND", "0")
+    assert not reader.blind_look_on(s)
+
+
+def test_new_features_are_off_on_the_live_bot_until_switched_on(monkeypatch):
+    import json
+
+    import yaml
+    from cormon import config, reader, settings
+    live = yaml.safe_load((settings.CODE_ROOT / "config" / "settings.yaml").read_text())
+    assert live["features"] and not any(live["features"].values())
+    assert live["memory"]["enabled"] is False
+    monkeypatch.delenv("CORMON_TEST_FEATURES", raising=False)
+    monkeypatch.delenv("CORMON_BLIND", raising=False)
+    s = config.study("NCT05842941")
+    assert reader.scope_system() == reader.SCOPE_SYSTEM and "claimed_by" not in json.dumps(reader.scope_schema(s))
+    assert not reader.blind_look_on(s)
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "permission_claims")
+    assert "claimed_by" in reader.scope_system() and "claimed_by" in json.dumps(reader.scope_schema(s))
+    assert not settings.feature("second_look")
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "all")
+    assert reader.blind_look_on(s) and settings.feature("privacy_check")
 
 
 def test_guide_reads_ocr_text_by_its_table_of_contents(tmp_path):
@@ -2616,15 +2840,16 @@ def _chat_message(text, frm, space="spaces/G", visibility="group", thread="T1"):
                                   "NCT05842941", visibility, frm, text, "2026-10-20T10:00:00+00:00", db.now()))
 
 
-def _alert(text, frm=CRC, space="spaces/G", visibility="group", thread="T1", tier="low"):
-    """A finding raised from a chat message, routed as the pipeline does; returns (item id, outbox rows)."""
+def _alert(text, frm=CRC, space="spaces/G", visibility="group", thread="T1", tier="low", memory=None):
+    """A finding raised from a chat message, routed as the pipeline does; returns (item id, outbox rows).
+    memory: the patient memory facts the finding was read with."""
     from cormon import config, routing
     study = config.study("NCT05842941")
     mid = _chat_message(text, frm, space, visibility, thread)
     ev = {"message_quote": text, "doc_quote": "CSF is collected before the first dose.", "doc_title": "Appendix G",
           "rule_text": "6.1 Baseline Visit", "next_step": "Record a protocol deviation.", "certainty": "clear",
           "sender_email": frm, "sender_name": study.person_by_email(frm).name, "message_date": "2026-10-20T10:00:00Z",
-          "channel": "teams", "visibility": visibility}
+          "channel": "teams", "visibility": visibility, **({"memory_facts": memory} if memory else {})}
     item_id, _ = items.upsert(study=study, thread_key=f"teams:{space}/threads/{thread}", message_id=mid,
                               dedup_key=f"k{mid}", kind="finding", pattern_class="sample_handling", rule_id=None,
                               participant_id="G-701-001", site="site-01", polarity="problem",
@@ -2651,6 +2876,45 @@ def test_a_low_alert_emails_the_first_cra_and_copies_every_clinops_lead(monkeypa
     mail = [r for r in rows if r["channel"] == "email"]
     assert [(r["purpose"], r["to_addrs"]) for r in mail] == [("email_cra", [CRA])]
     assert set(mail[0]["cc_addrs"]) == {LEAD, SPONSOR}
+
+
+def test_an_alert_read_with_patient_memory_is_held_for_a_reader_who_may_not_hear_it(monkeypatch):
+    fact = "earlier fact, reported on 01 Oct 2026 by John Rohit (Study coordinator): G-701-001 is HIV positive"
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "privacy_check")
+    _rooms(monkeypatch, {"spaces/G": [CRC]})
+    calls = _ai(monkeypatch, privacy_check=lambda user: {"ok": "HIV" not in user.split("THE BOT'S REPLY:")[1]
+                                                         .split("EARLIER FACTS")[0], "text": "",
+                                                         "not_for": [{"group": "study team", "what": "HIV status"}]})
+    _, rows = _alert("G-701-001 started efavirenz (for her HIV) the day before the CSF draw.", memory=[fact])
+    by = {(r["channel"], r["purpose"]): r["status"] for r in rows}
+    assert by[("teams", "teams_study_team")] == "queued"   # the room holds only the site care team: not checked
+    assert by[("email", "email_cra")] == "held"            # the CRA may not hear the HIV status
+    assert [c[0] for c in calls] == ["privacy_check"] and "sponsor and CRO study team" in calls[0][2]
+    held = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='alert_held_privacy'")["details"])
+    assert held["readers"] == ["study_team"] and held["not_for"][0]["what"] == "HIV status"
+    _, rows = _alert("G-701-001 baseline CSF drawn at 11:00, first dose was 9:00.", thread="T2", memory=[fact])
+    assert {r["status"] for r in rows} == {"queued"}       # says nothing private: sent
+    _, rows = _alert("G-701-001 baseline CSF drawn at 11:00, first dose was 9:00.", thread="T3")
+    assert len(calls) == 2                                 # no memory behind it: no check
+
+
+def test_the_privacy_check_on_an_alert_also_reads_what_its_details_page_says(monkeypatch):
+    from cormon import config, privacy
+    s = config.study("NCT05842941")
+    calls = _ai(monkeypatch, privacy_check=lambda user: {"ok": "HIV" not in user.split("THE BOT'S REPLY:")[1]
+                                                         .split("EARLIER FACTS")[0], "text": "", "not_for": []})
+    items = [{"evidence": {"why": "The earlier fact says she takes efavirenz for HIV.", "next_step": "Stop dosing."},
+              "reasoning": "unused"}]
+    assert privacy.details_shown(items) == "The earlier fact says she takes efavirenz for HIV.\nStop dosing."
+    who = [(CRA, privacy.group_of(s, CRA))]
+    fact = ["earlier fact, reported on 01 Oct 2026 by John Rohit (Study coordinator): 1001-532 is HIV positive"]
+    assert privacy.alert_problem(s, "1001-532 was dosed while on efavirenz.", fact, who, use_cache=False) is None
+    assert privacy.alert_problem(s, "1001-532 was dosed while on efavirenz.", fact, who, use_cache=False,
+                                 details=privacy.details_shown(items))
+    assert len(calls) == 2
+    stranger = [("someone@outside.org", privacy.group_of(s, "someone@outside.org"))]
+    assert privacy.alert_problem(s, "1001-532 missed the Week 8 labs.", fact, who + stranger, use_cache=False)
+    assert len(calls) == 2   # someone the study does not list may hear nothing about a participant: no AI needed
 
 
 def test_an_alert_about_a_doctor_in_the_chat_is_not_posted_there_but_sent_privately(monkeypatch):
@@ -2954,6 +3218,117 @@ def test_careful_rules_grow_from_a_file_and_a_study_can_add_or_change_them(monke
     assert careful.named(study, "pick up the kits", [(eliot, got["physicians"])]) == []
     monkeypatch.setitem(study.raw, "careful", [{"id": "physicians", "enabled": False}])
     assert careful.rules(study) == [] and careful.rule_for(study, eliot) is None
+
+
+MM = "john+medicalmonitor@huma.ai"
+HIV = "earlier fact, reported on 01 Oct 2026 by John Rohit (Study coordinator): G-708-002 is HIV positive, on Biktarvy"
+
+
+def _hiv_answer():
+    return {"question": "Can G-708-002 take the next dose?", "participant": "G-708-002", "found": True,
+            "traced": True, "text": "Hold it.", "plain": "Hold the dose: G-708-002 is HIV positive and on Biktarvy.",
+            "record": ["baseline visit on 01 Sep 2026", HIV], "from_record": [HIV], "quotes": [], "sums": []}
+
+
+def test_privacy_groups_place_each_reader_by_their_widest_role(monkeypatch):
+    from cormon import config, privacy
+    study = config.study("NCT05842941")
+    got = {a: privacy.group_of(study, a)["id"] for a in (CRC, DOC, "peter@huma.ai", SPONSOR, MM, "x@other.org")}
+    assert got == {CRC: "care_team", DOC: "care_team", "peter@huma.ai": "study_team", SPONSOR: "study_team",
+                   MM: "safety", "x@other.org": "unknown"}
+    monkeypatch.setitem(study.raw, "privacy", [{"id": "care_team", "roles": ["pi", "sub_investigator"]}])
+    assert privacy.group_of(study, CRC)["id"] == "unknown" and privacy.group_of(study, DOC)["id"] == "care_team"
+
+
+def test_privacy_check_rewords_what_a_sponsor_may_not_hear_and_clears_the_details_page(monkeypatch):
+    from cormon import config, llm, privacy, rooms
+    study = config.study("NCT05842941")
+    msg = {"id": 7, "from_addr": CRC, "thread_key": "teams:spaces/R/threads/T"}
+    asked = []
+    monkeypatch.setattr(rooms, "members", lambda s: {"emails": {CRC, DOC}, "complete": True, "error": None})
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: pytest.fail("the care team may hear everything"))
+    a = _hiv_answer()
+    privacy.screen(study, msg, [a])
+    assert "HIV" in a["plain"] and a["record"][1] == HIV   # only the site care team reads it: untouched
+
+    monkeypatch.setattr(rooms, "members", lambda s: {"emails": {CRC, SPONSOR}, "complete": True, "error": None})
+    said = "Please ask the site investigator to review G-708-002's history before the next dose."
+    replies = iter([{"ok": False, "not_for": [{"group": "sponsor and CRO study team", "what": "HIV status"}],
+                     "text": said}, {"ok": True, "not_for": [], "text": ""}])
+    monkeypatch.setattr(llm, "structured", lambda task, sys, user, *x, **k: asked.append((task, user)) or next(replies))
+    privacy.screen(study, msg, [a])
+    assert a["plain"] == said and a["record"] == [] and a["from_record"] == []
+    assert "sponsor and CRO study team (Peter" in asked[0][1] and HIV in asked[0][1]   # who reads it, and the fact
+    assert "baseline visit" not in asked[0][1]   # the details page keeps only what the answer used
+    row = db.q1("SELECT details FROM audit_log WHERE action='privacy_check' ORDER BY id DESC")
+    assert '"reworded": true' in row["details"] and "HIV status" in row["details"]
+
+
+def test_privacy_check_sends_the_safe_reply_when_the_rewording_adds_a_number_or_the_check_fails(monkeypatch):
+    from cormon import config, llm, privacy, rooms
+    study = config.study("NCT05842941")
+    msg = {"id": 8, "from_addr": SPONSOR, "thread_key": "teams:spaces/R/threads/T"}
+    monkeypatch.setattr(rooms, "members", lambda s: {"emails": {SPONSOR}, "complete": True, "error": None})
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: {"ok": False, "not_for": [], "text": "Wait 14 days."})
+    a = _hiv_answer()
+    privacy.screen(study, msg, [a])
+    assert a["plain"] == privacy.SAFE_REPLY and "HIV" not in a["text"]
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("down")))
+    a = _hiv_answer()
+    privacy.screen(study, msg, [a])
+    assert a["plain"] == privacy.SAFE_REPLY
+
+
+def test_privacy_check_reads_an_email_reply_by_its_one_reader_and_skips_answers_without_a_record(monkeypatch):
+    from cormon import config, llm, privacy
+    study = config.study("NCT05842941")
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: pytest.fail("no check expected"))
+    privacy.screen(study, {"id": 9, "from_addr": CRC, "thread_key": "gmail:abc"}, [_hiv_answer()])
+    privacy.screen(study, {"id": 9, "from_addr": MM, "thread_key": "gmail:abc"},
+                   [dict(_hiv_answer(), record=[], from_record=[])])
+    calls = []
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: calls.append(a[2]) or {"ok": True, "not_for": [],
+                                                                                  "text": ""})
+    a = _hiv_answer()
+    privacy.screen(study, {"id": 9, "from_addr": MM, "thread_key": "gmail:abc"}, [a])
+    assert len(calls) == 1 and "safety reviewers" in calls[0] and "HIV" in a["plain"]
+    with_stranger = {"id": 9, "from_addr": CRC, "thread_key": "teams:spaces/R/threads/T"}
+    from cormon import rooms
+    monkeypatch.setattr(rooms, "members", lambda s: {"emails": {CRC}, "complete": False, "error": "403"})
+    privacy.screen(study, with_stranger, [_hiv_answer()])
+    assert len(calls) == 2 and "could not list" in calls[1]   # an unreadable member list counts as a stranger
+
+
+def test_privacy_check_reads_what_the_room_already_saw_about_the_participant(monkeypatch):
+    from cormon import config, conversation, llm, privacy, rooms
+    study = config.study("NCT05842941")
+
+    def said(mid, space, text, mins_ago):
+        db.ex("INSERT INTO messages (id, channel, external_id, thread_key, study_id, route, visibility, from_name,"
+              " body_text, received_at, status) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+              (mid, "teams", f"x{mid}", f"teams:spaces/{space}/threads/{mid}", "NCT05842941", "study", "group",
+               "John Rohit", text, db.later(-mins_ago), "processed"))
+    said(1, "A", "Mary Alvarez (G-708-002) is in for Week 4.", 3 * 24 * 60)   # days ago, but names the ID
+    said(2, "B", "Tom Reyes (G-708-002) in the other room", 10)
+    said(3, "A", "Old chat about another participant", 3 * 24 * 60)
+    for n in range(4, 30):
+        said(n, "A", f"filler {n}", 60 - n)
+    said(40, "A", "Can G-708-002 take the next dose?", 0)
+    msg = capture.message(40)
+    texts = [t["text"] for t in conversation.about(msg, "G-708-002")]
+    assert texts[0].startswith("Mary Alvarez") and "Old chat about another participant" not in texts
+    assert not any("Tom Reyes" in t for t in texts) and len(texts) == 1 + conversation.TURNS   # this room only
+
+    asked = []
+    monkeypatch.setattr(rooms, "members", lambda s: {"emails": {CRC, SPONSOR}, "complete": True, "error": None})
+    monkeypatch.setattr(llm, "structured", lambda task, sys, user, *x, **k: asked.append(user) or
+                        {"ok": False, "not_for": [{"group": "sponsor and CRO study team", "what": "HIV status"}],
+                         "text": ""})
+    a = _hiv_answer()
+    privacy.screen(study, msg, [a])
+    seen = asked[0].split("THE CONVERSATION SO FAR, AS THE READERS SAW IT:")[1].split("THE BOT'S REPLY:")[0]
+    assert "Mary Alvarez (G-708-002)" in seen and seen.strip().endswith("Can G-708-002 take the next dose?")
+    assert a["plain"] == privacy.SAFE_REPLY and "who they are" in privacy.CHECK_SYSTEM
 
 
 def _two_doc_study(tmp_path, scanned=False):

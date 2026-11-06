@@ -1811,7 +1811,8 @@ def test_every_code_file_is_tied_to_a_test_set_or_known_to_need_none():
     cfg = gate.gates()
     tied = {p for s in cfg["sets"].values() for p in gate._flat(s["when"])} | set(cfg["all_when"])
     none_needed = {  # operator tools, records, alerts and pages: covered by the code tests only
-        "__init__", "adminview", "backup", "cli", "compare", "corrections", "coverage", "digest", "drift", "export",
+        "__init__", "adminview", "backup", "chatdemo", "cli", "compare", "corrections", "coverage", "digest", "drift",
+        "export",
         "notes", "prune", "senders", "settings", "stuck", "timing", "watchdog", "weblogin", "webview",
         "outbox",   # its AI set (the trick emails) is left out for now
         "hindsight"}  # off in the AI sets until its own memory set (docs/hindsight-plan.md, step 8)

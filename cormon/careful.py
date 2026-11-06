@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import re
 
-from . import capture, config, db, items, llm, outcheck, rooms
+from . import capture, config, db, items, llm, outcheck, privacy, rooms
 from .channels.gchat import chat_text
 from .config import Person, Study
-from .settings import CONFIG_DIR, load_yaml
+from .settings import CONFIG_DIR, feature, load_yaml
 
 CALM_REPLY = "Thank you for letting me know. I have shared this with the study team so they can follow up."
 SAFETY = "Contact the PI and the Medical Monitor now"
@@ -384,24 +384,57 @@ def _report(study: Study, item: dict, others: list[dict], msg: dict, created: li
     said = {"room": " and ".join(dict.fromkeys(n["room"] for n in notes)),
             "people": "; ".join(dict.fromkeys(n["who"] for n in notes)),
             "why": "; ".join(dict.fromkeys(n["why"] for n in notes))}
+    facts = [x for it in [item] + others for x in (it.get("evidence") or {}).get("memory_facts") or []] \
+        if feature("privacy_check") else []
     sent, seen = [], set()
     for role in roles:
         for p in study.people_with_role(role, item.get("site")):
             if not p.email or p.email.lower() in seen:
                 continue
             seen.add(p.email.lower())
+            dm = _direct_chat(study, item, p)
             if p.email.lower() in emailed:
                 db.audit("reported_privately", entity_type="item", entity_id=item["id"], study_id=study.study_id,
                          to=p.email, role=role, already_emailed=emailed[p.email.lower()], why=said["why"])
-                continue
+                if not dm:   # the 1-on-1 chat is another place, so it still gets the report
+                    continue
             tpl = drafting.select("careful_report", "*", "email", "*")  # a role's own alert template would win
             subject, body = drafting.render(tpl, dict(context(p), careful=said))
-            oid = routing.enqueue(
-                purpose=f"careful_report_{role}", channel="email", destination="email", body=body, subject=subject,
-                item_id=item["id"], template_id=tpl["id"], from_addr=routing.from_alias(study, msg), to=[p.email],
-                meta={"thread_key": item["thread_key"], "item_id": item["id"], "item_ids": ids},
-                status="queued" if item["send_draft"] else "held", study_id=study.study_id)
-            db.audit("reported_privately", entity_type="item", entity_id=item["id"], study_id=study.study_id,
-                     to=p.email, role=role, outbox_id=oid, why=said["why"])
-            sent.append(oid)
+            hidden = privacy.alert_problem(study, body, facts, [(p.email, privacy.group_of(study, p.email))],
+                                           details=privacy.details_shown([item] + others))
+            if hidden:
+                db.audit("alert_held_privacy", entity_type="item", entity_id=item["id"], study_id=study.study_id,
+                         readers=[privacy.group_of(study, p.email)["id"]], **hidden)
+            if p.email.lower() not in emailed:
+                oid = routing.enqueue(
+                    purpose=f"careful_report_{role}", channel="email", destination="email", body=body,
+                    subject=subject, item_id=item["id"], template_id=tpl["id"],
+                    from_addr=routing.from_alias(study, msg), to=[p.email],
+                    meta={"thread_key": item["thread_key"], "item_id": item["id"], "item_ids": ids},
+                    status="queued" if item["send_draft"] and not hidden else "held", study_id=study.study_id)
+                db.audit("reported_privately", entity_type="item", entity_id=item["id"], study_id=study.study_id,
+                         to=p.email, role=role, outbox_id=oid, why=said["why"])
+                sent.append(oid)
+            if dm:
+                sent.append(routing.enqueue(
+                    purpose=f"careful_report_{role}_chat", channel="teams", destination="direct",
+                    body=f"<b>{subject}</b><br><br>{body}", item_id=item["id"], template_id=tpl["id"],
+                    meta={"thread_key": item["thread_key"], "item_id": item["id"], "item_ids": ids,
+                          "target": {"space": dm, "key": "direct", "name": f"a 1-on-1 chat with {p.name}"}},
+                    status="queued" if item["send_draft"] and not hidden else "held", study_id=study.study_id))
     return sent
+
+
+def _direct_chat(study: Study, item: dict, p: Person) -> str | None:
+    """The bot's 1-on-1 chat with p, where the report also goes when mattermost.reports_by_chat is on."""
+    from . import settings
+
+    if settings.get("channels.teams") != "mattermost" or not settings.get("mattermost.reports_by_chat"):
+        return None
+    try:
+        from .channels.mattermost import MattermostChannel
+        return MattermostChannel().direct_space(p.email)
+    except Exception as e:
+        db.audit("careful_report_chat_failed", entity_type="item", entity_id=item["id"], study_id=study.study_id,
+                 to=p.email, error=str(e)[:300])
+        return None
