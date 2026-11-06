@@ -13,7 +13,7 @@ import re
 import shutil
 from datetime import datetime, timezone
 from email.message import EmailMessage
-from email.utils import formatdate
+from email.utils import formataddr, formatdate
 
 from .. import settings
 from ..capture import Inbound, parse_email
@@ -50,7 +50,7 @@ def email_html(body: str) -> str:
 
 def build_mime(row: dict) -> EmailMessage:
     msg = EmailMessage()
-    msg["From"] = row["from_addr"]
+    msg["From"] = formataddr((row.get("from_name") or settings.bot_name(), row["from_addr"]))
     # Gmail rewrites From to the account address unless the alias is a verified send-as address;
     # Reply-To keeps replies on the study alias either way.
     msg["Reply-To"] = row["from_addr"]

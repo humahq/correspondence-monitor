@@ -16,6 +16,14 @@ chat:
   # One of these is picked at random each time; empty: the texts in cormon/pipeline.py (RECEIPTS).
   receipt_texts: []
 
+bot:
+  # This deployment's name for the bot, as people see it in email, the admin pages and ops warnings.
+  # Set it per deployment in config/settings.local.yaml (not committed); the Google Chat app's name in the
+  # Cloud console should match. Empty: "Study monitor", with the usual automated-message disclaimer.
+  name: ""
+  avatar_url: ""
+  signature: ""
+
 matching:
   # Forwarded or attached content about events older than this is treated as historical (no alert),
   # so forwarding an old email does not turn an old event into a new one.

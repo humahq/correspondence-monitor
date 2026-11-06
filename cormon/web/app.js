@@ -5,6 +5,8 @@
   const { useState, useEffect } = React;
   const html = htm.bind(React.createElement);
   const EMAIL = document.body.dataset.email || "";
+  const BOT_NAME = document.body.dataset.botName || "Study monitor";
+  const BOT_AVATAR = document.body.dataset.botAvatar || "";
 
   const NAV = [["/admin", "Home"], ["/admin/messages", "Messages"], ["/admin/alerts", "Alerts"],
                ["/admin/memory", "Patient memory"], ["/admin/people", "Sign-ins and use"]];
@@ -142,7 +144,7 @@
       const card = (n, label, href, extra) => html`<a class="card click" href=${href} onClick=${linkTo(href)}>
         <b>${n}</b><span class="muted">${label}</span>${extra}</a>`;
       return html`
-      <div class="head"><div><h1>Study monitor</h1><div class="sub">What came in and what the bot did. Pick the days
+      <div class="head"><div><h1>${BOT_NAME}</h1><div class="sub">What came in and what the bot did. Pick the days
         to look at; click any number to see those messages or alerts.</div>
         <div class="gap-top"><a href="/admin/alerts" onClick=${linkTo("/admin/alerts")}><b>${d.open_now} open
           alert${d.open_now === 1 ? "" : "s"}</b></a>${" "}${d.open_by_tier.map((x) => html`<a key=${x.tier}
@@ -477,7 +479,7 @@
     else page = html`<div class="error">Not found.</div>`;
     const section = msg ? "/admin/messages" : path;
     return html`<div class="app">
-      <aside class="side"><div class="logo"><i></i>Study monitor</div>
+      <aside class="side"><div class="logo">${BOT_AVATAR ? html`<img src=${BOT_AVATAR} alt="" />` : html`<i></i>`}${BOT_NAME}</div>
         ${NAV.map(([to, name]) => html`<a key=${to} href=${to} class=${section === to ? "on" : ""} onClick=${linkTo(to)}>${name}</a>`)}
         <div class="who">${EMAIL}<br /><a href="/auth/logout">Sign out</a></div></aside>
       <main>${page}<div class="foot-note">Read-only, except corrections to patient memory, each kept with its reason.

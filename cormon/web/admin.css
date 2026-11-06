@@ -15,6 +15,7 @@ a:hover { text-decoration: underline; }
   padding: 0 10px 22px; }
 .logo i { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, #4f7bff, #7c5cff);
   display: inline-block; }
+.logo img { width: 30px; height: 30px; border-radius: 9px; object-fit: cover; display: inline-block; }
 .side a { display: flex; align-items: center; gap: 10px; color: var(--side-ink); padding: 9px 12px; border-radius: 8px;
   font-weight: 500; margin-bottom: 2px; }
 .side a:hover { background: rgba(255,255,255,.06); text-decoration: none; color: #fff; }

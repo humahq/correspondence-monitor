@@ -8,9 +8,6 @@ sponsor: Massachusetts General Hospital (Sean M. Healey & AMG Center for ALS)
 
 # Mail to bot+<address_tag>@huma.ai is routed to this study.
 address_tag: NCT05842941
-monitor_signature: |-
-  HEALEY Regimen G Correspondence Monitor
-  (automated message from the study monitoring service; it does not review safety information)
 
 documents:
   - id: master

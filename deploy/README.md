@@ -11,6 +11,8 @@
   Messages and items on the server are kept; the swap is recorded in the log.
 - **Packages:** the gate installs exactly `deploy/requirements-live.txt` (the server's `pip freeze`). Changing a
   package means changing that file (so every test set runs) and installing it on the server as its own step.
-- **Settings:** changes made on the server with `cormon config set` are overwritten by the repo's `config/` on the
-  next `create_vm.sh`, so make permanent changes in the repo.
+- **Settings:** changes made on the server with `cormon config set` can be overwritten by the repo's `config/` (a
+  release puts the gate-tested triage, routing, templates, careful, studies and llm/matching settings in place),
+  so make permanent changes in the repo. Deployment-specific values (the bot's name, avatar and email signature
+  under `bot:`) go in the server's untracked `config/settings.local.yaml`, which a release leaves alone.
 - **Giving someone access:** `./deploy/grant_access.sh name@huma.ai` (Eliot and Peter already have access).
