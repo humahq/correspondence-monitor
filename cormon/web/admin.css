@@ -156,3 +156,21 @@ button.primary { border: 0; border-radius: 8px; background: var(--brand); color:
   font-weight: 600; cursor: pointer; }
 button.primary:disabled { opacity: .6; cursor: default; }
 tr.retired td { color: var(--muted); }
+
+/* The OpenBook look (features.openbook_look): openbook.phd's navy, teal and cream, and Inter. The site's teal
+   (#00c2cb) is too light for text on white, so links and buttons use a darker teal. */
+body.openbook { --bg: #f8f6f0; --ink: #0b192c; --muted: #5b6677; --line: #e7e2d7; --brand: #00838a;
+  --brand-soft: #e0f6f7; --side: #0b192c; --side-ink: #c3cedb;
+  font-family: Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+body.openbook .logo { flex-direction: column; align-items: flex-start; gap: 2px; font-size: 24px; letter-spacing: -1px;
+  line-height: 1.1; }
+body.openbook .logo small { font-size: 11px; font-weight: 500; letter-spacing: 0; color: #8b9bb0; }
+body.openbook .side a.on { background: rgba(0,194,203,.14); box-shadow: inset 3px 0 0 #00c2cb; }
+body.openbook h1 { letter-spacing: -.02em; }
+body.openbook a.card:hover { border-color: #9fe2e6; box-shadow: 0 2px 8px rgba(0,194,203,.12); }
+body.openbook tr.click:hover td { background: #f2fafa; }
+body.openbook th { background: #fbfaf6; }
+body.openbook .protocol { color: #006a70; }
+body.openbook .bubble.bot { background: #eaf8f9; border-color: #c4ecef; }
+body.openbook .bubble.bot .text.long::after { background: linear-gradient(transparent, #eaf8f9); }
+body.openbook .sent.email { border-left-color: #00c2cb; }

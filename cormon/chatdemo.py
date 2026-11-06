@@ -91,6 +91,8 @@ def prepare(live_root: Path, chat: Path, team: str | None = None) -> Path:
     cfg.setdefault("memory", {}).update({"enabled": True, "bank_prefix": f"demo-{team}-"})
     # the demo shows every new feature; the live bot gets each one when it is switched on there (docs/features.md)
     cfg["features"] = {name: True for name in cfg.get("features") or {}}
+    if demo.get("bot_name"):   # the name people see in the chat (bot.yaml), so email and the admin page agree
+        cfg.setdefault("bot", {})["name"] = demo["bot_name"]
     # a report kept out of the room also goes to the reader's 1-on-1 chat with the bot, not only to email
     cfg["mattermost"] = {"env_file": str(chat / ".env"), "team": team, "people": people(demo, team),
                          "rooms": _rooms(chat, demo, team), "reports_by_chat": True}
