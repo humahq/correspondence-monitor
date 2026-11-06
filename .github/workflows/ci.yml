@@ -1,7 +1,8 @@
 # Release gate (SDL-02, SDL-05, VAL-05, CFG-02, CAP-09). Every change runs the code tests and the AI test sets that
 # config/gates.yaml ties to the files changed since the live version (tag `live`). Once a week every set runs
-# with no kept AI answers, to catch a change on the model supplier's side. deploy/release.sh deploys only a
-# commit whose "gate" job passed.
+# with no kept AI answers, to catch a change on the model supplier's side, and its answers become the kept ones.
+# A merge takes its pull request's kept answers, so the next change only pays for what it changed.
+# deploy/release.sh deploys only a commit whose "gate" job passed.
 name: gate
 
 on:
@@ -38,6 +39,8 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
       sets: ${{ steps.plan.outputs.sets }}
+      kept_sets: ${{ steps.plan.outputs.kept_sets }}
+      from_run: ${{ steps.plan.outputs.from_run }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -114,20 +117,61 @@ jobs:
           pip install -r deploy/requirements-live.txt
           pip install --no-deps -e .
       - run: env -u CORMON_HOME python -m cormon.gate home "$CORMON_HOME"
+      # The kept AI answers: an unchanged input is not asked again, so it costs nothing and gets the same answer.
+      # The weekly run asks everything fresh, and its answers become the kept ones.
       - name: Kept AI answers (not on the weekly run)
         if: github.event_name != 'schedule'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: .gate-home/cache.db
           key: ai-answers-${{ matrix.set }}-${{ github.run_id }}
           restore-keys: ai-answers-${{ matrix.set }}-
       - run: python -m cormon.gate run ${{ matrix.set }} gate-out/${{ matrix.set }}
+      - name: Keep this run's AI answers
+        if: always() && hashFiles('.gate-home/cache.db') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .gate-home/cache.db
+          key: ai-answers-${{ matrix.set }}-${{ github.run_id }}
+      # a pull request's answers can't be read from main's cache, so main takes them from here when it merges
+      - if: always() && github.event_name == 'pull_request' && hashFiles('.gate-home/cache.db') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-answers-${{ matrix.set }}
+          path: .gate-home/cache.db
+          retention-days: 30
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: results-${{ matrix.set }}
           path: gate-out/${{ matrix.set }}
           retention-days: 90
+
+  # After a merge whose AI sets already passed on the pull request, its kept answers become main's, so the next
+  # pull request starts from them (no AI calls here).
+  keep-answers:
+    needs: plan
+    if: github.event_name == 'push' && needs.plan.outputs.from_run != ''
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        set: ${{ fromJSON(needs.plan.outputs.kept_sets) }}
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true   # a pull request run from before its answers were kept as a file
+        with:
+          name: ai-answers-${{ matrix.set }}
+          path: .gate-home
+          run-id: ${{ needs.plan.outputs.from_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: hashFiles('.gate-home/cache.db') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .gate-home/cache.db
+          key: ai-answers-${{ matrix.set }}-${{ github.run_id }}
 
   gate:
     needs: [plan, tasks, code-tests, ai-tests]

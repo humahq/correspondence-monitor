@@ -85,6 +85,7 @@ def _claude(model: str, system: str, user: str, schema: dict, effort: str | None
 
 # tokens used by calls that reached the model (cache hits use none), by model: for cost reports
 USAGE: dict[str, dict[str, int]] = {}
+REUSED = {"answers": 0}   # calls answered from the cache instead
 
 
 def _count(model: str, usage) -> None:
@@ -152,6 +153,7 @@ def structured(
     while use_cache:
         row = db.q1("SELECT response FROM llm_cache WHERE key=?", (key,))
         if row:
+            REUSED["answers"] += 1
             timing.llm_call(task, model, 0, cached=True)
             log(row["response"], cached=True)
             return json.loads(row["response"])
@@ -276,6 +278,7 @@ def decide(task: str, input: str | list[dict], questions: list[dict], *, use_cac
     if use_cache:
         row = db.q1("SELECT response FROM llm_cache WHERE key=?", (key,))
         if row:
+            REUSED["answers"] += 1
             timing.llm_call(task, model, 0, cached=True)
             log(row["response"], cached=True)
             return json.loads(row["response"])
