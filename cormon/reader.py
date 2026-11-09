@@ -1073,7 +1073,7 @@ def _second_hand(study: Study, part: dict, msg: dict, out: list[Finding], meta: 
         if _NO_ONE.match(_norm(who)):
             who = "whoever gave it"
         what = s.get("excuses") or s["text"]
-        note = (f'The email says {who} allowed "{what}"; a permission passed on by someone else is not accepted, '
+        note = (f'The message says {who} allowed "{what}"; a permission passed on by someone else is not accepted, '
                 f"so confirm it directly with {who}.")
         mine = sorted(range(start, len(out)), key=lambda n: not _covers(meta[n][0], s))
         if mine:  # one alert for the participant already: the claim is named there, not raised twice
@@ -1088,7 +1088,7 @@ def _second_hand(study: Study, part: dict, msg: dict, out: list[Finding], meta: 
         problem = f"Permission passed on from {who}, not confirmed by them: {what}"
         next_step = (f"Confirm directly with {who}, in writing, before relying on it. Until then, treat it as not "
                      "approved and check it against the protocol.")
-        why = f'The email says: "{s["text"]}". The bot does not accept a permission passed on by someone else.'
+        why = f'The message says: "{s["text"]}". The bot does not accept a permission passed on by someone else.'
         rec = {"problem": problem, "email_quote": s["text"], "section_id": sec["id"], "outcome": "unsure",
                "second_hand": who}
         pt["findings"].append(rec)
@@ -1105,7 +1105,7 @@ def _second_hand(study: Study, part: dict, msg: dict, out: list[Finding], meta: 
             extra={"headline": problem, "next_step": next_step, "severity": "moderate", "why": why,
                    "second_hand": who, "memory_facts": recalled,
                    "problem_key": hashlib.sha1(f"claim|{_norm(s['text'])}|{pid}".encode()).hexdigest()[:10],
-                   "unsure_reason": f"the email says {who} allowed it, which only {who} can confirm"}))
+                   "unsure_reason": f"the message says {who} allowed it, which only {who} can confirm"}))
 
 
 def blind_look_on(study: Study) -> bool:
