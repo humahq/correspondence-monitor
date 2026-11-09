@@ -7,6 +7,7 @@
   const EMAIL = document.body.dataset.email || "";
   const BOT_NAME = document.body.dataset.botName || "Study monitor";
   const BOT_AVATAR = document.body.dataset.botAvatar || "";
+  const PRODUCT = document.body.dataset.product || "";
 
   const NAV = [["/admin", "Home"], ["/admin/messages", "Messages"], ["/admin/alerts", "Alerts"],
                ["/admin/memory", "Patient memory"], ["/admin/people", "Sign-ins and use"]];
@@ -479,7 +480,9 @@
     else page = html`<div class="error">Not found.</div>`;
     const section = msg ? "/admin/messages" : path;
     return html`<div class="app">
-      <aside class="side"><div class="logo">${BOT_AVATAR ? html`<img src=${BOT_AVATAR} alt="" />` : html`<i></i>`}${BOT_NAME}</div>
+      <aside class="side">${PRODUCT
+        ? html`<div class="logo">${PRODUCT}<small>${BOT_NAME} · powered by Huma.ai</small></div>`
+        : html`<div class="logo">${BOT_AVATAR ? html`<img src=${BOT_AVATAR} alt="" />` : html`<i></i>`}${BOT_NAME}</div>`}
         ${NAV.map(([to, name]) => html`<a key=${to} href=${to} class=${section === to ? "on" : ""} onClick=${linkTo(to)}>${name}</a>`)}
         <div class="who">${EMAIL}<br /><a href="/auth/logout">Sign out</a></div></aside>
       <main>${page}<div class="foot-note">Read-only, except corrections to patient memory, each kept with its reason.

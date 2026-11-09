@@ -115,6 +115,15 @@ def test_the_admin_page_defaults_to_the_neutral_name(unnamed):
     assert 'data-bot-name="Study monitor"' in page
 
 
+def test_the_admin_page_has_the_openbook_look_only_when_switched_on(named, monkeypatch):
+    assert 'class="openbook"' not in adminview.shell("peter@huma.ai"), "off: the page looks as before"
+    monkeypatch.setattr(settings, "feature", lambda name: name == "openbook_look")
+    page = adminview.shell("peter@huma.ai")
+    assert '<body class="openbook" data-product="OpenBook"' in page
+    assert "<title>OpenBook admin</title>" in page
+    assert 'data-bot-name="Mira Belle"' in page
+
+
 def test_a_study_without_a_signature_inherits_the_deployment_signature(named, tmp_path):
     path = tmp_path / "study.yaml"
     path.write_text("study_id: NCT00000001\nshort_name: X\n", encoding="utf-8")

@@ -19,6 +19,7 @@ from .triage import TIER_LABELS
 
 PAGE = 50
 WEB = Path(__file__).parent / "web"
+PRODUCT = "OpenBook"   # the product's name (openbook.phd); the bot inside it has its own name (bot.name)
 # In load order: React and htm before the app.
 STATIC = {"admin.css": "text/css", "vendor/react.production.min.js": "text/javascript",
           "vendor/react-dom.production.min.js": "text/javascript", "vendor/htm.umd.js": "text/javascript",
@@ -633,10 +634,12 @@ def shell(email: str) -> str:
     scripts = "".join(f'<script src="/admin/static/{f}?v={v}"></script>' for f in STATIC if f.endswith(".js"))
     name = html.escape(settings.bot_name())
     avatar = html.escape(settings.bot_avatar(), quote=True)
+    product = PRODUCT if settings.feature("openbook_look") else ""
+    look = f' class="openbook" data-product="{product}"' if product else ""
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
-            f'<title>{name} admin</title><link rel="stylesheet" href="/admin/static/admin.css?v={v}">'
-            f'</head><body data-email="{email.replace(chr(34), "")}" data-bot-name="{name}"'
+            f'<title>{product or name} admin</title><link rel="stylesheet" href="/admin/static/admin.css?v={v}">'
+            f'</head><body{look} data-email="{email.replace(chr(34), "")}" data-bot-name="{name}"'
             f' data-bot-avatar="{avatar}"><div id="root"></div>{scripts}</body></html>')
 
 
