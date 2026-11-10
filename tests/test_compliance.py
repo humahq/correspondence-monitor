@@ -844,9 +844,10 @@ def _to(purpose):
 
 
 def test_an_alert_is_closed_on_its_page_and_some_choices_need_a_second_person():
+    from zoneinfo import ZoneInfo
     from cormon import closing, items
 
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+    now = datetime.now(ZoneInfo(settings.get("system.timezone", "America/New_York"))).strftime("%Y-%m-%dT%H:%M")
     _live_item(1)
     with pytest.raises(closing.NotAllowed):
         closing.close(1, "johnrohit94@gmail.com", "done", now, "")           # the site's CRC: not for now
