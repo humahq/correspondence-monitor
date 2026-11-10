@@ -41,13 +41,16 @@ echo "gate passed: run $RUN_ID"
 # 1b. Model drift (VAL-07): the newest fresh run (every AI set asked with no kept answers and compared with the
 # one before) passed and is at most 8 days old, so a change on the model supplier's side has been tested.
 # A fresh run leaves a "fresh-check" file; a weekly run is a fresh run even from before that file existed.
-read -r FRESH_ID FRESH_AT < <({
+FRESH_LINE=$(
   gh api "repos/{owner}/{repo}/actions/artifacts?name=fresh-check&per_page=30" \
     --jq '.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")
           | "\(.workflow_run.id) \(.created_at)"'
   gh run list --workflow ci.yml --event schedule --branch main --limit 1 --json databaseId,createdAt,status \
     --jq '.[] | select(.status == "completed") | "\(.databaseId) \(.createdAt)"'
-} | sort -n | tail -1) || true
+) || true
+FRESH_LINE=$(printf '%s\n' "$FRESH_LINE" | sort -n | tail -1)
+FRESH_ID=${FRESH_LINE%% *}
+FRESH_AT=${FRESH_LINE#* }
 [ -n "${FRESH_ID:-}" ] || stop "no fresh AI run on main yet: wait for the weekly one or start it with: gh workflow run ci.yml -f fresh=true"
 FRESH_GATE=$(gh run view "$FRESH_ID" --json jobs --jq '.jobs[] | select(.name == "gate") | .conclusion')
 [ "$FRESH_GATE" = success ] || stop "the newest fresh AI run did not pass (run $FRESH_ID: ${FRESH_GATE:-not finished}): the model's answers changed or dropped; see that run"
