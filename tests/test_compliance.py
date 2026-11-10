@@ -1581,6 +1581,46 @@ def test_an_unacknowledged_safety_message_goes_up_the_chain_then_to_a_phone(monk
     assert safety.escalate(log=lambda *_: None) == []
 
 
+def test_a_safety_email_names_the_participant_only_for_the_medical_monitor(monkeypatch):
+    from cormon import config, llm, safety
+
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "safety_names")
+    monkeypatch.setattr(llm, "structured", lambda task, *a, **k: {"names": ["Jane Doe"]} if task == "participant_names"
+                        else pytest.fail(f"unexpected AI call {task}"))
+    study = config.study("NCT05842941")
+    monitor = study.people_with_role("medical_monitor")[0].email
+    cra = study.people_with_role("cra")[0].email
+    iid = _safety_item(study, "DNL-1012 (Jane Doe) was hospitalized after a fall. Doe's husband called us.")
+    cras = {p.email for p in study.people_with_role("cra", "site-01")}   # the sponsor is a CRA here too
+    first = {db.unjs(r["to_addrs"])[0]: dict(r) for r in db.q("SELECT * FROM outbox WHERE item_id=?", (iid,))}
+    assert set(first) == {monitor} | cras                                # the CRAs are not copied: their own email
+    assert "Jane Doe" in first[monitor]["body"] and not db.unjs(first[monitor]["cc_addrs"] or "[]")
+    for a in cras:
+        assert "Jane" not in first[a]["body"] and "Doe" not in first[a]["body"]
+    assert "DNL-1012 ([name removed]) was hospitalized" in first[cra]["body"]
+    for _ in range(3):
+        _due_now(iid)
+        safety.escalate(log=lambda *_: None)
+    later = db.q("SELECT body, to_addrs FROM outbox WHERE template_id='email-safety-escalation'")
+    assert later and all("Jane" not in r["body"] and "Doe" not in r["body"] for r in later)
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='safety_names_removed'")
+
+
+def test_a_safety_email_copy_leaves_out_the_quote_when_the_name_check_fails(monkeypatch):
+    from cormon import config, llm
+
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "safety_names")
+
+    def broken(task, *a, **k):
+        raise RuntimeError("AI down")
+    monkeypatch.setattr(llm, "structured", broken)
+    study = config.study("NCT05842941")
+    cra = study.people_with_role("cra")[0].email
+    iid = _safety_item(study, "DNL-1012 (Jane Doe) was hospitalized after a fall.")
+    copy = db.q1("SELECT body FROM outbox WHERE item_id=? AND to_addrs LIKE ?", (iid, f'%{cra}%'))
+    assert "Jane" not in copy["body"] and "may name the participant" in copy["body"]
+
+
 def test_the_medical_monitor_acknowledges_by_reply_and_the_chain_stops(monkeypatch):
     from cormon import config, items, llm, pipeline, safety
 

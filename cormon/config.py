@@ -21,6 +21,7 @@ class Person:
     sites: list[str]
     teams_upn: str | None = None
     phone: str | None = None
+    languages: list[str] = field(default_factory=list)   # the languages they read; none listed: the shared one
 
     @property
     def first_name(self) -> str:
@@ -123,6 +124,7 @@ def _person(d: dict) -> Person:
         id=d["id"], name=d.get("name", d["id"]), email=d.get("email"),
         roles=list(d.get("roles", [])), sites=list(d.get("sites", ["*"])),
         teams_upn=d.get("teams_upn"), phone=d.get("phone"),
+        languages=[str(x).strip() for x in d.get("languages") or [] if str(x).strip()],
     )
 
 

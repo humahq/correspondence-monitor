@@ -884,6 +884,9 @@ def _quote_parts(quote: str) -> list[tuple[str, bool]]:
     return out
 
 
+_STEP_NUMBER = re.compile(r"(?m)^\s*\(?\d{1,2}[.)](?=\s)")
+
+
 def _nums(s: str) -> set[str]:
     return set(re.findall(r"\d+(?:\.\d+)?", s or ""))
 
@@ -898,6 +901,8 @@ def _exact_words(quote: str, proof: list[dict], sources: list[dict], cited: str,
     about_nums = _nums(" ".join(f.get(k) or "" for k in ("problem", "why")))
     hits = []
     order = sorted(pool, key=lambda i: i["id"] != cited)
+    # a numbered list's "1." and "2." are not the rule's numbers
+    quote_nums = _nums(_STEP_NUMBER.sub("", quote or "") if settings.feature("numbered_steps") else quote)
     for text, listy in _quote_parts(quote):
         exact = next(((i, i["text"][s[0]:s[1]]) for i in order if (s := textutil.find_quote(text, i["text"]))), None)
         h = exact or _find_quote(text, pool, cited)  # a loose match can land on a look-alike line elsewhere
@@ -908,7 +913,7 @@ def _exact_words(quote: str, proof: list[dict], sources: list[dict], cited: str,
     best = max(hits, key=lambda h: (h[3] + h[4], not h[2]))
     keep = [h[1] for h in hits if h[0]["id"] == best[0]["id"]
             and (h is best or not h[2] or (h[2] is True and h[3] >= 2 and h[4]))]  # one table cell: the best
-    if _nums(quote) and not any(_nums(quote) & _nums(k) for k in keep):
+    if quote_nums and not any(quote_nums & _nums(k) for k in keep):
         return None  # the rule's numbers are not in what was found: it is about something else
     return best[0], " ... ".join(dict.fromkeys(keep))
 

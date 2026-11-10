@@ -14,7 +14,7 @@ from . import (answers, asks, capture, careful, checks, config, conversation, db
                outbox, reader, routing, senders, settings, textutil, timing, triage)
 from .compliance import records
 from .config import Study
-from . import drafting, hindsight, safety
+from . import drafting, hindsight, language, safety
 from .drafting import item_link, local_time
 
 SAFETY_TITLE = "Safety information received; not reviewed by this monitor (out of scope)"
@@ -255,6 +255,7 @@ def _answer_in_chat(study: Study, msg: dict, text: str, purpose: str = "instruct
     m = re.fullmatch(r"teams:((spaces/[^/]+)/threads/[^/]+)", msg.get("thread_key") or "")
     if msg.get("channel") != "teams" or not m:
         return
+    text = language.fit(study, msg, text)
     routing.enqueue(purpose=purpose, channel="teams", destination="teams_study_channel", body=text,
                     message_id=msg["id"], study_id=study.study_id,
                     meta={"target": {"space": m.group(2), "thread": m.group(1), "key": "study_channel"}})

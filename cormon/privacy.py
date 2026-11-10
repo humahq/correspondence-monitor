@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import re
 
-from . import conversation, db, llm, rooms
-from .config import Study
+from . import conversation, db, llm, rooms, settings
+from .config import Person, Study
 from .settings import CODE_ROOT, CONFIG_DIR, load_yaml
 
 SAFE_REPLY = ("Please ask the site investigator to review this participant's record; they can see everything "
@@ -206,3 +206,58 @@ def screen(study: Study, msg: dict, answers: list[dict], use_cache: bool = True)
                  participant_id=a.get("participant"), question=a.get("question"),
                  readers=sorted({g["id"] for _, g in who}), ok=res["ok"], not_for=res.get("not_for") or [],
                  reworded=sent != said, safe_reply=sent == safe_reply() and sent != said, error=res.get("error"))
+
+
+# Names in a safety email (switch: safety_names; Eliot, Nov 6): the medical monitor's own email may name the
+# participant, as the site care team may; the CRA's copy and every escalation email may not. The site's words are
+# quoted in those emails, so the names in them are found and taken out for everyone else.
+NAMES_SYSTEM = """List every name in a clinical-trial site's message that names a participant (patient) or one of
+their relatives or friends, exactly as written: full names, first names, surnames, nicknames and initials (for
+example "Mr. Tanaka", "Jane", "J.T."). Leave out study and site staff, doctors, hospitals, companies, drugs and
+participant study IDs (such as G-723-041). [] when there are none."""
+NAMES_SCHEMA = llm.obj({"names": {"type": "array", "items": {"type": "string"}}})
+NAME_REMOVED = "[name removed]"
+QUOTE_WITHHELD = "(not quoted here, as it may name the participant: please open the full message)"
+
+
+def may_see_names(study: Study, person: Person | None) -> bool:
+    """Whether a safety email to this person may name the participant: the site care team and the roles in
+    safety.names_for (the medical monitor)."""
+    roles = set(person.roles) if person else set()
+    care = next((g for g in groups(study) if g.get("everything")), {})
+    return bool(roles & (set(care.get("roles") or []) | set(settings.get("safety.names_for") or ["medical_monitor"])))
+
+
+def participant_names(study: Study, text: str, use_cache: bool = True) -> list[str] | None:
+    """The names of participants and their relatives in a site's words, longest first; None when the check failed.
+    A study person's name is never one of them."""
+    if not (text or "").strip():
+        return []
+    try:
+        found = llm.structured("participant_names", NAMES_SYSTEM, text[:6000], NAMES_SCHEMA, "names",
+                               use_cache=use_cache)["names"]
+    except Exception as e:
+        db.audit("participant_names_failed", entity_type="llm", entity_id="participant_names", error=str(e)[:300])
+        return None
+    words = lambda s: re.findall(r"[^\W\d_]{2,}", s or "")  # noqa: E731
+    staff = {w.lower() for p in study.people for w in words(p.name)} | {"mr", "mrs", "ms", "miss", "dr"}
+    names = {" ".join(n.split()) for n in found if n and n.strip()}
+    names = {n for n in names if not words(n) or not {w.lower() for w in words(n)} <= staff}   # "J.T." stays
+    # each part on its own too ("Mr Tanaka" for "Mr. Tanaka", "Tanaka" later on); a staff name's part stays
+    names |= {w for n in names for w in words(n) if len(w) >= 3 and w.lower() not in staff}
+    return sorted(names, key=len, reverse=True)
+
+
+def without_names(study: Study, ctx: dict, use_cache: bool = True) -> dict:
+    """A safety email's context with the participant's names taken out of the site's quoted words and subject."""
+    f = dict(ctx.get("finding") or {})
+    quote, subject = f.get("message_quote") or "", f.get("message_subject") or ""
+    names = participant_names(study, f"{subject}\n{quote}", use_cache)
+    if names is None:
+        f.update(message_quote=QUOTE_WITHHELD, message_subject="(subject not shown)")
+    else:
+        for n in names:
+            pat = re.compile(r"(?<!\w)" + r"\s+".join(map(re.escape, n.split())) + r"(?!\w)", re.I)
+            quote, subject = pat.sub(NAME_REMOVED, quote), pat.sub(NAME_REMOVED, subject)
+        f.update(message_quote=quote, message_subject=subject)
+    return dict(ctx, finding=f)

@@ -76,6 +76,7 @@ sets:
       - cormon/careful.py
       - cormon/privacy.py
       - config/privacy.yaml
+      - cormon/language.py
       - cormon/ingest.py
       - cormon/config.py
       - cormon/db.py

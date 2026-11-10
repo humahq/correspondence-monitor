@@ -20,7 +20,7 @@ from datetime import date, datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
 
-from . import (capture, careful, conversation, db, guide, hindsight, llm, memory, outcheck, privacy, reader, routing,
+from . import (capture, careful, conversation, db, guide, hindsight, language, llm, memory, outcheck, privacy, reader, routing,
                settings)
 from .compliance import sha256
 from .config import Study
@@ -792,6 +792,7 @@ def reply(study: Study, msg: dict, email: str, use_cache: bool = True, harm_only
         return None
     text = render(answers, save_page(study, msg, email, answers), chat=msg.get("channel") == "teams",
                   cra=cra_names(study))
+    text = language.fit(study, msg, text, use_cache)
     oid = _post(study, msg, text)
     hashes = [sha256(" ".join((a.get("question") or "").lower().split())) for a in answers]
     db.audit("question_answered", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
