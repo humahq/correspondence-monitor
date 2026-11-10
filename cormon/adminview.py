@@ -46,7 +46,8 @@ OUTCOMES = {
 
 CHANNEL = {"email": "Email", "teams": "Chat"}
 STATUS = {"new": "Waiting", "processing": "Reading now", "processed": "Done", "error": "Error"}
-STATE = {"open": "Open", "cleared": "Cleared", "suppressed": "Disregarded", "out_of_scope": "Not reviewed (safety)"}
+STATE = {"open": "Open", "cleared": "Cleared", "suppressed": "Disregarded", "waiting": "Waiting for review",
+         "out_of_scope": "Not reviewed (safety)"}
 PURPOSE = {"chat_received": "Quick receipt", "question_answer": "Answer", "chat_acknowledgement": "Reply in chat",
            "teams_study_team": "Alert in the study chat", "teams_study_channel": "Alert in the study chat",
            "email_cra": "Alert email to the CRA", "email_sponsor": "Email to the sponsor", "digest": "Daily digest",
@@ -636,6 +637,7 @@ def shell(email: str) -> str:
     avatar = html.escape(settings.bot_avatar(), quote=True)
     product = PRODUCT if settings.feature("openbook_look") else ""
     look = f' class="openbook" data-product="{product}"' if product else ""
+    look += ' data-closing="1"' if settings.feature("close_on_page") else ""
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{product or name} admin</title><link rel="stylesheet" href="/admin/static/admin.css?v={v}">'

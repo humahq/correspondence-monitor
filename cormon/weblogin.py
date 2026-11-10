@@ -60,6 +60,15 @@ def _unsign(value: str | None) -> dict | None:
     return data if data.get("exp", 0) > time.time() else None
 
 
+def seal(data: dict, minutes: float) -> str:
+    """`data`, signed so it comes back unchanged, for `minutes` (a confirm step's choices kept in its form)."""
+    return _sign(dict(data, exp=time.time() + minutes * 60))
+
+
+def unseal(value: str | None) -> dict | None:
+    return _unsign(value)
+
+
 def _redirect_uri() -> str:
     return settings.get("web.base_url").rstrip("/") + "/auth/callback"
 

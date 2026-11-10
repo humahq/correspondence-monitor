@@ -85,6 +85,12 @@ roles:
   # testers may clear and disregard alerts and chat with the bot 1-on-1; no routing rule emails them
   - { id: tester, label: Study team member }
 
+# Who may close an alert on its page, and who reviews "I did something else" and "Nothing can be done"
+# (features.close_on_page). For now only Peter, Eliot and John (John, 10 Nov); nobody reviews their own.
+closing:
+  close: [tester, clinops_lead]
+  review: [tester, pi, clinops_lead]
+
 sites:
   - { id: site-01, name: "Site 01 (MGH)", aliases: [MGH, Massachusetts General] }
 

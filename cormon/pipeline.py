@@ -14,7 +14,7 @@ from . import (answers, asks, capture, careful, checks, config, conversation, db
                outbox, reader, routing, senders, settings, textutil, timing, triage)
 from .compliance import records
 from .config import Study
-from . import drafting, hindsight, language, recipients, safety
+from . import closing, drafting, hindsight, language, recipients, safety
 from .drafting import item_link, local_time
 
 SAFETY_TITLE = "Safety information received; not reviewed by this monitor (out of scope)"
@@ -440,6 +440,13 @@ def handle_instruction(study: Study, msg: dict, instruction: dict) -> bool:
                                     f"{'it is' if len(elsewhere) == 1 else 'they are'} not part of this study.")
         return False
     sid = study.study_id
+    if kind == "cleared" and closing.on():
+        db.audit("clear_by_reply_sent_to_page", entity_type="message", entity_id=msg["id"], study_id=sid,
+                 instruction=instruction, item_ids=item_ids)
+        links = ", ".join(f'<a href="{item_link(items.get(i))}">#{i}</a>' for i in item_ids)
+        _answer_in_chat(study, msg, f"Alerts are closed on their page now, not by a reply: open {links}, sign in "
+                                    "and pick what was done.")
+        return False
     target = "suppressed" if kind == "disregard" else "cleared"
     refused = {i: why for i in item_ids if (why := items.order_problem(items.get(i), target, actor_type))}
     for i, why in refused.items():
