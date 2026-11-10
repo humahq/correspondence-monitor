@@ -8,7 +8,7 @@ This list is fixed: the same 71 IDs, in the document's order. Only the boxes cha
 listed on their own, at the end. They amend GOV-02 (by VAL-07), VAL-01 (by VAL-06), VAL-03 (by VAL-09) and
 PRV-02 (by VAL-08).
 
-Status on 30 Oct 2026: **49 done, 19 partly done, 1 not done, 2 later (V2).**
+Status on 10 Nov 2026: **52 done, 17 partly done, 0 not done, 2 later (V2).** Addendum A: 1 of 4 done (VAL-07).
 
 The safety contacts (medical monitor, safety backup, on-call) are stand-in addresses that reach John until the
 sponsor names the real people: put their names, emails and phones in the study file, nothing else changes.
@@ -99,8 +99,9 @@ What is left:
 - [ ] Questions for Eliot (email): can a fact from a private chat be used in a group chat? Who may correct facts,
   admins only or coordinators too? Is OpenAI's patient-data agreement (BAA) in place?
 
-**2. Closing alerts on the web page (DSP-01, DSP-02, DSP-04, and the "clear by reply" part of OUT-03).** Built
-(issue #74, `features.close_on_page`, `cormon/closing.py`), waiting for the merge and the next release.
+**2. Done, live on 10 Nov 2026: closing alerts on the web page (DSP-01, DSP-02, DSP-04, and the "clear by reply"
+part of OUT-03).** Issue #74, `features.close_on_page`, `cormon/closing.py`. For now only Peter, Eliot and John may
+close and review (`closing:` in study.yaml).
 Eliot decided this on 29 Oct. Alerts are no longer closed by email or chat reply. On the alert's web page, the person picks one:
 - "I did what was asked", with the date and time. This closes the alert.
 - "I did something else", with what and when. This goes to the PI.
@@ -143,7 +144,7 @@ IAM-04), all secrets in Secret Manager with rotation (SEC-03).
 
 **7. V2 (sponsor web features).** IAM-05, EXP-02.
 
-## Done (49)
+## Done (52)
 
 - [x] CAP-01 Original bytes preserved
 - [x] CAP-02 Hash-linked derivations
@@ -169,7 +170,10 @@ IAM-04), all secrets in Secret Manager with rotation (SEC-03).
 - [x] SAF-07 Safety routing record (each safety message in the records export, `safety.csv`: received time and hash, severity, where it was sent, who acknowledged and when, how far it escalated, and any deviation)
 - [x] SAF-10 Site notice never fires for safety
 - [x] SAF-11 Negative assurance
+- [x] DSP-01 Deterministic disposition grammar (an alert is closed on its page with three fixed choices, by a person signed in with Google; a "cleared" reply gets the page's link and changes nothing. Live 10 Nov, issue #74)
+- [x] DSP-02 Echo-back confirmation (a check step shows exactly what will be kept, and only Confirm saves it, sealed so it can't change in between; "something else" and "nothing can be done" also need a second person's review, never your own)
 - [x] DSP-03 Roster authority check
+- [x] DSP-04 Reason and visibility (the page's choice is the reason code: fixed, other_fix_approved, not_remediable_approved, reported_to_sponsor, with the person's words, on the alert's page and in the audit log)
 - [x] DSP-05 Operator override controls
 - [x] DSP-06 Operator notes are configuration
 - [x] AUD-01 Non-obscuring writes
@@ -195,7 +199,7 @@ IAM-04), all secrets in Secret Manager with rotation (SEC-03).
 - [x] GOV-02 Drift monitoring
 - [x] EXP-01 MVP export procedure (`cormon export-records`: one zip per study with originals and their hashes, alerts and every change to them, safety routing, sent messages, audit trail, AI log and settings history, plus the integrity checks. CSV, not PDF. PR #19)
 
-## Partly done (19)
+## Partly done (17)
 
 | ID | Name | What is left |
 |---|---|---|
@@ -203,12 +207,10 @@ IAM-04), all secrets in Secret Manager with rotation (SEC-03).
 | CAP-10 | Second-copy governance | No written rule for how long the mailbox keeps mail |
 | OUT-01 | Sent-message records | A write-once copy now goes to a separate database (PR #17), a stand-in: the locked bucket is Phase 3 |
 | OUT-02 | Outbound domain authentication | DMARC `p=reject` on the sending domain (a DNS task) |
-| OUT-03 | LLM output never routes | The AI still decides "whether" in 2 places (doctor check, careful check). Clear by reply is replaced by closing on the page: built, waiting for the merge (issue #74) |
+| OUT-03 | LLM output never routes | The AI still decides "whether" in 2 places (doctor check, careful check). Clear by reply is gone: alerts are closed on their page (live 10 Nov, issue #74) |
 | QAA-06 | No clinical judgment | A judgment in a final answer is recorded, not blocked. Needs real answers to measure |
 | SAF-02 | Detection and routing | Safety mail goes, unassessed, to the medical monitor with the CRA copied, but the address is a stand-in (john+medicalmonitor@huma.ai) until the sponsor names one |
 | SAF-05 | Escalation and terminus | Built: not acknowledged in time, it goes to the safety backup, then the ClinOps lead, then the on-call person and the admins are told to phone (3 reminders); reaching that last step is recorded as a deviation, with the steps that went unanswered. The contacts are stand-ins and no phone numbers are on file yet |
-| DSP-01 | Deterministic disposition grammar | Built, waiting for the merge (issue #74): an alert is closed on its page with three fixed choices by a person signed in with Google; a "cleared" reply gets the page's link and changes nothing. Who may close is a role list in study.yaml |
-| DSP-04 | Reason and visibility | Built, waiting for the merge (issue #74): the page's choice is the reason code (fixed, other_fix_approved, not_remediable_approved, reported_to_sponsor), with the person's words, shown on the alert's page and in the audit log |
 | IAM-01 | Operator access | MFA depends on the Google Workspace setting |
 | IAM-04 | Key management | No separate key-admin role; no key rotation |
 | AUD-02 | Immutability via compensating controls | Each audit entry is copied to a separate write-once database and checked daily (PR #17); someone with the file can still drop its triggers, so the locked bucket is Phase 3 |
@@ -218,11 +220,9 @@ IAM-04), all secrets in Secret Manager with rotation (SEC-03).
 | SEC-03 | Secrets and credentials | Some secrets still in env vars and files; no rotation |
 | PRV-01 | PHI handling | No consent-form coverage check when a study starts |
 | VAL-04 | Per-site protocol version effectivity | An alert checked against a version the site was not on that day is held for a person (PR #21). Only one version per document is loaded, and the sites have no version dates yet |
-## Not done (1)
+## Not done (0)
 
-| ID | Name | What is missing |
-|---|---|---|
-| DSP-02 | Echo-back confirmation | Built, waiting for the merge (issue #74): a check step shows exactly what will be kept, and only Confirm saves it (sealed, so it can't be changed in between); "something else" and "nothing can be done" also need a second person's review |
+None.
 
 
 ## Later, V2 (2)
@@ -230,11 +230,11 @@ IAM-04), all secrets in Secret Manager with rotation (SEC-03).
 - [ ] IAM-05 Sponsor web UI SSO and MFA
 - [ ] EXP-02 Sponsor self-service export
 
-## Addendum A, 5 Nov 2026 (4)
+## Addendum A, 5 Nov 2026 (4: 1 done)
 
 | ID | Name | Status |
 |---|---|---|
 | VAL-06 | Validated against FDA CSV and CSA | Eliot's paperwork: the VAL-01 package says, for each requirement, how it is validated (CSV or CSA). Not started |
-| VAL-07 | Model drift as a release gate | Built, waiting for the merge (issue #70): the weekly run asks every test set fresh and compares each case with the last passed fresh run; more changes than the limit in `config/gates.yaml` fail it, and `deploy/release.sh` stops unless the newest fresh run passed and is at most 8 days old |
+| VAL-07 | Model drift as a release gate | Done, live on 10 Nov 2026 (issue #70): the weekly run asks every test set fresh and compares each case with the last passed fresh run; more changes than the limit in `config/gates.yaml` fail it, and `deploy/release.sh` stops unless the newest fresh run passed and is at most 8 days old |
 | VAL-08 | GDPR and EU AI Act alongside Part 11 | Eliot's paperwork: the lawful basis, how long data is kept, and who checks the AI (human oversight). Not started |
 | VAL-09 | About 1,000 validated questions | Not done: 100 questions today (`demo/qa-g/questions.json`). Later |
