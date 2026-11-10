@@ -220,7 +220,13 @@ A first wording raised two false alerts on the 100 ("the PI reviewed and says al
 required interval"); the wording now says a report of what someone found as part of their job is not a permission,
 and the rerun raised none. Time: the scope step about 0.4 s longer per email.
 
-**Layer 1, a ready-made detector (measured, not built).** `demo/trick-detector/run.py`, on our own machine, no AI:
+**Layer 1, a ready-made detector (built 10 Nov, not live).** `cormon/trickcheck.py`, switch
+`features.trick_detector`: Meta Prompt Guard 2 (22M) as ONNX, made by `deploy/prompt_guard_export.py`, its files
+checked against a fixed SHA256. With the weights in their own file it needs about 230 MB of memory and about 50 ms
+a message. At a score of 0.9: 4 of 89 trick messages flagged, 0 of 1,220 normal ones (at 0.5, one normal note,
+"caregiver gives via tube each AM per pharmacy instructions", was flagged). A flagged message is recorded
+(`trick_detector_flagged`), the admins are emailed without its text, and the weekly report counts them. It changes
+nothing else. The measurement before it was built: `demo/trick-detector/run.py`, on our own machine, no AI:
 ProtectAI deberta v2 flagged 21 of 89 trick messages (the "ignore all previous instructions" kind; none of the
 "the sponsor said it's fine" kind) and 20 of 1,220 normal messages, at 35 ms a message (ONNX). It needs about
 850 MB of memory, too much next to Hindsight on the 4 GB server, and an 8-bit copy stops working (1 of 89 caught).

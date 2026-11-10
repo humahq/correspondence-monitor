@@ -14,7 +14,7 @@ from . import (answers, asks, capture, careful, checks, config, conversation, db
                outbox, reader, routing, senders, settings, textutil, timing, triage)
 from .compliance import records
 from .config import Study
-from . import closing, drafting, hindsight, language, recipients, safety
+from . import closing, drafting, hindsight, language, recipients, safety, trickcheck
 from .drafting import item_link, local_time
 
 SAFETY_TITLE = "Safety information received; not reviewed by this monitor (out of scope)"
@@ -601,6 +601,8 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
         history = capture.thread_history(msg["thread_key"], msg_id)
         reader_route = guide.checker(study).get("route") == "reader"
         corpus = _corpus(msg)
+        if not rerun:
+            trickcheck.check(study.study_id, msg_id, corpus)
         if reader_route:  # neither needs the extract's answer, so they run while it does
             early = ThreadPoolExecutor(3)
             reading = early.submit(reader.check, study, msg, corpus, use_cache=use_cache, save=False)

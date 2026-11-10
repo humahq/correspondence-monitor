@@ -72,6 +72,7 @@ def measure(start: str, end: str) -> dict:
         "judgment_flagged": _count("answer_judgment_flagged", start, end),
         "blocked_outgoing": _count("outgoing_blocked", start, end),
         "answer_messages": asked, "not_answered": _count("question_not_answered", start, end),
+        "tricks_flagged": _count("trick_detector_flagged", start, end),
     }
 
 
@@ -160,6 +161,8 @@ def render(rep: dict, sample: list[int]) -> str:
     lines += ["", f"Fallback model used {t['fallback_used']} time(s). AI wording refused by the output check "
               f"{t['wording_refused']} time(s); answers flagged for a possible clinical judgment "
               f"{t['judgment_flagged']}; outgoing messages blocked {t['blocked_outgoing']}."]
+    if t.get("tricks_flagged"):
+        lines.append(f"Messages the trick detector flagged: {t['tricks_flagged']} (see trick_detector_flagged in the audit log).")
     base = settings.get("web.base_url", "")
     if sample:
         lines += ["", f"Please read these {len(sample)} messages, which made no alert, and mark each one:",
