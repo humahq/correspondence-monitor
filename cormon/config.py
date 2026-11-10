@@ -218,7 +218,7 @@ def _rel(p: Path) -> str:
 # What the release gate tests (CFG-02): on the live copy these change only through GitHub and deploy/release.sh.
 TESTED_FILES = ("config/triage.yaml", "config/routing.yaml", "config/templates.yaml", "config/careful.yaml",
                 "config/privacy.yaml")
-TESTED_SETTINGS = ("llm", "matching")
+TESTED_SETTINGS = ("llm", "matching", "features", "language", "safety")
 GATED = ("{} changes what the release gate tests (CFG-02), so on the live bot it changes only through GitHub: "
          "commit it, let the gate pass, then deploy/release.sh puts it in place")
 
@@ -359,7 +359,7 @@ def approve_version(version_id: int, who: str) -> dict:
 
 
 def _merge_tested_settings(server: str, repo: str) -> str:
-    """The server's settings with the gate-tested sections (llm, matching) taken from the repo's."""
+    """The server's settings with the gate-tested sections (TESTED_SETTINGS) taken from the repo's."""
     import io
 
     from ruamel.yaml import YAML
