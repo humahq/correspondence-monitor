@@ -1937,6 +1937,60 @@ def test_the_pass_marks_block_a_drop_and_a_stranger_recipient(tmp_path):
     assert gate.check("tricks", tricks, {"accuracy": 0.6, "strangers": bad})
 
 
+def test_model_drift_compares_each_case_with_the_last_fresh_run(tmp_path):
+    from cormon import gate
+
+    sets = gate.gates()["sets"]
+    before, now = tmp_path / "before", tmp_path / "now"
+    for d, verdicts in ((before, ["right"] * 20), (now, ["wrong", "wrong", "wrong"] + ["right"] * 17)):
+        d.mkdir()
+        rows = "".join(f"e{i:02},{v}\n" for i, v in enumerate(verdicts))
+        (d / "results.csv").write_text("case,verdict\n" + rows + ("e99,right\n" if d is now else ""))
+    got = gate.drift("findings", now, before)
+    assert got["compared"] == 20 and got["changed"] == 0.15, "a case only one run has is not compared"
+    assert got["changed_ones"][0] == "e00 (now wrong)"
+    assert gate.drift_problems(sets["findings"], got) == []
+    (now / "results.csv").write_text((now / "results.csv").read_text().replace("e03,right", "e03,wrong"))
+    over = gate.drift_problems(sets["findings"], gate.drift("findings", now, before))
+    assert over and "changed 20%" in over[0] and "15%" in over[0]
+
+    for d, verdict in ((before, "correct"), (now, "partly")):
+        (d / "results.csv").unlink()
+        (d / "results.json").write_text(json.dumps([{"id": "q1", "grade": {"verdict": verdict}},
+                                                    {"id": "q2", "grade": None}]))
+    assert gate.drift("questions", now, before)["changed"] == 0, "correct and partly both count as right"
+    assert gate.drift_problems(sets["doctors"], {"changed": 0.5}) == [], "doctors: shown only"
+
+    text = gate.summary_md({"set": "findings", "what": "f", "passed": True, "below": [], "baseline_run": 41,
+                            "changes_accepted": over,
+                            "scores": {"recall": 1.0, "changed": 0.2, "compared": 20, "changed_ones": ["e00 (now wrong)"]}})
+    assert "accepted by the person who ran it" in text and "(41): 1 of 20 cases changed: e00" in text
+
+
+def test_the_last_fresh_run_is_the_newest_one_that_passed(monkeypatch):
+    from cormon import gate
+
+    def run(i, branch="main"):
+        return {"id": i, "head_branch": branch}
+
+    pages = {"artifacts": {"artifacts": [{"expired": False, "workflow_run": run(50)},
+                                         {"expired": True, "workflow_run": run(60)},
+                                         {"expired": False, "workflow_run": run(70, "feature")}]},
+             "runs": {"workflow_runs": [run(30), run(40)]}}
+    passed = {30: "success", 40: "success", 50: "failure"}
+
+    def github(path):
+        if path.startswith("actions/runs/"):
+            i = int(path.split("/")[2])
+            return {"jobs": [{"name": "gate", "conclusion": passed[i]}]}
+        return pages["artifacts" if "artifacts" in path else "runs"]
+
+    monkeypatch.setattr(gate, "_github", github)
+    assert gate.last_fresh() == 40, "50 failed, 60 expired, 70 is not on main"
+    passed[50] = "success"
+    assert gate.last_fresh() == 50
+
+
 def test_the_question_grader_sees_every_section_the_bot_read():
     from cormon import qabench
 

@@ -5,7 +5,8 @@
 #   ./deploy/release.sh            the latest commit on GitHub's main
 #   ./deploy/release.sh <commit>   a given commit (it must be on main and its gate must have passed)
 #
-# It stops, changing nothing, when: the gate did not pass for the commit; the server's packages differ from
+# It stops, changing nothing, when: the gate did not pass for the commit; the newest fresh AI run (weekly, VAL-07)
+# did not pass or is more than 8 days old; the server's packages differ from
 # deploy/requirements-live.txt; the live code is not the version tagged `live` (someone changed it by hand);
 # or the live study model differs from studies/model/model.sql (a rebuild the gate has not tested).
 # Otherwise it backs up the code and the database, puts the commit's cormon/ in place, restarts the bot and
@@ -36,6 +37,23 @@ RUN_ID=$(gh run list --workflow ci.yml --commit "$SHA" --limit 20 --json databas
 GATE=$(gh run view "$RUN_ID" --json jobs --jq '.jobs[] | select(.name == "gate") | .conclusion')
 [ "$GATE" = success ] || stop "the gate did not pass for $SHA (run $RUN_ID: $GATE)"
 echo "gate passed: run $RUN_ID"
+
+# 1b. Model drift (VAL-07): the newest fresh run (every AI set asked with no kept answers and compared with the
+# one before) passed and is at most 8 days old, so a change on the model supplier's side has been tested.
+# A fresh run leaves a "fresh-check" file; a weekly run is a fresh run even from before that file existed.
+read -r FRESH_ID FRESH_AT < <({
+  gh api "repos/{owner}/{repo}/actions/artifacts?name=fresh-check&per_page=30" \
+    --jq '.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")
+          | "\(.workflow_run.id) \(.created_at)"'
+  gh run list --workflow ci.yml --event schedule --branch main --limit 1 --json databaseId,createdAt,status \
+    --jq '.[] | select(.status == "completed") | "\(.databaseId) \(.createdAt)"'
+} | sort -n | tail -1) || true
+[ -n "${FRESH_ID:-}" ] || stop "no fresh AI run on main yet: wait for the weekly one or start it with: gh workflow run ci.yml -f fresh=true"
+FRESH_GATE=$(gh run view "$FRESH_ID" --json jobs --jq '.jobs[] | select(.name == "gate") | .conclusion')
+[ "$FRESH_GATE" = success ] || stop "the newest fresh AI run did not pass (run $FRESH_ID: ${FRESH_GATE:-not finished}): the model's answers changed or dropped; see that run"
+FRESH_DAYS=$(python3 -c 'import sys, datetime as d; print((d.datetime.now(d.timezone.utc) - d.datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00"))).days)' "$FRESH_AT")
+[ "$FRESH_DAYS" -le 8 ] || stop "the newest fresh AI run is $FRESH_DAYS days old (run $FRESH_ID): start one with: gh workflow run ci.yml -f fresh=true"
+echo "fresh AI run passed: run $FRESH_ID, $FRESH_DAYS days ago"
 
 # 2. The server's packages are the ones the gate tested with.
 diff <(git show "$SHA:deploy/requirements-live.txt" | sort) \

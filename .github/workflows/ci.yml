@@ -3,6 +3,9 @@
 # with no kept AI answers, to catch a change on the model supplier's side, and its answers become the kept ones.
 # A merge takes its pull request's kept answers, so the next change only pays for what it changed.
 # deploy/release.sh deploys only a commit whose "gate" job passed.
+# Model drift (VAL-07): a fresh run (weekly, or by hand with "fresh") compares each case with the last fresh run
+# that passed, and leaves a "fresh-check" file; deploy/release.sh stops unless the newest one passed and is at
+# most 8 days old.
 name: gate
 
 on:
@@ -17,9 +20,18 @@ on:
         description: Run every AI test set
         type: boolean
         default: false
+      fresh:
+        description: Ask every set fresh, with no kept answers, and compare with the last fresh run (as the weekly run)
+        type: boolean
+        default: false
+      accept_changes:
+        description: With fresh, more changes than allowed do not fail (a wanted change, e.g. a new model)
+        type: boolean
+        default: false
 
 concurrency:
-  group: gate-${{ github.ref }}
+  # a merge does not cancel a fresh run
+  group: gate-${{ github.ref }}-${{ (github.event_name == 'schedule' || inputs.fresh) && 'fresh' || 'change' }}
   cancel-in-progress: true
 
 permissions:
@@ -41,6 +53,8 @@ jobs:
       sets: ${{ steps.plan.outputs.sets }}
       kept_sets: ${{ steps.plan.outputs.kept_sets }}
       from_run: ${{ steps.plan.outputs.from_run }}
+      fresh: ${{ steps.plan.outputs.fresh }}
+      baseline_run: ${{ steps.plan.outputs.baseline_run }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,7 +65,11 @@ jobs:
       - run: pip install pyyaml
       - id: plan
         run: |
-          if [ "${{ github.event_name }}" = schedule ] || [ "${{ inputs.all }}" = true ]; then
+          if [ "${{ github.event_name }}" = schedule ] || [ "${{ inputs.fresh }}" = true ]; then
+            base=$(python -m cormon.gate last-fresh)   # GitHub not reachable: the run stops, not compared silently
+            printf 'fresh=true\nbaseline_run=%s\n' "$base" >> "$GITHUB_OUTPUT"
+            python -m cormon.gate plan --all
+          elif [ "${{ inputs.all }}" = true ]; then
             python -m cormon.gate plan --all
           elif [ "${{ github.event_name }}" = push ]; then
             # merging a pull request whose run passed on exactly this code does not run its AI sets again
@@ -100,6 +118,9 @@ jobs:
     if: needs.plan.outputs.sets != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read   # the last fresh run's results
     strategy:
       fail-fast: false
       matrix:
@@ -119,14 +140,29 @@ jobs:
       - run: env -u CORMON_HOME python -m cormon.gate home "$CORMON_HOME"
       # The kept AI answers: an unchanged input is not asked again, so it costs nothing and gets the same answer.
       # The weekly run asks everything fresh, and its answers become the kept ones.
-      - name: Kept AI answers (not on the weekly run)
-        if: github.event_name != 'schedule'
+      - name: Kept AI answers (not on a fresh run)
+        if: needs.plan.outputs.fresh != 'true'
         uses: actions/cache/restore@v4
         with:
           path: .gate-home/cache.db
           key: ai-answers-${{ matrix.set }}-${{ github.run_id }}
           restore-keys: ai-answers-${{ matrix.set }}-
-      - run: python -m cormon.gate run ${{ matrix.set }} gate-out/${{ matrix.set }}
+      - name: The last fresh run's results, to compare with (VAL-07)
+        if: needs.plan.outputs.fresh == 'true' && needs.plan.outputs.baseline_run != ''
+        continue-on-error: true   # a set the last fresh run did not have is not compared
+        uses: actions/download-artifact@v4
+        with:
+          name: results-${{ matrix.set }}
+          path: gate-baseline/${{ matrix.set }}
+          run-id: ${{ needs.plan.outputs.baseline_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          args=()
+          if [ -d "gate-baseline/${{ matrix.set }}" ]; then
+            args=(--baseline "gate-baseline/${{ matrix.set }}" --baseline-run "${{ needs.plan.outputs.baseline_run }}")
+            [ "${{ inputs.accept_changes }}" = true ] && args+=(--accept-changes)
+          fi
+          python -m cormon.gate run ${{ matrix.set }} gate-out/${{ matrix.set }} "${args[@]}"
       - name: Keep this run's AI answers
         if: always() && hashFiles('.gate-home/cache.db') != ''
         uses: actions/cache/save@v4
@@ -178,6 +214,19 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      # VAL-07: deploy/release.sh finds the newest fresh run on main by this file and needs its gate passed.
+      - if: needs.plan.outputs.fresh == 'true' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p fresh-check
+          printf '{"run": %s, "commit": "%s", "event": "%s", "by": "%s", "accept_changes": %s, "ai_tests": "%s"}\n' \
+            "${{ github.run_id }}" "${{ github.sha }}" "${{ github.event_name }}" "${{ github.actor }}" \
+            "${{ inputs.accept_changes == true }}" "${{ needs.ai-tests.result }}" > fresh-check/fresh-check.json
+      - if: needs.plan.outputs.fresh == 'true' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-check
+          path: fresh-check
+          retention-days: 90
       - name: Every required job passed
         run: |
           echo "sets: ${{ needs.plan.outputs.sets }}"
