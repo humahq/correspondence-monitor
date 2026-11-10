@@ -42,7 +42,11 @@ is what stops them reaching the wrong person.
 2. Update the table above: Live bot "on", and the date.
 3. Run the code tests (`pytest tests`), then commit with an issue number and push.
 4. The release gate runs the AI test sets with the switch on. They must pass.
-5. John runs `deploy/release.sh`. The code and the switch go live together.
+5. John runs `deploy/release.sh`. The code and the switch go live together: the release puts the `features:`,
+   `language:` and `safety:` parts of `settings.yaml` in place, approved by the gate, so no second person has
+   to approve the switch on the server. On the server itself these parts can't be changed by hand.
+   Patient memory is the exception: `memory:` holds the server's own Hindsight details, so `memory.enabled` is
+   switched on on the server (`cormon config set settings memory.enabled true`) and a second person approves it.
 
 To try a feature in a test run before then: `CORMON_TEST_FEATURES=permission_claims cormon test <folder>`
 (names separated by commas, or `all`). Patient memory in a test run: `CORMON_TEST_MEMORY=1`.

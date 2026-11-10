@@ -55,11 +55,11 @@ def changed_files(base: str) -> list[str] | None:
     return [f for f in _git("diff", "--name-only", f"{base}...HEAD").splitlines() if f]
 
 
-TESTED_SETTINGS = ("llm", "matching")  # the same as config.TESTED_SETTINGS; this job installs only pyyaml
+TESTED_SETTINGS = ("llm", "matching", "features", "language", "safety")  # = config.TESTED_SETTINGS; only pyyaml here
 
 
 def _llm_block(text: str | None) -> dict:
-    """The settings the gate tests: the models and how matching runs."""
+    """The settings the gate tests: the models, how matching runs, and the feature switches."""
     data = yaml.safe_load(text or "") or {}
     return {k: data.get(k) for k in TESTED_SETTINGS}
 

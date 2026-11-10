@@ -1208,12 +1208,14 @@ def test_the_release_puts_the_tested_config_in_place_and_keeps_the_servers_own(t
     commit = tmp_path / "commit"
     (commit / "config").mkdir(parents=True)
     (commit / "config" / "triage.yaml").write_text("hours: 24\n")
-    (commit / "config" / "settings.yaml").write_text("llm:\n  model: b\nweb:\n  host: 0.0.0.0\n")
+    (commit / "config" / "settings.yaml").write_text("llm:\n  model: b\nfeatures:\n  numbered_steps: true\n"
+                                                     "web:\n  host: 0.0.0.0\n")
     (home / "config" / "triage.yaml").write_text("hours: 99\n")  # a hand edit just before: it waits
     assert sorted(config.release(commit, "john_huma_ai", "run 7")) == ["config/settings.yaml", "config/triage.yaml"]
     assert (home / "config" / "triage.yaml").read_text() == "hours: 24\n"
     s = (home / "config" / "settings.yaml").read_text()
     assert "model: b" in s and "host: 127.0.0.1  # server only" in s
+    assert "numbered_steps: true" in s                  # the switch the gate tested, with no second person
     assert config.waiting() == [] and config.unapproved() == []
     assert config.in_force("config/triage.yaml")["approved_by"] == "release gate (run 7)"
     assert config.record_config_changes() == [] and db.q1("SELECT 1 FROM audit_log WHERE action='config_released'")
@@ -1307,6 +1309,7 @@ def test_the_gate_runs_every_set_when_matching_settings_change():
     assert gate.TESTED_SETTINGS == config.TESTED_SETTINGS
     assert gate._llm_block("matching:\n  sweep: true\n") != gate._llm_block("matching:\n  sweep: false\n")
     assert gate._llm_block("web:\n  host: a\n") == gate._llm_block("web:\n  host: b\n")
+    assert gate._llm_block("features:\n  x: true\n") != gate._llm_block("features:\n  x: false\n")
 
 
 def test_a_merge_passes_its_pull_requests_kept_answers_on_and_each_run_says_what_it_cost(tmp_path, monkeypatch):
