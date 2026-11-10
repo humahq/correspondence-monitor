@@ -14,7 +14,7 @@ from . import (answers, asks, capture, careful, checks, config, conversation, db
                outbox, reader, routing, senders, settings, textutil, timing, triage)
 from .compliance import records
 from .config import Study
-from . import drafting, hindsight, language, safety
+from . import drafting, hindsight, language, recipients, safety
 from .drafting import item_link, local_time
 
 SAFETY_TITLE = "Safety information received; not reviewed by this monitor (out of scope)"
@@ -858,9 +858,13 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
         summary["turn"] = turn
         text = f"{msg.get('subject') or ''}\n\n{msg.get('body_text') or ''}"
         declined = None
+        outsiders = recipients.outside(study, msg) if (not rerun and msg["channel"] == "email"
+                                                       and settings.feature("outside_recipients")) else []
+        if outsiders:   # no answer, acknowledgment or nudge goes to anyone on this email
+            summary["outside_recipients"] = recipients.handle(study, msg, outsiders)
         to_bot = turn in ("direct", "addressed") or (turn == "email" and msg.get("visibility") == "to")
         for_people = False  # an email the bot is only copied on: its opinion or task requests are for the people
-        if reader_route and not rerun and asks.enabled() and (to_bot or answers.asks_something(text)):
+        if reader_route and not rerun and not outsiders and asks.enabled() and (to_bot or answers.asks_something(text)):
             try:
                 if to_bot:
                     declined = asks.decline(study, msg, text, use_cache=use_cache)
@@ -876,7 +880,7 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
                 db.audit("request_sort_failed", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                          error=str(e)[:500])
         timing.step("answers")
-        if reader_route and not rerun:
+        if reader_route and not rerun and not outsiders:
             try:  # an answer that fails must not stop the problems from going out
                 said = answers.reply(study, msg, text, use_cache=use_cache,
                                      harm_only=turn == "quiet" or for_people or bool(declined and declined["only"]))
@@ -891,7 +895,7 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
                 and not summary.get("answer_failed") and not summary.get("instruction")
                 and not (declined and declined["only"] and not summary["items_created"])):
             _acknowledge(study, msg, summary, data["trial_related"])
-        elif not rerun and _answered_but_alert_unsaid(turn, summary):
+        elif not rerun and not outsiders and _answered_but_alert_unsaid(turn, summary):
             _acknowledge(study, msg, summary, data["trial_related"])
 
         timing.step("finish")
@@ -906,7 +910,7 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
 
         gap = (msg.get("headers") or {}).get("_cormon_gap_refs")
         state_key = f"nudged:{msg['thread_key']}"
-        if gap and not rerun and not db.get_state(state_key):
+        if gap and not rerun and not outsiders and not db.get_state(state_key):
             writer = first_writer_while_absent(msg)
             oid = routing.copy_nudge(study, msg, writer) if writer else None
             db.set_state(state_key, str(msg_id))

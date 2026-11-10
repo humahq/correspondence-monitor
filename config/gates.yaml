@@ -77,6 +77,7 @@ sets:
       - cormon/privacy.py
       - config/privacy.yaml
       - cormon/language.py
+      - cormon/recipients.py
       - cormon/ingest.py
       - cormon/config.py
       - cormon/db.py
