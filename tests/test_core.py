@@ -1196,7 +1196,7 @@ def test_new_features_are_off_on_the_live_bot_until_switched_on(monkeypatch):
     import yaml
     from cormon import config, reader, settings
     live = yaml.safe_load((settings.CODE_ROOT / "config" / "settings.yaml").read_text())
-    gone_live = {"numbered_steps", "language_courtesy", "safety_names"}
+    gone_live = {"numbered_steps", "language_courtesy", "safety_names", "outside_recipients"}
     assert live["features"] and not any(v for k, v in live["features"].items() if k not in gone_live)
     assert live["memory"]["enabled"] is False
     monkeypatch.delenv("CORMON_TEST_FEATURES", raising=False)
