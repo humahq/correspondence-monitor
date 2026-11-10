@@ -155,10 +155,11 @@ def handle_ack(msg: dict) -> bool:
 def _send(study: Study, item: dict, people, topic: str, again: bool = False) -> list[int]:
     from . import routing
     tpl = drafting.select(topic, "*", "email", "*")
+    quotes = any(k in f"{tpl.get('subject')}{tpl.get('body')}" for k in ("message_quote", "message_subject"))
     out = []
     for p in people:
         ctx = drafting.item_context(study, item, p)
-        if settings.feature("safety_names") and not privacy.may_see_names(study, p):
+        if quotes and settings.feature("safety_names") and not privacy.may_see_names(study, p):
             ctx = privacy.without_names(study, ctx)
         subject, body = drafting.render(tpl, ctx)
         out.append(routing.enqueue(purpose=topic, channel="email", destination="email", body=body, subject=subject,
