@@ -675,12 +675,13 @@ def save_page(study: Study, msg: dict, email: str, answers: list[dict]) -> str:
     return f"{settings.get('web.base_url', 'http://localhost:8080').rstrip('/')}/answers/{token}"
 
 
-def _post(study: Study, msg: dict, text: str, files: list[dict] | None = None) -> int | None:
+def _post(study: Study, msg: dict, text: str, files: list[dict] | None = None,
+          purpose: str = "question_answer") -> int | None:
     if msg.get("channel") == "teams":
         m = re.fullmatch(r"teams:((spaces/[^/]+)/threads/[^/]+)", msg.get("thread_key") or "")
         if not m:
             return None
-        return routing.enqueue(purpose="question_answer", channel="teams", destination="teams_study_channel",
+        return routing.enqueue(purpose=purpose, channel="teams", destination="teams_study_channel",
                                body=text, message_id=msg["id"], study_id=study.study_id,
                                meta={"target": {"space": m.group(2), "thread": m.group(1), "key": "study_channel"},
                                      **({"files": files} if files else {})})
@@ -693,7 +694,7 @@ def _post(study: Study, msg: dict, text: str, files: list[dict] | None = None) -
             "gmail_thread": msg["thread_key"].split(":", 1)[1], **({"files": files} if files else {})}
     # An email reply ends like the alerts do: the deployment's sign-off, with its automated-message disclaimer.
     body = f"{text}\n\n{study.monitor_signature}"
-    return routing.enqueue(purpose="question_answer", channel="email", destination="email", body=body,
+    return routing.enqueue(purpose=purpose, channel="email", destination="email", body=body,
                            subject=subject if subject.lower().startswith("re:") else f"Re: {subject}",
                            message_id=msg["id"], from_addr=routing.from_alias(study, msg), to=[sender], meta=meta,
                            study_id=study.study_id)
