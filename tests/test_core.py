@@ -820,6 +820,18 @@ def test_the_demo_page_lists_the_teams_and_makes_safe_team_names(monkeypatch, tm
     assert len("medmonitor" + chatdemo.tag("very-long-customer-name-demo", "huma-demo")) <= 22
 
 
+def test_a_new_download_seeds_the_demo_from_the_study_model(tmp_path):
+    from cormon import chatdemo, db, testbench
+
+    live = tmp_path / "bot"
+    (live / chatdemo.HOME_NAME).mkdir(parents=True)
+    (live / "studies").symlink_to(chatdemo.Path(__file__).resolve().parent.parent / "studies")
+    testbench._fresh_db(chatdemo.model_seed(live))
+    c = db.conn()
+    assert c.execute("SELECT COUNT(*) FROM rules").fetchone()[0] > 0, "the study's rules are in the demo database"
+    assert c.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 0, "and no message"
+
+
 def test_the_bot_shows_typing_while_it_works_on_a_chat_message_to_it(monkeypatch):
     import time
     from cormon import capture, channels, pipeline
