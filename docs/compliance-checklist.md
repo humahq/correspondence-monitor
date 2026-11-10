@@ -1,9 +1,12 @@
 # Compliance checklist (Part I)
 
-Source: "Open Book (Clinical Trials AI Monitor): 21 CFR Part 11 Compliance PRD", version 1.0, 26 Oct 2026.
+Source: "Open Book (Clinical Trials AI Monitor): 21 CFR Part 11 Compliance PRD", version 1.0, 26 Oct 2026, with
+Eliot's Addendum A of 5 Nov 2026 (VAL-06 to VAL-09, at the end of this list).
 Part I is the developer's part. It has 71 requirements. Part II (policies, contracts, training) is Eliot's and is not in this list.
 
-This list is fixed: the same 71 IDs, in the document's order. Only the boxes change.
+This list is fixed: the same 71 IDs, in the document's order. Only the boxes change. The Addendum's 4 are
+listed on their own, at the end. They amend GOV-02 (by VAL-07), VAL-01 (by VAL-06), VAL-03 (by VAL-09) and
+PRV-02 (by VAL-08).
 
 Status on 30 Oct 2026: **49 done, 19 partly done, 1 not done, 2 later (V2).**
 
@@ -226,3 +229,12 @@ IAM-04), all secrets in Secret Manager with rotation (SEC-03).
 
 - [ ] IAM-05 Sponsor web UI SSO and MFA
 - [ ] EXP-02 Sponsor self-service export
+
+## Addendum A, 5 Nov 2026 (4)
+
+| ID | Name | Status |
+|---|---|---|
+| VAL-06 | Validated against FDA CSV and CSA | Eliot's paperwork: the VAL-01 package says, for each requirement, how it is validated (CSV or CSA). Not started |
+| VAL-07 | Model drift as a release gate | Built, waiting for the merge (issue #70): the weekly run asks every test set fresh and compares each case with the last passed fresh run; more changes than the limit in `config/gates.yaml` fail it, and `deploy/release.sh` stops unless the newest fresh run passed and is at most 8 days old |
+| VAL-08 | GDPR and EU AI Act alongside Part 11 | Eliot's paperwork: the lawful basis, how long data is kept, and who checks the AI (human oversight). Not started |
+| VAL-09 | About 1,000 validated questions | Not done: 100 questions today (`demo/qa-g/questions.json`). Later |

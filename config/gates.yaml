@@ -8,6 +8,15 @@
 #
 # Agreed with John, 29 Oct 2026. Each mark sits a little under the score of the version then live, so the
 # normal wobble of the AI does not block a release but a real drop does.
+#
+# Model drift (VAL-07): the weekly run (and a manual run with "fresh") asks every set with no kept answers and
+# compares each case, right or wrong, with the last fresh run that passed. A set fails when more of its cases
+# changed than its `changed_at_most`. deploy/release.sh stops unless the newest fresh run passed and is at most
+# 8 days old. A wanted change (a new model) is let through by a manual fresh run with "accept changes": who ran
+# it is on GitHub, and it becomes the run the next week is compared with.
+# The limits, 9 Nov 2026, from the two weekly runs of 2 and 9 Nov (12 code changes between them): findings 15
+# of 100 cases changed, questions 2 of 100, wording 0 of 26, doctors 5 of 28 (shown only: it has no pass mark
+# yet either). To be lowered once weeks with no code change show the AI's own wobble.
 
 study: NCT05842941
 
@@ -28,6 +37,7 @@ sets:
     marks:
       recall: 0.95       # of the real problems, how many were caught
       precision: 0.90    # of the alerts raised, how many were real
+      changed_at_most: 0.15   # cases right one week and wrong the next, or the other way (VAL-07)
     when: &reading
       - cormon/reader.py
       - cormon/matching.py
@@ -64,6 +74,7 @@ sets:
     marks:                    # raised 29 Oct once the grader saw every section the bot read (98% and 1% then)
       right_or_partly: 0.95   # correct or partly correct
       wrong_at_most: 0.03
+      changed_at_most: 0.05
     when:
       - cormon/answers.py
       - cormon/asks.py
@@ -90,6 +101,7 @@ sets:
     file: demo/test-wording/cases.json
     marks:
       right: 1.0              # every one
+      changed_at_most: 0.0
     when:
       - cormon/outcheck.py
       - cormon/drafting.py
