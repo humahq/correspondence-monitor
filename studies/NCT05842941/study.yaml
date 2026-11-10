@@ -9,6 +9,10 @@ sponsor: Massachusetts General Hospital (Sean M. Healey & AMG Center for ALS)
 # Mail to bot+<address_tag>@huma.ai is routed to this study.
 address_tag: NCT05842941
 
+# Email domains whose new people are likely colleagues to set up, not strangers (features.outside_recipients).
+# Name each domain here; a person's own address on the people list never approves their whole domain.
+email_domains: [huma.ai]
+
 documents:
   - id: master
     kind: protocol

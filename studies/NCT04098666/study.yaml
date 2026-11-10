@@ -8,6 +8,10 @@ sponsor: Columbia University (funded by the National Institute on Aging)
 # Mail to bot+<address_tag>@huma.ai is routed to this study.
 address_tag: NCT04098666
 
+# Email domains whose new people are likely colleagues to set up, not strangers (features.outside_recipients).
+# Name each domain here; a person's own address on the people list never approves their whole domain.
+email_domains: [huma.ai]
+
 documents:
   - id: protocol
     kind: protocol
