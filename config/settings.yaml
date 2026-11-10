@@ -54,6 +54,7 @@ features:
   language_courtesy: true    # in a chat, answer in a language everyone there reads, and say so kindly if not
   safety_names: true         # a safety email names the participant only for the medical monitor; copies don't
   outside_recipients: true   # an email with someone on it the study doesn't list gets no answer, only a note to the sender
+  close_on_page: true        # an alert is closed on its page with three fixed choices; some wait for the PI's review
 
 # The language everyone in a study shares (language_courtesy). A person's own are `languages:` in study.yaml.
 language:

@@ -110,6 +110,24 @@ CREATE TABLE IF NOT EXISTS items (
 );
 CREATE INDEX IF NOT EXISTS ix_items_study ON items(study_id, created_at);
 
+-- an alert closed on its page (closing.py): who chose what, and the second person's review when it needs one
+CREATE TABLE IF NOT EXISTS closings (
+    id INTEGER PRIMARY KEY,
+    item_id INTEGER NOT NULL,
+    study_id TEXT NOT NULL,
+    choice TEXT NOT NULL,
+    done_at TEXT,
+    details TEXT,
+    by_email TEXT NOT NULL,
+    by_name TEXT,
+    status TEXT NOT NULL,
+    reviewed_by TEXT,
+    review_note TEXT,
+    reviewed_at TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_closings_item ON closings(item_id, id);
+
 CREATE TABLE IF NOT EXISTS outbox (
     id INTEGER PRIMARY KEY,
     item_id INTEGER,

@@ -1,5 +1,6 @@
-"""Read-only item and answer detail pages, reached only through the unguessable link in a draft or a reply, and the
-admin pages under /admin (adminview.py), read-only except an admin's corrections to patient memory."""
+"""Item and answer detail pages, reached only through the unguessable link in a draft or a reply, and the admin
+pages under /admin (adminview.py). Read-only except an admin's corrections to patient memory and, with
+features.close_on_page, closing an alert on its page (closing.py)."""
 
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ import html
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs
 
 from . import config, db, items, senders, settings, weblogin
 from .compliance import SAFETY_NOTICE
@@ -100,7 +102,81 @@ def _careful(item_id) -> str:
     return " ".join(said)
 
 
-def render_item(item: dict) -> str:
+def _closed_as(c: dict) -> str:
+    from . import closing
+    said = f"<p class=\"muted\">{_e(c['by_name'])} chose <b>{_e(closing.CHOICES.get(c['choice'], c['choice']))}</b>" \
+           + (f", done {_e(local_time(c['done_at']))}" if c["done_at"] else "") + f" (on {_e(local_time(c['created_at']))})"
+    said += f": \"{_e(c['details'])}\"</p>" if c["details"] else ".</p>"
+    if c["reviewed_by"]:
+        said += (f"<p class=\"muted\">Reviewed by {_e(c['reviewed_by'])} on {_e(local_time(c['reviewed_at']))}: "
+                 f"<b>{_e({'approved': 'approved', 'sent_back': 'sent back', 'reported': 'reported to the sponsor'}.get(c['status'], c['status']))}</b>"
+                 + (f". \"{_e(c['review_note'])}\"" if c["review_note"] else "") + "</p>")
+    return said
+
+
+def _radios(name: str, options: dict) -> str:
+    return "<p>" + "<br>".join(f'<label><input type="radio" name="{name}" value="{k}" required> {_e(v)}</label>'
+                               for k, v in options.items()) + "</p>"
+
+
+def _closing_part(item: dict, email: str | None, path: str) -> str:
+    """Close this alert (closing.py): the three choices, or the second person's review, for whoever may."""
+    from . import closing
+    if not closing.on() or item["kind"] != "finding":
+        return ""
+    s = config.study(item["study_id"])
+    c = closing.latest(item["id"])
+    record = _closed_as(c) if c else ""
+    if item["state"] not in ("open", "waiting"):
+        return f"<h2>How it was closed</h2>{record}" if record else ""
+    head = "<h2>Close this alert</h2>" if item["state"] == "open" else \
+        f"<h2>Waiting for a second person's review</h2>{record}"
+    token = item["link_token"]
+    if not email:
+        if not weblogin.ready():
+            return head + '<p class="muted">Closing an alert here needs Google sign-in, which is not set up here.</p>'
+        return head + f'<p><a href="{_e(weblogin.sign_in_url(path))}">Sign in with Google</a> to close this alert.</p>'
+    if item["state"] == "open":
+        if not closing.person(s, email, "close"):
+            return head + f'<p class="muted">You are signed in as {_e(email)}, who may not close alerts here.</p>'
+        return head + f"""{f'<p class="muted">Earlier:</p>{record}' if record else ''}
+<form method="post" action="/items/{_e(token)}/close"><input type="hidden" name="step" value="check">
+{_radios("choice", closing.CHOICES)}
+<p><label>When it was done (your local time; not needed for "Nothing can be done")<br>
+<input type="datetime-local" name="done_at"></label></p>
+<p><label>What was done, or why nothing can be done (needed unless you did what was asked)<br>
+<textarea name="details" rows="3" cols="70" maxlength="2000"></textarea></label></p>
+<p><button>Check before closing</button></p></form>"""
+    if not closing.person(s, email, "review"):
+        return head + '<p class="muted">A person who reviews alerts in this study will look at it.</p>'
+    if c and c["by_email"] == email.lower():
+        return head + '<p class="muted">You closed it, so a second person must review it.</p>'
+    return head + f"""<form method="post" action="/items/{_e(token)}/review"><input type="hidden" name="step" value="check">
+{_radios("decision", closing.REVIEWS)}
+<p><label>Your note (needed unless you approve)<br>
+<textarea name="note" rows="3" cols="70" maxlength="2000"></textarea></label></p>
+<p><button>Check before saving</button></p></form>"""
+
+
+def render_confirm(item: dict, lines: list[str], action: str, sealed: str) -> str:
+    """The confirm step (DSP-02): exactly what will be kept, before it counts."""
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Check: item #{item['id']}</title>
+<style>{CSS}</style></head><body>
+<h1>Please check: item #{item['id']}: {_e(item['title'])}</h1>
+<ul>{''.join(f'<li>{_e(x)}</li>' for x in lines)}</ul>
+<p>By confirming, you state that this is true. Your name, the time and your words are kept in the alert's record.</p>
+<form method="post" action="/items/{_e(item['link_token'])}/{action}"><input type="hidden" name="step" value="confirm">
+<input type="hidden" name="sealed" value="{_e(sealed)}"><p><button>Confirm</button>
+<a href="/items/{_e(item['link_token'])}">Go back</a></p></form></body></html>"""
+
+
+def render_problem(item: dict, why: str) -> str:
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Not saved</title><style>{CSS}</style></head>
+<body><h1>Not saved</h1><p>{_e(why[:1].upper() + why[1:])}.</p>
+<p><a href="/items/{_e(item['link_token'])}">Back to item #{item['id']}</a></p></body></html>"""
+
+
+def render_item(item: dict, email: str | None = None, path: str = "") -> str:
     s = config.study(item["study_id"])
     ev = item["evidence"]
     hist = items.history(item["id"])
@@ -135,6 +211,7 @@ def render_item(item: dict) -> str:
 {_how(item, ev)}
 <p class="muted">Check: {_e(ev.get('method'))} · recipient: {_e(item['recipient_person'])}
 ({_e(item['recipient_reason'])})</p>
+{_closing_part(item, email, path or f"/items/{item['link_token']}")}
 <h2>History</h2><table><tr><th>When</th><th>Who</th><th>What</th></tr>{rows}</table>
 <p class="muted">This monitor does not review safety information. {SAFETY_NOTICE}</p>
 </body></html>"""
@@ -237,8 +314,64 @@ class Handler(BaseHTTPRequestHandler):
                 and (self.headers.get("Content-Type") or "").startswith("application/json")
                 and (not origin or origin.rstrip("/") == base))
 
+    def _closing_post(self, token: str, action: str):
+        """The close and review forms on an alert's page (closing.py). Only the signed-in person may act, from
+        this site (the session cookie is SameSite=Lax, and another site's Origin is refused); a check step comes
+        first, and what it showed is sealed into the confirm form, so the confirm saves exactly that."""
+        from . import closing
+        row = db.q1("SELECT id, study_id FROM items WHERE link_token=?", (token,))
+        if not row or not closing.on():
+            return self._send(404, "not found", "text/plain")
+        item = items.get(row["id"])
+        study = config.study(item["study_id"])
+        email = weblogin.signed_in(self.headers.get("Cookie"))
+        origin = (self.headers.get("Origin") or "").rstrip("/")
+        size = int(self.headers.get("Content-Length") or 0)
+        if (origin and origin != (settings.get("web.base_url") or "").rstrip("/")) or not 0 < size <= 20000:
+            db.audit("closing_refused", entity_type="item", entity_id=item["id"], study_id=study.study_id,
+                     email=email, why="not from the alert's page")
+            return self._send(403, render_problem(item, "this form did not come from the alert's page"))
+        if not email or not weblogin.may_see(email, study.study_id):
+            return self._send(403, render_problem(item, "please sign in with Google first, from the alert's page"))
+        form = parse_qs(self.rfile.read(size).decode("utf-8", "replace"))
+        f = lambda k: (form.get(k) or [""])[0]
+        try:
+            if f("step") == "confirm":
+                got = weblogin.unseal(f("sealed"))
+                if not got or got.get("email") != email or got.get("item") != item["id"] or got.get("action") != action:
+                    raise ValueError("this check has run out of time or is not yours. Please start again")
+                if action == "close":
+                    closing.close(item["id"], email, got["choice"], got["done_at"], got["details"])
+                else:
+                    closing.review(item["id"], email, got["decision"], got["note"])
+                return self._send(303, "", "text/plain", {"Location": f"/items/{token}"})
+            if action == "close":
+                c = closing.check_close(item, study, email, f("choice"), f("done_at"), f("details"))
+                kept = {"choice": c["choice"], "done_at": f("done_at"), "details": c["details"]}
+                lines = [f"Your choice: {closing.CHOICES[c['choice']]}"] \
+                    + ([f"When it was done: {local_time(c['done_at'])}"] if c["done_at"] else []) \
+                    + ([f"What you wrote: {c['details']}"] if c["details"] else []) \
+                    + ["The alert closes." if c["choice"] == "done" else "It goes to a second person for review."]
+            else:
+                r = closing.check_review(item, study, email, f("decision"), f("note"))
+                kept = {"decision": r["decision"], "note": r["note"]}
+                lines = [f"Your decision: {closing.REVIEWS[r['decision']]}"] \
+                    + ([f"Your note: {r['note']}"] if r["note"] else [])
+            sealed = weblogin.seal(dict(kept, email=email, item=item["id"], action=action), minutes=15)
+            return self._send(200, render_confirm(item, [f"Signed in as: {email}"] + lines, action, sealed))
+        except closing.NotAllowed as e:
+            db.audit("closing_refused", entity_type="item", entity_id=item["id"], study_id=study.study_id,
+                     email=email, why=str(e))
+            return self._send(403, render_problem(item, str(e)))
+        except (ValueError, KeyError, items.StepOrder) as e:
+            return self._send(400, render_problem(item, str(e).strip("'")))
+
     def do_POST(self):
         from . import adminview
+        if self.path.startswith("/items/"):
+            token, _, action = self.path.split("/items/", 1)[1].split("?")[0].partition("/")
+            if action in ("close", "review"):
+                return self._closing_post(token, action)
         if self.path != "/admin/api/memory/change":
             return self._send(404, "not found", "text/plain")
         stop, email = weblogin.admin_gate(self.path, self.headers.get("Cookie"), log=False)
@@ -279,7 +412,8 @@ class Handler(BaseHTTPRequestHandler):
             if row:
                 if self._gated(row["study_id"], "item", row["id"]):
                     return
-                return self._send(200, render_item(items.get(row["id"])))
+                return self._send(200, render_item(items.get(row["id"]), weblogin.signed_in(self.headers.get("Cookie")),
+                                                   self.path))
         if self.path.startswith("/answers/"):
             token = self.path.split("/answers/", 1)[1].split("?")[0]
             as_file = token.endswith(".md")

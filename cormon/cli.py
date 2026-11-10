@@ -634,7 +634,7 @@ def _reason_ok(state: str, args) -> bool:
     if bad := items.reason_problem(state, args.code, args.reason):
         print(f"not changed: {bad}")
         for k, label in items.REASON_CODES.items():
-            if k != "by_reply":
+            if k not in items.NOT_TYPED:
                 print(f"  {k:17} {label}")
         return False
     return True
@@ -1150,7 +1150,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("id", type=int); s.add_argument("--force", action="store_true")
     s.add_argument("--send", action="store_true", help="send them immediately"); s.set_defaults(fn=cmd_draft)
 
-    codes = ", ".join(k for k in items.REASON_CODES if k != "by_reply")
+    codes = ", ".join(k for k in items.REASON_CODES if k not in items.NOT_TYPED)
     s = sub.add_parser("suppress", help="suppress (disregard) an item"); s.add_argument("id", type=int)
     s.add_argument("--code", help=f"why, from the fixed list: {codes}")
     s.add_argument("--reason", required=True); _approval(s); s.set_defaults(fn=cmd_suppress)

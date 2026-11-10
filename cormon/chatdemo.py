@@ -15,6 +15,7 @@ import os
 import re
 import shutil
 import signal
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -109,6 +110,17 @@ PAGE_PORT = 8090
 PAGE = f"http://localhost:{PAGE_PORT}"
 
 
+def model_seed(live_root: Path) -> Path:
+    """A new download has no database of its own, so the demo starts from the study model in the repo
+    (studies/model/model.sql: the live rules, without any message or patient data)."""
+    seed = live_root / HOME_NAME / "model-seed.db"
+    seed.unlink(missing_ok=True)
+    c = sqlite3.connect(seed)
+    c.executescript((live_root / "studies" / "model" / "model.sql").read_text())
+    c.close()
+    return seed
+
+
 def slug(name: str) -> str:
     """The team's Mattermost name from the customer name typed on the page: "Acme Pharma" -> acme-pharma-demo."""
     s = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:50].strip("-")
@@ -135,7 +147,8 @@ class Demo:
         home = prepare(self.live, self.chat, team)
         env = dict(os.environ, CORMON_HOME=str(home), CORMON_OPERATOR=os.environ.get("CORMON_OPERATOR", "demo"))
         if fresh or not (home / settings.get("system.data_dir", "data") / "cormon.db").exists():
-            if subprocess.call([sys.executable, "-m", "cormon.chatdemo", "--seed-from", str(db.db_path())], env=env):
+            seed = db.db_path() if db.db_path().exists() else model_seed(self.live)
+            if subprocess.call([sys.executable, "-m", "cormon.chatdemo", "--seed-from", str(seed)], env=env):
                 raise RuntimeError("could not make the demo database")
         self.child = subprocess.Popen([sys.executable, "-m", "cormon.cli", "run"], env=env)
         (self.live / HOME_NAME / "active_team").write_text(team)

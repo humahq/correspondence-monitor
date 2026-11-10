@@ -32,6 +32,7 @@ from .. import db
 from . import ailog, records, sha256, trail
 
 STATE_LABEL = {"open": "open", "cleared": "cleared", "suppressed": "disregarded", "handled": "handled",
+               "waiting": "waiting for review",
                "out_of_scope": "safety (not assessed)"}
 
 

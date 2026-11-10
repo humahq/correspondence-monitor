@@ -12,6 +12,7 @@ from .triage import TIER_LABELS
 GROUPS = [
     ("attention", "Needs your attention (medium or immediate, not yet resolved)"),
     ("awaiting", "Awaiting clearance by the CRA (low tier, not cleared)"),
+    ("review", "Waiting for a second person's review (closed on the alert's page)"),
     ("handled", "Handled by the CRA"),
     ("updates", "Updates (good news)"),
 ]
@@ -22,6 +23,8 @@ def _status(item: dict) -> str:
         return "updates"
     if item["state"] in ("cleared", "suppressed", "handled"):
         return "handled"
+    if item["state"] == "waiting":
+        return "review"
     if item["tier"] in ("medium", "immediate"):
         return "attention"
     return "awaiting"
@@ -31,7 +34,7 @@ def build(since: datetime, until: datetime, study_ids: list[str] | None = None) 
     all_studies = config.studies()
     rows = db.q(
         "SELECT * FROM items WHERE kind != 'out_of_scope' AND (counts=1 OR state IN ('suppressed','cleared')) AND ("
-        " (created_at >= ? AND created_at < ?) OR (state='open' AND created_at < ?)"
+        " (created_at >= ? AND created_at < ?) OR (state IN ('open','waiting') AND created_at < ?)"
         " OR (updated_at >= ? AND updated_at < ? AND state IN ('cleared','suppressed'))"
         ") ORDER BY study_id, id",
         (since.isoformat(), until.isoformat(), since.isoformat(), since.isoformat(), until.isoformat()))
@@ -59,7 +62,8 @@ def build(since: datetime, until: datetime, study_ids: list[str] | None = None) 
     studies_out = []
     total = 0
     for sid, e in per_study.items():
-        groups = [{"label": label, "entries": e["buckets"][k]} for k, label in GROUPS]
+        groups = [{"label": label, "entries": e["buckets"][k]} for k, label in GROUPS
+                  if k != "review" or e["buckets"][k]]   # only alerts closed on their page wait for a review
         total += sum(len(g["entries"]) for g in groups)
         studies_out.append({"study_id": sid, "short_name": e["short_name"], "groups": groups})
     tz = ZoneInfo(settings.get("digest.timezone", "America/New_York"))
