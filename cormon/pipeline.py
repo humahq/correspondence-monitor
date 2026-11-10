@@ -580,7 +580,10 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
 
         study = config.study(msg["study_id"])
         hindsight.save_message(study, msg, _own_text(msg.get("body_text") or ""))
-        if not rerun:
+        outsiders = recipients.outside(study, msg) if not rerun and settings.feature("outside_recipients") else []
+        if outsiders:   # no answer, receipt, acknowledgment or nudge goes to anyone on this message
+            summary["outside_recipients"] = recipients.handle(study, msg, outsiders)
+        if not rerun and not outsiders:
             timing.step("receipt")
             try:  # a receipt that fails must not stop the read
                 if _receipt(study, msg):
@@ -858,10 +861,6 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
         summary["turn"] = turn
         text = f"{msg.get('subject') or ''}\n\n{msg.get('body_text') or ''}"
         declined = None
-        outsiders = recipients.outside(study, msg) if (not rerun and msg["channel"] == "email"
-                                                       and settings.feature("outside_recipients")) else []
-        if outsiders:   # no answer, acknowledgment or nudge goes to anyone on this email
-            summary["outside_recipients"] = recipients.handle(study, msg, outsiders)
         to_bot = turn in ("direct", "addressed") or (turn == "email" and msg.get("visibility") == "to")
         for_people = False  # an email the bot is only copied on: its opinion or task requests are for the people
         if reader_route and not rerun and not outsiders and asks.enabled() and (to_bot or answers.asks_something(text)):
@@ -891,7 +890,7 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
                 db.audit("question_answer_failed", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                          error=str(e)[:500])
         timing.step("acknowledge")
-        if (turn in ("direct", "addressed") and not rerun and not summary.get("answered")
+        if (turn in ("direct", "addressed") and not rerun and not outsiders and not summary.get("answered")
                 and not summary.get("answer_failed") and not summary.get("instruction")
                 and not (declined and declined["only"] and not summary["items_created"])):
             _acknowledge(study, msg, summary, data["trial_related"])

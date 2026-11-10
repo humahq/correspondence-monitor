@@ -1,14 +1,14 @@
-"""Who is on a study email (sender, To, Cc) that the study does not list (Eliot, Nov 10).
+"""Who is on a study email (sender, To, Cc), or writes to the bot in chat, that the study does not list (Eliot, Nov 10).
 
-An email with someone on it the study does not list gets no answer: the bot replies to the sender only, with no
-study information, to say who should not be on it. Someone whose email domain the study approves
+A message with someone on it the study does not list gets no answer: the bot replies to the sender only, with no
+study information, to say who should not be on it. In chat only the writer is checked, not the room's members. Someone whose email domain the study approves
 (`email_domains:` in study.yaml) is likely a new colleague not set up yet, so the site's CRA is asked to add them.
 Anyone else is a reportable event: the CRA and the admins are told. A domain is approved only by name, never by a
 listed person's address (one gmail.com person does not make every gmail.com address safe)."""
 
 from __future__ import annotations
 
-from . import db, routing, settings
+from . import answers, db, routing, settings
 from .config import Study
 
 
@@ -29,9 +29,10 @@ def approved_domain(study: Study, addr: str) -> bool:
 
 
 def outside(study: Study, msg: dict) -> list[dict]:
-    """Each address on the email the study does not list, with whether its domain is approved."""
+    """Each address on the message the study does not list, with whether its domain is approved."""
     seen, out = set(), []
-    for a in [msg.get("from_addr")] + list(msg.get("to_addrs") or []) + list(msg.get("cc_addrs") or []):
+    others = list(msg.get("to_addrs") or []) + list(msg.get("cc_addrs") or []) if msg.get("channel") == "email" else []
+    for a in [msg.get("from_addr")] + others:
         a = (a or "").strip().lower()
         if not a or "@" not in a or a in seen or _bot(study, a):
             continue
@@ -57,7 +58,10 @@ def to_sender(study: Study, msg: dict, out: list[dict]) -> str:
     new = [o["address"] for o in out if o["domain_approved"]]
     strangers = [o["address"] for o in out if not o["domain_approved"]]
     lines = []
-    if sender in strangers:
+    if sender in strangers and msg.get("channel") != "email":
+        lines.append(f"I can't answer this: {sender} is not on this study's list, so I can't send study information "
+                     "here. If you work on this study, please ask the study's CRA to add you.")
+    elif sender in strangers:
         lines.append(f"I can't answer this email: {sender} is not on this study's list, so I can't send study "
                      "information to it. If you work on this study, please write from the address the study has "
                      "for you.")
@@ -86,39 +90,34 @@ def handle(study: Study, msg: dict, out: list[dict]) -> dict:
     strangers = [o["address"] for o in out if not o["domain_approved"]]
     base = (settings.get("web.base_url") or "").rstrip("/")
     link = f"\nSee it: {base}/admin/messages/{msg['id']}\n" if base else ""
-    subject = msg.get("subject") or "(no subject)"
+    email = msg.get("channel") == "email"
+    what = (f"An email to the study {study.short_name} (\"{msg.get('subject') or '(no subject)'}\", from {sender}) "
+            "had people on it the study does not list." if email else
+            f"A chat message to the bot in {study.short_name} came from {sender}, who is not on the study's list.")
     sent = {}
     if sender and not _bot(study, sender):
-        meta = {"thread_key": msg["thread_key"], "in_reply_to": msg.get("rfc_message_id"),
-                "references": (msg.get("refs") or []) + ([msg["rfc_message_id"]] if msg.get("rfc_message_id") else []),
-                "gmail_thread": msg["thread_key"].split(":", 1)[1]}
-        sent["sender"] = routing.enqueue(
-            purpose="outside_recipients_sender", channel="email", destination="email",
-            body=f"{to_sender(study, msg, out)}\n\n{study.monitor_signature}",
-            subject=subject if subject.lower().startswith("re:") else f"Re: {subject}", message_id=msg["id"],
-            from_addr=routing.from_alias(study, msg), to=[sender], meta=meta, study_id=study.study_id)
+        sent["sender"] = answers._post(study, msg, to_sender(study, msg, out), purpose="outside_recipients_sender")
     cras = _cras(study, msg)
     if cras and (new or strangers):
-        lines = [f"An email to the study {study.short_name} (\"{subject}\", from {sender}) had people on it the study "
-                 "does not list. The bot did not answer it, and sent no study information to anyone on it."]
+        lines = [f"{what} The bot did not answer it, and sent no study information to anyone on it."]
         if new:
             lines.append(f"New, from an approved domain, so probably a colleague to set up: {_names(new)}. "
                          "If they work on this study, please ask for them to be added to its people list.")
         if strangers:
             lines.append(f"Not from an approved domain: {_names(strangers)}. This may be a privacy incident to "
-                         "report: the email itself went to them.")
+                         + ("report: the email itself went to them." if email else "report."))
         sent["cra"] = routing.enqueue(
             purpose="outside_recipients_cra", channel="email", destination="email",
             body="\n\n".join(lines) + f"\n{link}\n{study.monitor_signature}",
-            subject=(f"Privacy: someone outside the study was on an email · {study.short_name}" if strangers
-                     else f"Please set up a new person · {study.short_name}"),
+            subject=(f"Privacy: someone outside the study was on {'an email' if email else 'a chat'} · "
+                     f"{study.short_name}" if strangers else f"Please set up a new person · {study.short_name}"),
             message_id=msg["id"], from_addr=study.alias, to=cras, study_id=study.study_id)
     if strangers:
         sent["admins"] = alerts.notify(
-            f"outside_recipients:{msg['id']}", f"Privacy: someone outside {study.study_id} was on an email",
-            f"Message {msg['id']} to study {study.study_id} (from {sender}) had {_names(strangers)} on it, whose "
-            "email domain the study does not approve. The bot did not answer it and told the sender and the CRA."
-            f"\n{link}", every_minutes=10 ** 7)
+            f"outside_recipients:{msg['id']}", f"Privacy: someone outside {study.study_id} wrote to or was on a message",
+            f"Message {msg['id']} to study {study.study_id} (from {sender}, by {msg.get('channel')}) had "
+            f"{_names(strangers)} on it, whose email domain the study does not approve. The bot did not answer it "
+            f"and told the sender and the CRA.\n{link}", every_minutes=10 ** 7)
     db.audit("outside_recipients", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
              new_colleagues=new, not_approved=strangers, reportable=bool(strangers), told=sent)
     return {"new": new, "not_approved": strangers, "sent": sent}

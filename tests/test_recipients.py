@@ -72,6 +72,32 @@ def test_a_new_colleague_from_an_approved_domain_is_set_up_not_reported(told):
     assert out["outside_recipients_cra"]["subject"].startswith("Please set up a new person")
 
 
+def _chat(sender):
+    study = config.study("NCT05842941")
+    mid = capture.capture(Inbound(channel="teams", external_id="spaces/S1/messages/T1.T1", thread_ref="spaces/S1/threads/T1",
+                                  from_addr=sender, from_name="X", subject=None, sent_at="2026-11-09T20:05:59+00:00",
+                                  study_id=study.study_id, body_text="bot, what is the washout for quetiapine?",
+                                  visibility="direct"))
+    return study, capture.message(mid)
+
+
+def test_in_chat_only_the_writer_is_checked():
+    study, msg = _chat("johnrohit94@gmail.com")
+    assert recipients.outside(study, dict(msg, cc_addrs=["x@gmail.com"])) == []
+
+
+def test_a_chat_writer_not_on_the_list_gets_a_note_in_the_chat_and_is_reported(told):
+    study, msg = _chat("stranger@gmail.com")
+    done = recipients.handle(study, msg, recipients.outside(study, msg))
+    assert done["not_approved"] == ["stranger@gmail.com"]
+    rows = db.q("SELECT purpose, channel, body, meta FROM outbox ORDER BY id")
+    note = next(r for r in rows if r["purpose"] == "outside_recipients_sender")
+    assert note["channel"] == "teams" and db.unjs(note["meta"])["target"]["space"] == "spaces/S1"
+    assert "not on this study's list" in note["body"] and "quetiapine" not in note["body"].lower()
+    cra = next(r for r in rows if r["purpose"] == "outside_recipients_cra")
+    assert cra["channel"] == "email" and "A chat message" in cra["body"] and told
+
+
 def test_the_note_names_strangers_and_new_colleagues_apart(told):
     study, msg = _email("johnrohit94@gmail.com", cc=["x@gmail.com", "new.cra@huma.ai"])
     text = recipients.to_sender(study, msg, recipients.outside(study, msg))
