@@ -50,9 +50,9 @@ features:
   second_look: false         # a second reading of the email's facts only, so words aimed at the AI can't hide a problem
   privacy_check: false       # who may hear what, before an answer or alert using patient memory goes out
   openbook_look: false       # the admin page in OpenBook's look (openbook.phd: its name, colors and font)
-  numbered_steps: false      # a quote of numbered steps ("1. Click Add Subject") counts as the document's words
-  language_courtesy: false   # in a chat, answer in a language everyone there reads, and say so kindly if not
-  safety_names: false        # a safety email names the participant only for the medical monitor; copies don't
+  numbered_steps: true       # a quote of numbered steps ("1. Click Add Subject") counts as the document's words
+  language_courtesy: true    # in a chat, answer in a language everyone there reads, and say so kindly if not
+  safety_names: true         # a safety email names the participant only for the medical monitor; copies don't
 
 # The language everyone in a study shares (language_courtesy). A person's own are `languages:` in study.yaml.
 language:

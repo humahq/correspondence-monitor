@@ -107,13 +107,17 @@ def test_protocol_words_are_found_sentence_by_sentence():
 
 
 def test_a_quote_of_numbered_steps_is_the_documents_words_with_the_switch_on(monkeypatch):
+    from cormon import settings
     from cormon.reader import _exact_words
+    real = settings.get
+    monkeypatch.setattr(settings, "get", lambda k, d=None: False if k == "features.numbered_steps" else real(k, d))
+    monkeypatch.delenv("CORMON_TEST_FEATURES", raising=False)
     s = {"id": "irt:3.1", "kind": "section", "text": "To register a subject who has signed the consent forms:\n\n"
          "1. Click the Add Subject button on the Home Dashboard.\n2. Enter the Date of Informed Consent and the "
          "subject's Year of Birth.\n3. Review the summary screen and click Confirm."}
     q = "1. Click the Add Subject button on the Home Dashboard.\n2. Enter the Date of Informed Consent."
     f = {"problem": "What is the first step in registering a new patient?", "why": "Click Add Subject."}
-    assert _exact_words(q, [s], [s], "irt:3.1", f) is None   # the live version: "1" and "2" look like rule numbers
+    assert _exact_words(q, [s], [s], "irt:3.1", f) is None   # switched off: "1" and "2" look like rule numbers
     monkeypatch.setenv("CORMON_TEST_FEATURES", "numbered_steps")
     sec, words = _exact_words(q, [s], [s], "irt:3.1", f)
     assert sec["id"] == "irt:3.1" and "Add Subject" in words
@@ -1192,7 +1196,8 @@ def test_new_features_are_off_on_the_live_bot_until_switched_on(monkeypatch):
     import yaml
     from cormon import config, reader, settings
     live = yaml.safe_load((settings.CODE_ROOT / "config" / "settings.yaml").read_text())
-    assert live["features"] and not any(live["features"].values())
+    gone_live = {"numbered_steps", "language_courtesy", "safety_names"}
+    assert live["features"] and not any(v for k, v in live["features"].items() if k not in gone_live)
     assert live["memory"]["enabled"] is False
     monkeypatch.delenv("CORMON_TEST_FEATURES", raising=False)
     monkeypatch.delenv("CORMON_BLIND", raising=False)

@@ -1497,9 +1497,13 @@ def test_no_monitor_listed_a_safety_message_goes_to_nobody_and_cannot_be_cleared
 def test_a_safety_message_goes_unassessed_to_the_medical_monitor_only(monkeypatch):
     from cormon import config, items, llm, routing
 
+    from cormon import privacy
+
     monkeypatch.setattr(llm, "structured", lambda *a, **k: pytest.fail("no AI call expected"))
+    monkeypatch.setattr(privacy, "participant_names", lambda *a, **k: [])
     study = config.study("NCT05842941")
     monitor = study.people_with_role("medical_monitor")[0].email
+    cras = {p.email for p in study.people_with_role("cra", "site-01")}
     crc = study.people_with_role("crc")[0].email
     mid = capture.capture(Inbound(channel="email", external_id="<s1@site.org>", thread_ref="s1", from_addr=crc,
                                   from_name="C", subject="DNL-1012 visit", sent_at=_ago(5), study_id=study.study_id,
@@ -1511,10 +1515,12 @@ def test_a_safety_message_goes_unassessed_to_the_medical_monitor_only(monkeypatc
                           evidence={"message_quote": "fell at home and spent a night in the ER"}, reasoning=None,
                           state="out_of_scope")
     routing.route_item(iid)
-    out = [dict(r) for r in db.q("SELECT * FROM outbox WHERE item_id=?", (iid,))]
+    out = [dict(r) for r in db.q("SELECT * FROM outbox WHERE item_id=? AND purpose NOT LIKE '%_copy'", (iid,))]
     assert [(json.loads(r["to_addrs"]), r["status"], r["template_id"]) for r in out] == \
         [([monitor], "queued", "email-safety-to-medical-monitor")]
     assert "fell at home and spent a night in the ER" in out[0]["body"] and "have not assessed" in out[0]["body"]
+    copies = db.q("SELECT to_addrs FROM outbox WHERE item_id=? AND purpose LIKE '%_copy'", (iid,))
+    assert {db.unjs(r["to_addrs"])[0] for r in copies} == cras
 
 
 def _safety_item(study, text, n=1):
@@ -1549,9 +1555,11 @@ def test_a_safety_message_is_severe_by_the_word_list_and_gets_its_clock():
     received = datetime.fromisoformat(capture.message(it["first_message_id"])["received_at"])
     assert it["severity"] == "severe"
     assert datetime.fromisoformat(it["ack_due_at"]) == received + timedelta(minutes=60)   # from ingestion
-    mail = db.q1("SELECT subject, body, cc_addrs FROM outbox WHERE item_id=?", (iid,))
+    mail = db.q1("SELECT subject, body, cc_addrs FROM outbox WHERE item_id=? ORDER BY id", (iid,))
     assert mail["subject"].startswith("Severe:") and f"ACK {safety.ack_code(it)}" in mail["body"]
-    assert "within 1 hour" in mail["body"] and study.people_with_role("cra")[0].email in mail["cc_addrs"]
+    cra = study.people_with_role("cra")[0].email
+    assert "within 1 hour" in mail["body"] and db.q1("SELECT 1 FROM outbox WHERE item_id=? AND to_addrs LIKE ?",
+                                                      (iid, f"%{cra}%"))   # its own copy, without names
 
 
 def test_an_unacknowledged_safety_message_goes_up_the_chain_then_to_a_phone(monkeypatch):
@@ -1565,7 +1573,7 @@ def test_an_unacknowledged_safety_message_goes_up_the_chain_then_to_a_phone(monk
     for _ in range(6):
         _due_now(iid)
         safety.escalate(log=lambda *_: None)
-    rows = db.q("SELECT template_id, to_addrs, purpose FROM outbox ORDER BY id")
+    rows = db.q("SELECT template_id, to_addrs, purpose FROM outbox WHERE purpose NOT LIKE '%_copy' ORDER BY id")
     seq = [(r["template_id"], db.unjs(r["to_addrs"])[0]) for r in rows]
     assert seq[0] == ("email-safety-to-medical-monitor", "john+medicalmonitor@huma.ai")
     assert ("email-safety-escalation", "john+pvbackup@huma.ai") == seq[1]

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from cormon import config, db, language, llm, privacy
+from cormon import config, db, language, llm, privacy, settings
 
 PEOPLE = {"aiko@site.test": ["Japanese", "en"], "kenji@site.test": ["ja"], "cra@cro.test": []}
 ROOM = {"teams:spaces/site/threads/1": ["aiko@site.test", "cra@cro.test"],
@@ -69,6 +69,8 @@ def test_english_in_any_room_is_unchanged_and_the_switch_off_changes_nothing(stu
     m = msg("teams:spaces/site/threads/1", "cra@cro.test", "what is the window for week 4?")
     assert language.fit(study, m, "Day 28 ± 7.") == "Day 28 ± 7."
     monkeypatch.setenv("CORMON_TEST_FEATURES", "")
+    real = settings.get
+    monkeypatch.setattr(settings, "get", lambda k, d=None: False if k == "features.language_courtesy" else real(k, d))
     jp = msg("teams:spaces/site/threads/1", "aiko@site.test", "第16週の来院期間は?")
     assert language.fit(study, jp, "Day 112 ± 7 days.") == "Day 112 ± 7 days." and ai["calls"] == []
 
