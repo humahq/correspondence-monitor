@@ -816,15 +816,137 @@ def test_clearing_needs_a_reason_code_from_the_fixed_list():
 
 
 def test_a_reply_that_clears_is_recorded_with_its_own_code(monkeypatch):
-    from cormon import items, pipeline
+    from cormon import closing, items, pipeline
 
     _item(5)
+    monkeypatch.setattr(closing, "on", lambda: False)   # with it on, the reply gets the page's link (below)
     monkeypatch.setattr(pipeline, "_answer_in_chat", lambda *a: None)
     person = SimpleNamespace(name="Ann", email="cra@site.org", roles=["cra"])
     study = SimpleNamespace(study_id="S1", person_by_email=lambda a: person)
     msg = {"id": 1, "channel": "teams", "study_id": "S1", "from_addr": "cra@site.org", "headers": {}}
     assert pipeline.handle_instruction(study, msg, {"type": "cleared", "text": "cleared #5"})
     assert items.get(5)["state"] == "cleared" and items.get(5)["reason_code"] == "by_reply"
+
+
+# ------------------------------------------------------------------ closing an alert on its page (DSP-01, 02, 04)
+
+def _live_item(iid, state="open", routed=1):
+    db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind, site,"
+          " polarity, title, tier, evidence, link_token, created_at, updated_at, state, routed)"
+          " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (iid, "NCT05842941", "t", 1, 1, f"k{iid}", "finding", "site-01", "problem", "Check-in missed", "medium",
+           "{}", f"tok{iid}", db.now(), db.now(), state, routed))
+
+
+def _to(purpose):
+    return [sorted(db.unjs(r["to_addrs"], [])) for r in
+            db.q("SELECT to_addrs FROM outbox WHERE purpose=? ORDER BY id", (purpose,))]
+
+
+def test_an_alert_is_closed_on_its_page_and_some_choices_need_a_second_person():
+    from cormon import closing, items
+
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+    _live_item(1)
+    with pytest.raises(closing.NotAllowed):
+        closing.close(1, "johnrohit94@gmail.com", "done", now, "")           # the site's CRC: not for now
+    with pytest.raises(ValueError, match="what was done instead"):
+        closing.close(1, "peter@huma.ai", "other", now, " ")
+    with pytest.raises(ValueError, match="future"):
+        closing.close(1, "peter@huma.ai", "done", "2099-01-01T09:00", "")
+    assert closing.close(1, "peter@huma.ai", "done", now, "checked the patient in") == "cleared"
+    assert items.get(1)["reason_code"] == "fixed" and not _to("closing_review")
+
+    _live_item(2)
+    assert closing.close(2, "peter@huma.ai", "other", now, "gave the dose from the fridge") == "waiting"
+    assert items.get(2)["state"] == "waiting"
+    assert "peter@huma.ai" not in _to("closing_review")[0] and "eliot@huma.ai" in _to("closing_review")[0]
+    with pytest.raises(closing.NotAllowed, match="second person"):
+        closing.review(2, "peter@huma.ai", "approve", "")                   # nobody reviews their own
+    with pytest.raises(ValueError, match="say why"):
+        closing.review(2, "eliot@huma.ai", "send_back", "")
+    assert closing.review(2, "eliot@huma.ai", "send_back", "it must be the labelled vial") == "open"
+    assert _to("closing_sent_back") == [["peter@huma.ai"]] and closing.latest(2)["status"] == "sent_back"
+    with pytest.raises(ValueError, match="not waiting"):
+        closing.review(2, "eliot@huma.ai", "approve", "")
+    assert closing.close(2, "peter@huma.ai", "nothing", "", "the participant withdrew") == "waiting"
+    assert closing.review(2, "john@huma.ai", "approve", "") == "cleared"
+    assert items.get(2)["reason_code"] == "not_remediable_approved" and _to("closing_approved") == [["peter@huma.ai"]]
+
+    _live_item(3)
+    closing.close(3, "john@huma.ai", "other", now, "used another participant's kit")
+    assert closing.review(3, "eliot@huma.ai", "report", "kits can't be swapped") == "cleared"
+    assert items.get(3)["reason_code"] == "reported_to_sponsor" and "john@huma.ai" in _to("closing_reported")[0]
+
+    _live_item(4, routed=0)
+    with pytest.raises(ValueError, match="never sent"):
+        closing.close(4, "peter@huma.ai", "done", now, "")
+    assert not db.q("SELECT 1 FROM closings WHERE item_id=4")
+    steps = [r["action"] for r in db.q("SELECT action FROM audit_log WHERE entity_type='item' AND entity_id='2'"
+                                       " ORDER BY id")]
+    assert steps.count("item_closing_chosen") == 2 and steps.count("item_closing_reviewed") == 2
+
+
+def test_the_page_checks_then_confirms_and_only_for_the_signed_in_person(monkeypatch):
+    import time as _t
+    import re
+    from urllib.parse import urlencode
+    from cormon import items, webview, weblogin
+
+    _set(monkeypatch, web__login__client_id="cid", web__base_url="https://mon.example",
+         web__admin__emails=["peter@huma.ai"])
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "close_on_page")
+    _live_item(5)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), webview.Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    cookie = lambda e: f"{weblogin.COOKIE}={weblogin._sign({'email': e, 'exp': _t.time() + 60})}"
+
+    def call(method, path, email=None, form=None, origin=None):
+        c = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        body = urlencode(form or {})
+        headers = {"Content-Type": "application/x-www-form-urlencoded", **({"Cookie": cookie(email)} if email else {}),
+                   **({"Origin": origin} if origin else {})}
+        c.request(method, path, body=body if method == "POST" else None, headers=headers)
+        r = c.getresponse()
+        return r.status, r.read().decode()
+    try:
+        assert "Sign in with Google" in call("GET", "/items/tok5")[1]
+        assert 'action="/items/tok5/close"' in call("GET", "/items/tok5", "peter@huma.ai")[1]
+        check = {"step": "check", "choice": "other", "done_at": "2026-11-09T10:00", "details": "gave another vial"}
+        assert call("POST", "/items/tok5/close", None, check)[0] == 403
+        assert call("POST", "/items/tok5/close", "peter@huma.ai", check, "https://evil.example")[0] == 403
+        status, page = call("POST", "/items/tok5/close", "peter@huma.ai", check)
+        assert status == 200 and "gave another vial" in page and items.get(5)["state"] == "open", "a check changes nothing"
+        sealed = re.search(r'name="sealed" value="([^"]+)"', page).group(1)
+        assert call("POST", "/items/tok5/close", "eliot@huma.ai", {"step": "confirm", "sealed": sealed})[0] == 400
+        assert call("POST", "/items/tok5/close", "peter@huma.ai", {"step": "confirm", "sealed": sealed + "x"})[0] == 400
+        assert call("POST", "/items/tok5/close", "peter@huma.ai", {"step": "confirm", "sealed": sealed})[0] == 303
+        assert items.get(5)["state"] == "waiting"
+        assert "You closed it" in call("GET", "/items/tok5", "peter@huma.ai")[1]
+        assert 'action="/items/tok5/review"' in call("GET", "/items/tok5", "eliot@huma.ai")[1]
+        monkeypatch.delenv("CORMON_TEST_FEATURES")
+        monkeypatch.setattr(settings, "feature", lambda name: False)
+        assert "Close this alert" not in call("GET", "/items/tok5", "peter@huma.ai")[1]
+        assert call("POST", "/items/tok5/review", "eliot@huma.ai", {"step": "check", "decision": "approve"})[0] == 404
+    finally:
+        server.shutdown()
+
+
+def test_with_closing_on_a_page_a_cleared_reply_gets_the_link_instead(monkeypatch):
+    from cormon import closing, items, pipeline
+
+    _item(6)
+    said = []
+    monkeypatch.setattr(pipeline, "_answer_in_chat", lambda study, msg, text: said.append(text))
+    person = SimpleNamespace(name="Ann", email="cra@site.org", roles=["cra"])
+    study = SimpleNamespace(study_id="S1", person_by_email=lambda a: person)
+    msg = {"id": 1, "channel": "teams", "study_id": "S1", "from_addr": "cra@site.org", "headers": {}}
+    monkeypatch.setattr(closing, "on", lambda: True)
+    assert pipeline.handle_instruction(study, msg, {"type": "cleared", "text": "cleared #6"}) is False
+    assert items.get(6)["state"] == "open" and "/items/l6" in said[0]
+    monkeypatch.setattr(closing, "on", lambda: False)
+    assert pipeline.handle_instruction(study, msg, {"type": "cleared", "text": "cleared #6"})
+    assert items.get(6)["state"] == "cleared"
 
 
 # ------------------------------------------------------------------ two people (SEC-04, DSP-05)
@@ -1904,7 +2026,7 @@ def test_every_code_file_is_tied_to_a_test_set_or_known_to_need_none():
     cfg = gate.gates()
     tied = {p for s in cfg["sets"].values() for p in gate._flat(s["when"])} | set(cfg["all_when"])
     none_needed = {  # operator tools, records, alerts and pages: covered by the code tests only
-        "__init__", "adminview", "backup", "chatdemo", "cli", "compare", "corrections", "coverage", "digest", "drift",
+        "__init__", "adminview", "backup", "chatdemo", "cli", "closing", "compare", "corrections", "coverage", "digest", "drift",
         "export",
         "notes", "prune", "senders", "settings", "stuck", "timing", "watchdog", "weblogin", "webview",
         "outbox",   # its AI set (the trick emails) is left out for now

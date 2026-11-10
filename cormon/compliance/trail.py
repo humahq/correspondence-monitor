@@ -32,6 +32,7 @@ TRACKED = {
     "items": {"title", "evidence", "reasoning", "tier_reason", "recipient_reason"},
     "outbox": {"subject", "body", "meta", "last_error"},
     "rules": {"text", "source_quote"},
+    "closings": {"details", "review_note"},
 }
 
 

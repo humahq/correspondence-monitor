@@ -141,9 +141,9 @@ class StepOrder(ValueError):
 
 
 # which state an item may move to from each state (ARC-03). A safety item (out_of_scope) is never cleared or
-# hidden by anyone.
-NEXT = {"open": {"cleared", "suppressed", "handled"}, "cleared": {"open"}, "suppressed": {"open"},
-        "handled": {"open"}, "out_of_scope": set()}
+# hidden by anyone. "waiting": closed on its page with a choice a second person must review (closing.py).
+NEXT = {"open": {"cleared", "suppressed", "handled", "waiting"}, "cleared": {"open"}, "suppressed": {"open"},
+        "handled": {"open"}, "waiting": {"cleared", "open"}, "out_of_scope": set()}
 
 
 def order_problem(item: dict, state: str, actor_type: str) -> str | None:
@@ -169,7 +169,13 @@ REASON_CODES = {
     "not_this_study": "Not about this study",
     "other": "Other (the reason is written out)",
     "by_reply": "Cleared by a reply (the reply's words are kept)",
+    # closed on the alert's page (closing.py); "fixed" is "I did what was asked"
+    "other_fix_approved": "Something else was done, and a second person approved it",
+    "not_remediable_approved": "Nothing could be done, and a second person approved it",
+    "reported_to_sponsor": "A second person did not approve what was done, and reported it to the sponsor",
 }
+# set by a reply or by the alert's page, never given by an operator
+NOT_TYPED = ("by_reply", "other_fix_approved", "not_remediable_approved", "reported_to_sponsor")
 NEEDS_CODE = ("cleared", "suppressed")
 
 
@@ -181,7 +187,7 @@ def reason_problem(state: str, code: str | None, reason: str | None) -> str | No
     if state not in NEEDS_CODE:
         return None
     if code not in REASON_CODES:
-        return "give a reason code: " + ", ".join(k for k in REASON_CODES if k != "by_reply")
+        return "give a reason code: " + ", ".join(k for k in REASON_CODES if k not in NOT_TYPED)
     if code == "other" and not (reason or "").strip():
         return 'reason code "other" needs the reason written out (--reason)'
     return None

@@ -333,6 +333,7 @@
         conversation.</div></div></div>
       <div class="filters">
         <${Select} value=${q.state} onChange=${(v) => set("state", v)} options=${[{ value: "open", label: "Open alerts" },
+          ...(document.body.dataset.closing ? [{ value: "waiting", label: "Waiting for review" }] : []),
           { value: "cleared", label: "Cleared" }, { value: "suppressed", label: "Disregarded" }, { value: "all", label: "All alerts" }]} />
         <${Select} value=${q.type} onChange=${(v) => set("type", v)} options=${options.types} />
         <${Select} value=${q.tier} onChange=${(v) => set("tier", v)} options=${options.tiers} />

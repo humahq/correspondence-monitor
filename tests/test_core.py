@@ -1208,7 +1208,7 @@ def test_new_features_are_off_on_the_live_bot_until_switched_on(monkeypatch):
     import yaml
     from cormon import config, reader, settings
     live = yaml.safe_load((settings.CODE_ROOT / "config" / "settings.yaml").read_text())
-    gone_live = {"numbered_steps", "language_courtesy", "safety_names", "outside_recipients"}
+    gone_live = {"numbered_steps", "language_courtesy", "safety_names", "outside_recipients", "close_on_page"}
     assert live["features"] and not any(v for k, v in live["features"].items() if k not in gone_live)
     assert live["memory"]["enabled"] is False
     monkeypatch.delenv("CORMON_TEST_FEATURES", raising=False)
@@ -2432,8 +2432,9 @@ def test_the_sender_check_trusts_only_the_top_result_from_google():
     assert "_cormon_to_bot" not in forged.headers
 
 
-def test_an_email_that_fails_the_sender_check_cannot_clear_an_alert():
-    from cormon import pipeline
+def test_an_email_that_fails_the_sender_check_cannot_clear_an_alert(monkeypatch):
+    from cormon import closing, pipeline
+    monkeypatch.setattr(closing, "on", lambda: False)   # clearing by reply, as before close_on_page
     db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind,"
           " polarity, title, tier, evidence, link_token, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
           (8, "S1", "t", 1, 1, "k8", "finding", "problem", "x", "medium", "{}", "l8", db.now(), db.now()))
@@ -2501,7 +2502,7 @@ def test_pages_need_a_google_sign_in_on_the_studys_people_list(monkeypatch):
     monkeypatch.setattr(settings, "get", lambda k, d=None: conf.get(k, real(k, d)))
     person = type("P", (), {"email": "Cra@Site.org"})()
     monkeypatch.setattr(config, "studies", lambda: {"S1": type("S", (), {"people": [person]})()})
-    monkeypatch.setattr(webview, "render_item", lambda item: "THE PAGE")
+    monkeypatch.setattr(webview, "render_item", lambda item, email=None, path="": "THE PAGE")
     db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind,"
           " polarity, title, tier, evidence, link_token, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
           (9, "S1", "t", 1, 1, "k9", "finding", "problem", "x", "medium", "{}", "tok9", db.now(), db.now()))

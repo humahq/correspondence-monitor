@@ -96,7 +96,8 @@ What is left:
 - [ ] Questions for Eliot (email): can a fact from a private chat be used in a group chat? Who may correct facts,
   admins only or coordinators too? Is OpenAI's patient-data agreement (BAA) in place?
 
-**2. After hindsight: closing alerts on the web page (DSP-01, DSP-02, DSP-04, and the "clear by reply" part of OUT-03).**
+**2. Closing alerts on the web page (DSP-01, DSP-02, DSP-04, and the "clear by reply" part of OUT-03).** Built
+(issue #74, `features.close_on_page`, `cormon/closing.py`), waiting for the merge and the next release.
 Eliot decided this on 29 Oct. Alerts are no longer closed by email or chat reply. On the alert's web page, the person picks one:
 - "I did what was asked", with the date and time. This closes the alert.
 - "I did something else", with what and when. This goes to the PI.
@@ -199,12 +200,12 @@ IAM-04), all secrets in Secret Manager with rotation (SEC-03).
 | CAP-10 | Second-copy governance | No written rule for how long the mailbox keeps mail |
 | OUT-01 | Sent-message records | A write-once copy now goes to a separate database (PR #17), a stand-in: the locked bucket is Phase 3 |
 | OUT-02 | Outbound domain authentication | DMARC `p=reject` on the sending domain (a DNS task) |
-| OUT-03 | LLM output never routes | The AI still decides "whether" in 3 places (doctor check, careful check, clear by reply) |
+| OUT-03 | LLM output never routes | The AI still decides "whether" in 2 places (doctor check, careful check). Clear by reply is replaced by closing on the page: built, waiting for the merge (issue #74) |
 | QAA-06 | No clinical judgment | A judgment in a final answer is recorded, not blocked. Needs real answers to measure |
 | SAF-02 | Detection and routing | Safety mail goes, unassessed, to the medical monitor with the CRA copied, but the address is a stand-in (john+medicalmonitor@huma.ai) until the sponsor names one |
 | SAF-05 | Escalation and terminus | Built: not acknowledged in time, it goes to the safety backup, then the ClinOps lead, then the on-call person and the admins are told to phone (3 reminders); reaching that last step is recorded as a deviation, with the steps that went unanswered. The contacts are stand-ins and no phone numbers are on file yet |
-| DSP-01 | Deterministic disposition grammar | Today the AI reads a reply to clear an alert. Eliot decided (29 Oct) that alerts are closed on the alert's web page with fixed choices, not by reply. After hindsight |
-| DSP-04 | Reason and visibility | A clear by reply gets the code "by_reply". The web page choices will give the reason. After hindsight, with DSP-01 |
+| DSP-01 | Deterministic disposition grammar | Built, waiting for the merge (issue #74): an alert is closed on its page with three fixed choices by a person signed in with Google; a "cleared" reply gets the page's link and changes nothing. Who may close is a role list in study.yaml |
+| DSP-04 | Reason and visibility | Built, waiting for the merge (issue #74): the page's choice is the reason code (fixed, other_fix_approved, not_remediable_approved, reported_to_sponsor), with the person's words, shown on the alert's page and in the audit log |
 | IAM-01 | Operator access | MFA depends on the Google Workspace setting |
 | IAM-04 | Key management | No separate key-admin role; no key rotation |
 | AUD-02 | Immutability via compensating controls | Each audit entry is copied to a separate write-once database and checked daily (PR #17); someone with the file can still drop its triggers, so the locked bucket is Phase 3 |
@@ -218,7 +219,7 @@ IAM-04), all secrets in Secret Manager with rotation (SEC-03).
 
 | ID | Name | What is missing |
 |---|---|---|
-| DSP-02 | Echo-back confirmation | No confirm step before a close takes effect. It will be a confirm step on the web page, plus the PI's review. After hindsight, with DSP-01 |
+| DSP-02 | Echo-back confirmation | Built, waiting for the merge (issue #74): a check step shows exactly what will be kept, and only Confirm saves it (sealed, so it can't be changed in between); "something else" and "nothing can be done" also need a second person's review |
 
 
 ## Later, V2 (2)
