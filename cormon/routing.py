@@ -322,8 +322,15 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
                     continue
                 sent_to.add(addr.lower())
                 tpl = drafting.select(topic, axis, "email", item["tier"])
-                subject, body = drafting.render(tpl, context(person))
                 cc = _cc(study, entry, item, {addr.lower()})
+                names = item["kind"] == "out_of_scope" and settings.feature("safety_names")
+                # a safety email names the participant only for those who may see it; the others get their own copy
+                apart = [a for a in cc if not privacy.may_see_names(study, study.person_by_email(a))] if names else []
+                cc = [a for a in cc if a not in apart]
+                sent_to.update(a.lower() for a in apart)
+                hide = names and not privacy.may_see_names(study, person)
+                subject, body = drafting.render(tpl, privacy.without_names(study, context(person)) if hide
+                                                else context(person))
                 meta = {"thread_key": item["thread_key"], "item_id": item_id,
                         "item_ids": [item_id] + [it["id"] for it in others]}
                 if entry.get("to") == "sender" and msg.get("rfc_message_id"):
@@ -338,6 +345,17 @@ def route_item(item_id: int, *, force: bool = False, actor: str = "system", also
                     subject=subject, item_id=item_id, template_id=tpl["id"],
                     from_addr=from_alias(study, msg), to=[addr], cc=cc, meta=meta,
                     status=status, study_id=study.study_id, again=force and actor != "system"))
+                for a in apart:
+                    copy_subject, copy_body = drafting.render(
+                        tpl, privacy.without_names(study, context(study.person_by_email(a))))
+                    created.append(enqueue(
+                        purpose=f"email_{axis}_copy", channel="email", destination="email", body=copy_body,
+                        subject=copy_subject, item_id=item_id, template_id=tpl["id"],
+                        from_addr=from_alias(study, msg), to=[a], meta=meta, status=status,
+                        study_id=study.study_id, again=force and actor != "system"))
+                if apart:
+                    db.audit("safety_names_removed", entity_type="item", entity_id=item_id, study_id=study.study_id,
+                             named_for=[addr] if not hide else [], copies_without_names=apart)
             continue
         db.audit("routing_unknown_destination", entity_type="item", entity_id=item_id,
                  study_id=study.study_id, destination=dest)

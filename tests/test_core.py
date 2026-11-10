@@ -106,6 +106,21 @@ def test_protocol_words_are_found_sentence_by_sentence():
     assert _exact_words("Exclude inducers within 2 weeks", [brief], [a, b], "x:4.2", f) is None  # a brief is not proof
 
 
+def test_a_quote_of_numbered_steps_is_the_documents_words_with_the_switch_on(monkeypatch):
+    from cormon.reader import _exact_words
+    s = {"id": "irt:3.1", "kind": "section", "text": "To register a subject who has signed the consent forms:\n\n"
+         "1. Click the Add Subject button on the Home Dashboard.\n2. Enter the Date of Informed Consent and the "
+         "subject's Year of Birth.\n3. Review the summary screen and click Confirm."}
+    q = "1. Click the Add Subject button on the Home Dashboard.\n2. Enter the Date of Informed Consent."
+    f = {"problem": "What is the first step in registering a new patient?", "why": "Click Add Subject."}
+    assert _exact_words(q, [s], [s], "irt:3.1", f) is None   # the live version: "1" and "2" look like rule numbers
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "numbered_steps")
+    sec, words = _exact_words(q, [s], [s], "irt:3.1", f)
+    assert sec["id"] == "irt:3.1" and "Add Subject" in words
+    wrong = {"id": "x:4", "kind": "section", "text": "1. Wait 14 days after the last dose."}
+    assert _exact_words("1. Wait 28 days after the last dose.", [wrong], [wrong], "x:4", f) is None  # real numbers count
+
+
 def test_protocol_words_drop_a_procedure_list_that_is_not_about_the_finding():
     from cormon.reader import _exact_words
     v = {"id": "g:6.4", "kind": "section", "text": "This visit will take place 84 ± 3 days after the Baseline visit via "

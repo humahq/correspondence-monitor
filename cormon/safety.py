@@ -26,7 +26,7 @@ import hashlib
 import re
 from datetime import datetime, timedelta, timezone
 
-from . import config, db, drafting, items, senders
+from . import config, db, drafting, items, privacy, senders, settings
 from .config import Study
 
 DEFAULTS = {"ack_minutes": {"severe": 60, "standard": 1440}, "step_minutes": {"severe": 30, "standard": 240},
@@ -158,6 +158,8 @@ def _send(study: Study, item: dict, people, topic: str, again: bool = False) -> 
     out = []
     for p in people:
         ctx = drafting.item_context(study, item, p)
+        if settings.feature("safety_names") and not privacy.may_see_names(study, p):
+            ctx = privacy.without_names(study, ctx)
         subject, body = drafting.render(tpl, ctx)
         out.append(routing.enqueue(purpose=topic, channel="email", destination="email", body=body, subject=subject,
                                    item_id=item["id"], template_id=tpl["id"], from_addr=study.alias, to=[p.email],
