@@ -8,7 +8,7 @@ bot:
 
 channels:
   email: sim
-  teams: "off"
+  teams: sim
 
 mailbox:
   address: bot_test@huma.ai
