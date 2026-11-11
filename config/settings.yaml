@@ -58,6 +58,7 @@ features:
   trick_detector: false      # Meta's open-source trick detector flags a message that tries to give the AI orders; admins told
   mark_email: true          # the message is marked at both ends with its own tag and cleaned of invisible characters
   flag_orders: true         # a message giving the bot orders: admins told, and never a quiet "no problem" (please check)
+  confirm_orders: false      # a second judge (Decisions API) must agree a sentence is an order before it is flagged
   safety_backstop: false     # a severe safety word the AI did not send to the medical monitor is sent anyway
 
 # The language everyone in a study shares (language_courtesy). A person's own are `languages:` in study.yaml.
