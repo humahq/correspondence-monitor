@@ -72,6 +72,10 @@ def measure(start: str, end: str) -> dict:
         "judgment_flagged": _count("answer_judgment_flagged", start, end),
         "blocked_outgoing": _count("outgoing_blocked", start, end),
         "answer_messages": asked, "not_answered": _count("question_not_answered", start, end),
+        "tricks_flagged": _count("trick_detector_flagged", start, end),
+        "flagged_messages": [r["entity_id"] for r in db.q(
+            "SELECT DISTINCT entity_id FROM audit_log WHERE action IN ('trick_detector_flagged', "
+            "'orders_to_bot_flagged', 'safety_backstop_routed') AND ts>=? AND ts<? ORDER BY entity_id", (start, end))],
     }
 
 
@@ -161,6 +165,10 @@ def render(rep: dict, sample: list[int]) -> str:
               f"{t['wording_refused']} time(s); answers flagged for a possible clinical judgment "
               f"{t['judgment_flagged']}; outgoing messages blocked {t['blocked_outgoing']}."]
     base = settings.get("web.base_url", "")
+    if t.get("flagged_messages"):   # CAP-09 step 8: so attacks being honed are seen
+        lines += ["", f"Messages flagged as possible tricks this week ({len(t['flagged_messages'])}: the trick "
+                  "detector, orders to the bot, or a severe word the AI did not send to the medical monitor):",
+                  *[f"- {base}/admin/messages/{m}" for m in t["flagged_messages"]]]
     if sample:
         lines += ["", f"Please read these {len(sample)} messages, which made no alert, and mark each one:",
                   *[f"- {base}/admin/messages/{m}   then: cormon drift --mark {m} ok   (or: missed --note ...)"

@@ -4,6 +4,7 @@ config/settings.local.yaml
 __pycache__/
 *.pyc
 data/
+models/
 secrets/
 .pytest_cache/
 .ruff_cache/

@@ -46,8 +46,8 @@ memory:
 # New features, each off on the live bot until John says "yes, put it in the live bot" (docs/features.md).
 # Patient memory's switch is memory.enabled above.
 features:
-  permission_claims: false   # "Dr. Smith said it's fine": a permission passed on by someone else is not accepted
-  second_look: false         # a second reading of the email's facts only, so words aimed at the AI can't hide a problem
+  permission_claims: true   # "Dr. Smith said it's fine": a permission passed on by someone else is not accepted
+  second_look: true         # a second reading of the email's facts only, so words aimed at the AI can't hide a problem
   privacy_check: false       # who may hear what, before an answer or alert using patient memory goes out
   openbook_look: false       # the admin page in OpenBook's look (openbook.phd: its name, colors and font)
   numbered_steps: true       # a quote of numbered steps ("1. Click Add Subject") counts as the document's words
@@ -55,6 +55,10 @@ features:
   safety_names: true         # a safety email names the participant only for the medical monitor; copies don't
   outside_recipients: true   # an email with someone on it the study doesn't list gets no answer, only a note to the sender
   close_on_page: true        # an alert is closed on its page with three fixed choices; some wait for the PI's review
+  trick_detector: false      # Meta's open-source trick detector flags a message that tries to give the AI orders; admins told
+  mark_email: true          # the message is marked at both ends with its own tag and cleaned of invisible characters
+  flag_orders: true         # a message giving the bot orders: admins told, and never a quiet "no problem" (please check)
+  safety_backstop: false     # a severe safety word the AI did not send to the medical monitor is sent anyway
 
 # The language everyone in a study shares (language_courtesy). A person's own are `languages:` in study.yaml.
 language:
