@@ -1162,6 +1162,10 @@ def test_a_permission_passed_on_from_someone_else_is_never_accepted():
     reader._second_hand(s, dict(part, statements=[dict(claim, claimed_by="the medical monitor")]),
                         {"from_addr": mm}, out, [], {"findings": []}, 0, [sec], [])
     assert not out                                              # the monitor's own word is first-hand
+    story = dict(claim, text="Her mother says she had febrile seizures as a toddler.", claimed_by="someone",
+                 excuses="", claim_topic="")
+    reader._second_hand(s, dict(part, statements=[story]), {"from_addr": crc}, out, [], {"findings": []}, 0, [sec], [])
+    assert not out                                              # excuses nothing: an account, not a permission
 
 
 def test_the_second_look_sees_only_the_facts_and_only_adds(monkeypatch):
