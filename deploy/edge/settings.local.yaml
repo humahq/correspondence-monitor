@@ -1,0 +1,35 @@
+# The second server, cormon-edge: Peter's copy with the newest features (Eliot, 10 Nov), with its own bot account
+# (bot_test@huma.ai), so it never reads or answers the live bot's mail and chat. Put in place by
+#     NAME=cormon-edge LOCAL_SETTINGS=deploy/edge/settings.local.yaml ./deploy/create_vm.sh
+# Email and chat stay off until the account's app password and Chat sign-in are in place
+# (deploy/edge_connect.sh switches them on).
+bot:
+  name: "Study monitor (test)"
+
+channels:
+  email: sim
+  teams: "off"
+
+mailbox:
+  address: bot_test@huma.ai
+  general_addresses: [bot_test+clinical@huma.ai]
+  imap:
+    user: bot_test@huma.ai
+    secret:
+      project: optical-depth-506808-t0
+      name: bot-test-gmail-app-password
+
+gchat:
+  account: bot_test@huma.ai
+
+chat:
+  # The test bot's own rooms, filled in by deploy/edge_connect.sh once Eliot has made them.
+  rooms: {}
+
+memory:
+  enabled: true
+
+features:
+  privacy_check: true
+  openbook_look: true
+  confirm_orders: true

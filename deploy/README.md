@@ -16,3 +16,12 @@
   so make permanent changes in the repo. Deployment-specific values (the bot's name, avatar and email signature
   under `bot:`) go in the server's untracked `config/settings.local.yaml`, which a release leaves alone.
 - **Giving someone access:** `./deploy/grant_access.sh name@huma.ai` (Eliot and Peter already have access).
+- **The test server (`cormon-edge`):** a second bot with its own account (bot_test@huma.ai), its own Chat rooms
+  and the new features on, set in `deploy/edge/settings.local.yaml`. It never gets the live bot's sign-ins.
+  1. `NAME=cormon-edge LOCAL_SETTINGS=deploy/edge/settings.local.yaml ./deploy/create_vm.sh` (it starts with
+     email and chat off).
+  2. Store bot_test's Gmail app password:
+     `gcloud secrets versions add bot-test-gmail-app-password --project optical-depth-506808-t0 --data-file=-`.
+  3. `./deploy/edge_connect.sh chat`: sign in as bot_test in the browser; it lists bot_test's Chat spaces.
+  4. `STUDY_SPACE=spaces/... ALERT_SPACE=spaces/... ./deploy/edge_connect.sh on`.
+  Later updates: `CORMON_VM=cormon-edge ./deploy/release.sh` (same gate; its tag is `live-cormon-edge`).

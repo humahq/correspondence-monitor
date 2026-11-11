@@ -673,6 +673,17 @@ def test_orders_to_the_bot_never_leave_a_quiet_no_problem():
     assert len(out) == 1   # an order to report someone else still leaves no quiet "no problem" for this participant
 
 
+def test_a_second_server_posts_in_its_own_chat_rooms(monkeypatch):
+    from cormon import config
+
+    live = config.study("NCT05842941").teams["alert_channel"]["space"]
+    _set(monkeypatch, chat__rooms={"NCT05842941": {"alert_channel": {"space": "spaces/TEST", "name": "Test"}}})
+    assert config.study("NCT05842941").teams == {"alert_channel": {"space": "spaces/TEST", "name": "Test"}}
+    assert config.study("NCT04098666").teams.get("alert_channel", {}).get("space") != "spaces/TEST"
+    _set(monkeypatch, chat__rooms={})
+    assert config.study("NCT05842941").teams["alert_channel"]["space"] == live
+
+
 def test_a_second_judge_drops_an_order_only_when_sure(monkeypatch):
     from cormon import llm, reader
 

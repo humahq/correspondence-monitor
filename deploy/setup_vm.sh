@@ -19,6 +19,8 @@ fi
 id cormon >/dev/null 2>&1 || useradd --system --home "$APP" --shell /usr/sbin/nologin cormon
 [ -d "$APP/.venv" ] || python3 -m venv "$APP/.venv"
 "$APP/.venv/bin/pip" install -q --upgrade pip
+# The package versions the gate tests with (release.sh stops when the server's differ), then the app itself.
+[ -f "$APP/deploy/requirements-live.txt" ] && "$APP/.venv/bin/pip" install -q -r "$APP/deploy/requirements-live.txt"
 "$APP/.venv/bin/pip" install -q -e "$APP"   # editable: the service runs the files under $APP, never a stale copy
 mkdir -p "$APP/data" "$APP/secrets"
 

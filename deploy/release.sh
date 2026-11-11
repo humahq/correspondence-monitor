@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Puts a version of the bot's code on the live server, only if GitHub's gate passed for that exact commit
+# Puts a version of the bot's code on a server (the live one; CORMON_VM=cormon-edge for the test one), only if GitHub's gate passed for that exact commit
 # (SDL-05, VAL-05). Run from the laptop; you log in with your own Google and GitHub accounts.
 #
 #   ./deploy/release.sh            the latest commit on GitHub's main
@@ -7,7 +7,8 @@
 #
 # It stops, changing nothing, when: the gate did not pass for the commit; the newest fresh AI run (weekly, VAL-07)
 # did not pass or is more than 8 days old; the server's packages differ from
-# deploy/requirements-live.txt; the live code is not the version tagged `live` (someone changed it by hand);
+# deploy/requirements-live.txt; the server's code is not the version tagged `live` (`live-<server>` for
+# other servers; someone changed it by hand);
 # or the live study model differs from studies/model/model.sql (a rebuild the gate has not tested).
 # Otherwise it backs up the code and the database, puts the commit's cormon/ in place, restarts the bot and
 # checks its health; if the bot is not healthy it puts the old code back. Once healthy, the config the gate tested
@@ -20,6 +21,7 @@ ZONE="${CORMON_ZONE:-us-east1-b}"
 VM="${CORMON_VM:-cormon-demo}"
 SSH=(gcloud compute ssh "$VM" --project "$PROJECT" --zone "$ZONE" --tunnel-through-iap --quiet)
 LIVE=/opt/cormon
+TAG=$([ "$VM" = cormon-demo ] && echo live || echo "live-$VM")   # each server's own record of what it runs
 cd "$(dirname "$0")/.."
 
 remote() { "${SSH[@]}" --command "$1" 2>/dev/null </dev/null; }
@@ -63,19 +65,19 @@ diff <(git show "$SHA:deploy/requirements-live.txt" | sort) \
      <(remote "$LIVE/.venv/bin/python -m pip freeze --exclude-editable" | sort) >/dev/null \
   || stop "the server's packages differ from deploy/requirements-live.txt (a package change needs its own step)"
 
-# 3. The live code is the version tagged live (skipped until the first release sets the tag).
+# 3. The live code is the version tagged $TAG (skipped until the first release sets the tag).
 FILES="find cormon -name '*.py' -not -path '*/__pycache__/*' | LC_ALL=C sort"
-if git rev-parse -q --verify "refs/tags/live" >/dev/null; then
+if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
   tmp=$(mktemp -d)
-  git archive live cormon | tar -x -C "$tmp"
+  git archive "$TAG" cormon | tar -x -C "$tmp"
   diff <(cd "$tmp" && eval "$FILES" | xargs shasum -a 256) \
        <(remote "cd $LIVE && sudo sh -c \"$FILES | xargs sha256sum\"") \
-    || { rm -rf "$tmp"; stop "the live code is not the version tagged live (changed by hand?)"; }
+    || { rm -rf "$tmp"; stop "the code on $VM is not the version tagged $TAG (changed by hand?)"; }
   rm -rf "$tmp"
-  echo "live code is $(git rev-parse --short live)"
-  git --no-pager diff --stat live "$SHA" -- cormon
+  echo "code on $VM is $(git rev-parse --short "$TAG")"
+  git --no-pager diff --stat "$TAG" "$SHA" -- cormon
 else
-  echo "no live tag yet: first release through the gate"
+  echo "no $TAG tag yet: first release to $VM through the gate"
 fi
 
 # 4. The live study model is the one in the repo. Row order is not compared: import-model may store rows in another order.
@@ -84,7 +86,7 @@ diff -q <(git show "$SHA:studies/model/model.sql" | LC_ALL=C sort) <(remote "sud
   || stop "the live study model differs from studies/model/model.sql: export it, commit it and let the gate test it"
 echo "live study model matches studies/model/model.sql"
 
-read -r -p "Deploy $(git rev-parse --short "$SHA") to the live bot? Type yes: " ok || ok=""
+read -r -p "Deploy $(git rev-parse --short "$SHA") to $VM? Type yes: " ok || ok=""
 [ "$ok" = yes ] || stop "not confirmed"
 
 # 5. Back up, put the code in place, restart, check.
@@ -109,6 +111,6 @@ git archive --format=tar.gz "$SHA" cormon config $(git ls-tree -r --name-only "$
   rm -rf /tmp/release-$TS
   sudo journalctl -u cormon --since '-1 min' --no-pager | grep -iE 'error|traceback' | head -5 || true" 2>/dev/null
 
-git tag -f live "$SHA"
-git push -q -f origin refs/tags/live
-echo "deployed $(git rev-parse --short "$SHA"); tag live moved. Code backup: $LIVE/code-backup-$TS.tgz"
+git tag -f "$TAG" "$SHA"
+git push -q -f origin "refs/tags/$TAG"
+echo "deployed $(git rev-parse --short "$SHA") to $VM; tag $TAG moved. Code backup: $LIVE/code-backup-$TS.tgz"
