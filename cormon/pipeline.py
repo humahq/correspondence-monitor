@@ -200,6 +200,26 @@ def _already_raised(study: Study, f, pid: str | None, msg_id: int) -> bool:
     return hit is not None
 
 
+def _safety_backstop(study: Study, msg: dict, events_read: list[dict], out_of_scope) -> None:
+    """CAP-09 step 5 (features.safety_backstop): a message with one of the study's severe words that the AI did not
+    send to the medical monitor is sent anyway, so words in a message cannot talk the bot out of it. It only adds."""
+    text = f"{msg.get('subject') or ''}\n{_own_text(msg.get('body_text') or '')}"
+    sev, word = safety.severity(study, text)
+    if sev != "severe":
+        return
+    told = [e for e in events_read if textutil.quote_in(word, e.get("quote") or "", short_ok=True)]
+    if told and all(e.get("temporality") == "historical" for e in told):
+        return   # medical history ("a seizure in June"), not a new safety event
+    quote = textutil.expand_to_sentence(word, text)
+    pid = next((_pid(e.get("participant_id")) for e in told if e.get("participant_id")), None)
+    event = {"description": f'The message has the severe word "{word}"', "event_type": "adverse_event",
+             "temporality": "current", "quote": quote, "source": "body"}
+    db.audit("safety_backstop_routed", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
+             word=word, participant_id=pid)
+    out_of_scope(f'code backstop: the message has the severe word "{word}" and the AI did not send it to the '
+                 "medical monitor", pid, event, _base_evidence(study, msg, event))
+
+
 def _base_evidence(study: Study, msg: dict, event: dict) -> dict:
     sender = study.person_by_email(msg.get("from_addr"))
     return {
@@ -741,6 +761,8 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
             reader.keep(study, msg, trace)
             db.audit("reader_checked", entity_type="message", entity_id=msg_id, study_id=study.study_id,
                      trace=trace)
+            if trace.get("orders") and not rerun:
+                trickcheck.orders_flagged(study.study_id, msg_id, trace["orders"])
             hit = set()
             for f in found:
                 pid = _pid(f.event.get("participant_id"))
@@ -757,6 +779,9 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
                 if pid not in hit:
                     out_of_scope("safety signal that matches no study requirement, so its only reading is safety",
                                  pid, event, base)
+
+        if settings.feature("safety_backstop") and not rerun and data["trial_related"] and not summary["out_of_scope"]:
+            _safety_backstop(study, msg, data["events"], out_of_scope)
 
         if not reader_route and settings.get("matching.sweep", True):
             enrolled = {_pid(e.get("participant_id")) for e in data["events"]

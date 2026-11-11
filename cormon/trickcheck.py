@@ -1,4 +1,7 @@
-"""A ready-made trick detector (CAP-09, layer 1): Meta's open-source Llama Prompt Guard 2 (22M), run on our own
+"""Notes to the admins about messages that try to trick the bot (CAP-09): the ready-made detector below, and
+messages the reader found giving the bot orders (step 4, `orders_flagged`).
+
+A ready-made trick detector (CAP-09, layer 1): Meta's open-source Llama Prompt Guard 2 (22M), run on our own
 machine with onnxruntime, so no message text leaves it. It only adds: a flagged message is recorded in the audit
 log and the admins are told. It never clears, hides or changes an alert, and a detector that fails or is missing
 never stops a message from being read.
@@ -41,7 +44,8 @@ def _load() -> dict:
             import numpy as np
             import onnxruntime as ort
             from tokenizers import Tokenizer
-            folder = settings.resolve(settings.get("trick_detector.model_dir", MODEL_DIR))
+            folder = Path(settings.get("trick_detector.model_dir", MODEL_DIR))
+            folder = folder if folder.is_absolute() else Path(__file__).resolve().parents[1] / folder
             model = folder / "model.onnx"
             digest = hashlib.sha256()
             for part in (model, folder / "model.onnx.data"):
@@ -81,6 +85,25 @@ def score(text: str) -> float:
     return best
 
 
+def _tell_admins(key: str, study_id: str, msg_id: int, what: str) -> None:
+    from .compliance import alerts
+    base = settings.get("web.base_url", "").rstrip("/")
+    link = f"\nRead it: {base}/admin/messages/{msg_id}\n" if base else ""
+    alerts.notify(f"{key}:{msg_id}", f"[{study_id}] A message may be trying to trick the bot",
+                  f"Message {msg_id} in study {study_id} {what}.\n"
+                  "The bot followed none of it and changed nothing else because of this note. Please read it, and "
+                  f"tell the CRA if it looks deliberate.\n{link}", every_minutes=24 * 60)
+
+
+def orders_flagged(study_id: str, msg_id: int, orders: list[dict]) -> None:
+    """CAP-09 step 4: a message that gives the bot orders is recorded and the admins are told (without its text).
+    The reader has already made sure it gets no quiet "no problem"."""
+    db.audit("orders_to_bot_flagged", entity_type="message", entity_id=msg_id, study_id=study_id,
+             orders=len(orders), wants=sorted({o["wants"] for o in orders}))
+    _tell_admins("orders", study_id, msg_id, f"gives the bot orders about how to check or report it "
+                 f"({len(orders)} sentence(s); it was sent as \"please check\")")
+
+
 def check(study_id: str, msg_id: int, text: str) -> float | None:
     """Score a message; when flagged, record it and tell the admins (no message text in the note). The score, or
     None when the switch is off or the detector could not run."""
@@ -97,12 +120,5 @@ def check(study_id: str, msg_id: int, text: str) -> float | None:
         return s
     db.audit("trick_detector_flagged", entity_type="message", entity_id=msg_id, study_id=study_id,
              model=MODEL, score=round(s, 3), threshold=threshold)
-    from .compliance import alerts
-    base = settings.get("web.base_url", "").rstrip("/")
-    link = f"\nRead it: {base}/admin/messages/{msg_id}\n" if base else ""
-    alerts.notify(f"trick:{msg_id}", f"[{study_id}] A message may be trying to trick the bot",
-                  f"Message {msg_id} in study {study_id} looks like it tries to give the AI orders "
-                  f"({MODEL}, score {s:.2f}).\n"
-                  "The bot read and checked it as usual and changed nothing because of this note. Please read it, "
-                  f"and tell the CRA if it looks deliberate.\n{link}", every_minutes=24 * 60)
+    _tell_admins("trick", study_id, msg_id, f"looks like it tries to give the AI orders ({MODEL}, score {s:.2f})")
     return s
