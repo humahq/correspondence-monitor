@@ -45,8 +45,11 @@ if ! "${G[@]}" secrets describe "$SECRET" >/dev/null 2>&1; then
   echo "made the empty secret $SECRET: add the bot account's app password with"
   echo "  gcloud secrets versions add $SECRET --project $PROJECT --data-file=-"
 fi
-"${G[@]}" secrets add-iam-policy-binding "$SECRET" \
-  --member "serviceAccount:$SA" --role roles/secretmanager.secretAccessor >/dev/null
+for try in 1 2 3 4 5 6 7; do   # a new account takes a moment to be usable
+  "${G[@]}" secrets add-iam-policy-binding "$SECRET" \
+    --member "serviceAccount:$SA" --role roles/secretmanager.secretAccessor >/dev/null && break
+  [ "$try" = 7 ] && exit 1; sleep 10
+done
 
 if ! "${G[@]}" compute instances describe "$NAME" --zone "$ZONE" >/dev/null 2>&1; then
   "${G[@]}" compute instances create "$NAME" \
