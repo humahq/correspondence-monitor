@@ -55,7 +55,7 @@ features:
   safety_names: true         # a safety email names the participant only for the medical monitor; copies don't
   outside_recipients: true   # an email with someone on it the study doesn't list gets no answer, only a note to the sender
   close_on_page: true        # an alert is closed on its page with three fixed choices; some wait for the PI's review
-  trick_detector: false      # Meta's open-source trick detector flags a message that tries to give the AI orders; admins told
+  trick_detector: true       # Meta's open-source trick detector flags a message that tries to give the AI orders; admins told
   mark_email: true          # the message is marked at both ends with its own tag and cleaned of invisible characters
   flag_orders: true         # a message giving the bot orders: admins told, and never a quiet "no problem" (please check)
   safety_backstop: false     # a severe safety word the AI did not send to the medical monitor is sent anyway

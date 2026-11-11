@@ -44,6 +44,7 @@ def _load() -> dict:
             import numpy as np
             import onnxruntime as ort
             from tokenizers import Tokenizer
+            ort.disable_telemetry_events()   # no usage events to Microsoft from a machine holding trial data
             folder = Path(settings.get("trick_detector.model_dir", MODEL_DIR))
             folder = folder if folder.is_absolute() else Path(__file__).resolve().parents[1] / folder
             model = folder / "model.onnx"
