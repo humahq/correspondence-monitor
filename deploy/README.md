@@ -7,7 +7,7 @@
   on the server are not touched.
 - **Updating the rules:** rebuild them in the practice copy (`CORMON_HOME=practice cormon ingest --force`), read
   `cormon rules --report`, export the model tables to `studies/model/model.sql`, commit and push so the gate tests
-  them, then `cormon import-model practice/data/cormon.db --reason "..."` and `SYNC_MODEL=1 ./deploy/create_vm.sh`.
+  them, then `SYNC_MODEL=1 ./deploy/create_vm.sh` (it puts the committed `studies/model/model.sql` on the server).
   Messages and items on the server are kept; the swap is recorded in the log.
 - **Packages:** the gate installs exactly `deploy/requirements-live.txt` (the server's `pip freeze`). Changing a
   package means changing that file (so every test set runs) and installing it on the server as its own step.

@@ -3,7 +3,7 @@
 # Run it from the project folder, the first time and after every change:
 #     ./deploy/create_vm.sh
 # The live data on the VM (database, messages) is kept across updates.
-# To also replace the VM's study model (rules) with the laptop's, after rebuilding and testing it:
+# To also replace the VM's study model (rules) with studies/model/model.sql, once the gate has tested it:
 #     SYNC_MODEL=1 ./deploy/create_vm.sh
 # A second server with its own bot account (Peter's newest-features copy):
 #     NAME=cormon-edge LOCAL_SETTINGS=deploy/edge/settings.local.yaml ./deploy/create_vm.sh
@@ -79,7 +79,7 @@ HOST="${IP//./-}.sslip.io"
 echo "packing the project ..."
 SEED=/tmp/cormon-seed.db
 rm -f "$SEED"
-sqlite3 "$ROOT/data/cormon.db" ".backup '$SEED'"          # study model only is taken from this (see setup_vm.sh)
+sqlite3 "$SEED" < "$ROOT/studies/model/model.sql"   # the gate-tested study model (release.sh checks it is this)
 COPYFILE_DISABLE=1 tar --no-xattrs --exclude '._*' --exclude .DS_Store --exclude .venv --exclude ./data --exclude './practice*' --exclude ./sandbox --exclude ./results \
     --exclude __pycache__ --exclude .pytest_cache --exclude .ruff_cache --exclude '*.egg-info' --exclude .git \
     --exclude ./.work --exclude ./models ${EXCLUDE[@]+"${EXCLUDE[@]}"} \
