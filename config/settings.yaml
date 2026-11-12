@@ -63,6 +63,8 @@ features:
   flag_orders: true         # a message giving the bot orders: admins told, and never a quiet "no problem" (please check)
   confirm_orders: false      # a second judge (Decisions API) must agree a sentence is an order before it is flagged
   safety_backstop: false     # a severe safety word the AI did not send to the medical monitor is sent anyway
+  ack_on_page: false         # who answered the phone for a safety alert is recorded on its page, not with `cormon ack`
+  name_numbers: false        # a number inside a name the documents use ("12-lead ECG", "ALSAQ-40") is not an amount
 
 # The language everyone in a study shares (language_courtesy). A person's own are `languages:` in study.yaml.
 language:

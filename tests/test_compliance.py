@@ -1948,6 +1948,86 @@ def test_an_admin_records_a_phoned_acknowledgment(capsys):
         cli.main(["--as", "ann", "ack", "999", "--by", "medical-monitor", "--note", "x"])
 
 
+def _to_the_phone(iid):
+    from cormon import safety
+    for _ in range(4):
+        _due_now(iid)
+        safety.escalate(log=lambda *_: None)
+    return db.q1("SELECT body FROM outbox WHERE template_id='email-safety-phone' ORDER BY id")["body"]
+
+
+def test_without_ack_on_page_the_phone_email_still_gives_the_command(monkeypatch):
+    from cormon import config
+    from cormon.compliance import alerts
+
+    said = []
+    monkeypatch.setattr(alerts, "notify", lambda key, subject, body, **k: said.append(body))
+    iid = _safety_item(config.study("NCT05842941"), "DNL-1012 had a mild headache.")
+    body = _to_the_phone(iid)
+    assert f'(cormon ack {iid} --by <person> --note "phoned").' in body
+    assert f'cormon ack {iid} --by <person id> --note "phoned"\n\n' in said[0]
+
+
+def test_who_answered_the_phone_is_recorded_on_the_alerts_page(monkeypatch):
+    import re
+    import time as _t
+    from urllib.parse import urlencode
+    from cormon import config, items, webview, weblogin
+    from cormon.compliance import alerts
+
+    _set(monkeypatch, web__login__client_id="cid", web__base_url="https://mon.example",
+         web__admin__emails=["ops@huma.ai"])
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "ack_on_page")
+    said = []
+    monkeypatch.setattr(alerts, "notify", lambda key, subject, body, **k: said.append(body))
+    study = config.study("NCT05842941")
+    iid = _safety_item(study, "DNL-1012 had a mild headache.")
+    body = _to_the_phone(iid)
+    assert "cormon ack" not in body and "answered the phone on the alert's page" in body
+    assert "cormon ack" not in said[0] and "Record who answered the phone" in said[0]
+    tok = items.get(iid)["link_token"]
+    server = ThreadingHTTPServer(("127.0.0.1", 0), webview.Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    cookie = lambda e: f"{weblogin.COOKIE}={weblogin._sign({'email': e, 'exp': _t.time() + 60})}"
+
+    def call(method, path, email=None, form=None, origin=None):
+        c = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        headers = {"Content-Type": "application/x-www-form-urlencoded", **({"Cookie": cookie(email)} if email else {}),
+                   **({"Origin": origin} if origin else {})}
+        c.request(method, path, body=urlencode(form or {}) if method == "POST" else None, headers=headers)
+        r = c.getresponse()
+        return r.status, r.read().decode()
+    crc = study.people_with_role("crc")[0].email
+    try:
+        assert "Sign in with Google" in call("GET", f"/items/{tok}")[1]
+        assert "may not record it" in call("GET", f"/items/{tok}", crc)[1]
+        page = call("GET", f"/items/{tok}", "john@huma.ai")[1]               # the ClinOps lead, on the chain
+        assert f'action="/items/{tok}/ack"' in page and 'value="pv-backup"' in page
+        assert 'value="john-clinops"' not in page                            # cannot acknowledge
+        check = {"step": "check", "person": "pv-backup", "note": "phoned at 14:10"}
+        assert call("POST", f"/items/{tok}/ack", crc, check)[0] == 403
+        assert call("POST", f"/items/{tok}/ack", "john@huma.ai", check, "https://evil.example")[0] == 403
+        assert call("POST", f"/items/{tok}/ack", "john@huma.ai", dict(check, person="john-clinops"))[0] == 400
+        status, page = call("POST", f"/items/{tok}/ack", "john@huma.ai", check)
+        assert status == 200 and "phoned at 14:10" in page and not items.get(iid)["acked_at"], "a check saves nothing"
+        sealed = re.search(r'name="sealed" value="([^"]+)"', page).group(1)
+        assert call("POST", f"/items/{tok}/ack", "ops@huma.ai", {"step": "confirm", "sealed": sealed})[0] == 400
+        assert call("POST", f"/items/{tok}/ack", "john@huma.ai", {"step": "confirm", "sealed": sealed})[0] == 303
+        assert items.get(iid)["acked_by"] == "John (safety backup stand-in) <john+pvbackup@huma.ai>"
+        row = db.q1("SELECT actor, actor_type, details FROM audit_log WHERE action='safety_acknowledged'")
+        a = db.unjs(row["details"])
+        assert a["how"] == "phone" and a["note"] == "phoned at 14:10"
+        assert (row["actor"], row["actor_type"]) == ("john@huma.ai", "page")
+        assert "Acknowledged" in call("GET", f"/items/{tok}", "john@huma.ai")[1]
+        assert call("POST", f"/items/{tok}/ack", "john@huma.ai", check)[0] == 400   # already acknowledged
+        monkeypatch.delenv("CORMON_TEST_FEATURES")
+        monkeypatch.setattr(settings, "feature", lambda name: False)
+        assert "Acknowledged" not in call("GET", f"/items/{tok}", "john@huma.ai")[1]
+        assert call("POST", f"/items/{tok}/ack", "john@huma.ai", check)[0] == 404
+    finally:
+        server.shutdown()
+
+
 def test_a_message_with_a_safety_part_sends_no_notice_back_to_the_site(monkeypatch):
     from cormon import careful, config, events, items, llm, routing
 
