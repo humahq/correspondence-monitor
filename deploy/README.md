@@ -24,5 +24,6 @@
      `gcloud secrets versions add bot-test-gmail-app-password --project optical-depth-506808-t0 --data-file=-`.
   3. `./deploy/edge_connect.sh chat`: sign in as bot_test in the browser; it lists bot_test's Chat spaces.
   4. `STUDY_SPACE=spaces/... ALERT_SPACE=spaces/... ./deploy/edge_connect.sh on`, then a second person approves
-     the settings change with the command it prints (the server keeps the old settings until then).
+     the settings change with the command it prints (the server keeps the old settings until then), and
+     `./deploy/edge_connect.sh restart`.
   Later updates: `CORMON_VM=cormon-edge ./deploy/release.sh` (same gate; its tag is `live-cormon-edge`).

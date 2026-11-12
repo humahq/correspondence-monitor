@@ -71,7 +71,11 @@ EOF"
     echo
     echo "Settings changes need a second person. Someone other than the one who ran this approves with:"
     echo "  CORMON_VM=$VM ./bin/cormon-cloud config approve settings ${id:-<id from: config history settings>}"
+    echo "and then (the rooms are read when the bot starts): $0 restart"
     echo "Then $VM reads and answers $ACCOUNT's mail (study addresses only) and its own Chat rooms."
+    ;;
+  restart)
+    remote "sudo systemctl restart cormon && sleep 5 && systemctl is-active cormon && curl -fsS 127.0.0.1:8091/health"
     ;;
   *)
     sed -n '2,12p' "$0"; exit 1 ;;
