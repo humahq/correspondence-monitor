@@ -19,9 +19,13 @@ fi
 id cormon >/dev/null 2>&1 || useradd --system --home "$APP" --shell /usr/sbin/nologin cormon
 [ -d "$APP/.venv" ] || python3 -m venv "$APP/.venv"
 "$APP/.venv/bin/pip" install -q --upgrade pip
-# The package versions the gate tests with (release.sh stops when the server's differ), then the app itself.
-[ -f "$APP/deploy/requirements-live.txt" ] && "$APP/.venv/bin/pip" install -q -r "$APP/deploy/requirements-live.txt"
-"$APP/.venv/bin/pip" install -q -e "$APP"   # editable: the service runs the files under $APP, never a stale copy
+# Exactly the packages the gate tests with (release.sh stops when the server's differ), then the app itself.
+if [ -f "$APP/deploy/requirements-live.txt" ]; then
+  "$APP/.venv/bin/pip" install -q -r "$APP/deploy/requirements-live.txt"
+  "$APP/.venv/bin/pip" install -q --no-deps -e "$APP"   # editable: the service runs the files under $APP
+else
+  "$APP/.venv/bin/pip" install -q -e "$APP"
+fi
 mkdir -p "$APP/data" "$APP/secrets"
 
 # Cloud-only settings: pages are served by Caddy over HTTPS, the app itself listens on localhost only.

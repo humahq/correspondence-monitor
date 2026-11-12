@@ -109,7 +109,9 @@ git archive --format=tar.gz "$SHA" cormon config $(git ls-tree -r --name-only "$
   chmod -R a+rX /tmp/release-$TS
   cd $LIVE && sudo -u cormon env CORMON_HOME=$LIVE $LIVE/.venv/bin/cormon config release /tmp/release-$TS $RUN_ID
   rm -rf /tmp/release-$TS
-  sudo journalctl -u cormon --since '-1 min' --no-pager | grep -iE 'error|traceback' | head -5 || true" 2>/dev/null
+  sudo journalctl -u cormon --since '-1 min' --no-pager | grep -iE 'error|traceback' | head -5 || true" 2>/dev/null \
+  || stop "a step on $VM failed. Without 'healthy' above, the old code still runs (the backup comes first:
+try it with CORMON_VM=$VM ./bin/cormon-cloud backup). With 'healthy', the new code runs but its tested config was not put in place."
 
 git tag -f "$TAG" "$SHA"
 git push -q -f origin "refs/tags/$TAG"
