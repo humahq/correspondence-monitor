@@ -100,6 +100,11 @@ fi
   && $LOCAL_STEP && rm -f /tmp/cormon-settings.local.yaml \
   && sudo HOST=$HOST SYNC_MODEL=${SYNC_MODEL:-0} bash /opt/cormon/deploy/setup_vm.sh"
 rm -f /tmp/cormon.tgz "$SEED" /tmp/cormon-settings.local.yaml
+if [ "$NAME" != cormon-demo ]; then   # a test server runs every new feature, like the Mattermost demo
+  "${SSH[@]}" --command "sudo mkdir -p /etc/systemd/system/cormon.service.d \
+    && printf '[Service]\nEnvironment=CORMON_TEST_FEATURES=all\n' | sudo tee /etc/systemd/system/cormon.service.d/features.conf >/dev/null \
+    && sudo systemctl daemon-reload && sudo systemctl restart cormon"
+fi
 
 echo
 echo "The cloud bot is running on $NAME ($IP)."

@@ -1,7 +1,8 @@
 # New features: demo or live
 
 Every new feature has a switch in `config/settings.yaml`. It is **off on the live bot** until John says
-"yes, put this feature in the live bot". The Mattermost demo (`cormon chat-demo`) always has every feature on.
+"yes, put this feature in the live bot". The Mattermost demo (`cormon chat-demo`) and the test server `cormon-edge` always have every
+feature on (`docs/servers.md`).
 
 When a switch is off, the bot works exactly as the live version does (a code test checks this:
 `test_new_features_are_off_on_the_live_bot_until_switched_on`).

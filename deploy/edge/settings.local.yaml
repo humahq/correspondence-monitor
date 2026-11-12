@@ -33,7 +33,4 @@ chat:
 memory:
   enabled: true
 
-features:
-  privacy_check: true
-  openbook_look: true
-  confirm_orders: true
+# Every feature is on here without listing it: create_vm.sh sets CORMON_TEST_FEATURES=all for the service.
