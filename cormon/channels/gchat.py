@@ -405,7 +405,9 @@ class GoogleChatChannel:
         return self._app
 
     def members(self, space: str) -> list[str]:
-        """The email of each person in a space (spaces.members.list). Raises when the list can't be read."""
+        """The email of each person in a space (spaces.members.list), without the bot's own account: it signs in as
+        a user, so Chat lists it as a person. Raises when the list can't be read."""
+        own = {a.lower() for a in (settings.get("gchat.account"), settings.get("mailbox.address")) if a}
         http, out, token = self._members_http(), [], None
         for _ in range(10):
             r = http.get(f"{CHAT}/{space}/members", params={"pageSize": 100, **({"pageToken": token} if token else {})},
@@ -414,7 +416,8 @@ class GoogleChatChannel:
             data = r.json()
             for m in data.get("memberships", []):
                 user = m.get("member") or {}
-                if user.get("type") == "HUMAN" and user.get("name") and (email := self._email_for(user["name"])):
+                if user.get("type") == "HUMAN" and user.get("name") and (email := self._email_for(user["name"])) \
+                        and email.lower() not in own:
                     out.append(email)
             token = data.get("nextPageToken")
             if not token:

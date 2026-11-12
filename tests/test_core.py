@@ -3249,12 +3249,16 @@ def test_a_rooms_member_list_falls_back_to_who_wrote_there_when_the_api_fails(mo
     assert db.q("SELECT 1 FROM audit_log WHERE action='room_members_failed'")
     _rooms(monkeypatch, {"spaces/G": [CRA]})
     assert rooms.members("spaces/G") == {"emails": {DOC, CRA}, "complete": True, "error": None}
-    # Google Chat: each human member's email, the bot and apps left out
+    # Google Chat: each human member's email; apps and the bot's own account (a user in Chat) left out
+    from cormon import settings
+    monkeypatch.setattr(settings, "get", lambda k, d=None: "Bot_Test@huma.ai" if k == "gchat.account" else d)
+
     class Session:
         def get(self, url, params=None, timeout=None):
             data = {"memberships": [{"member": {"name": "users/7", "type": "HUMAN"}},
+                                    {"member": {"name": "users/8", "type": "HUMAN"}},
                                     {"member": {"name": "users/100", "type": "BOT"}}]} if url.endswith("/members") \
-                else {"emailAddresses": [{"value": "Dr.Who@Site.org"}]}
+                else {"emailAddresses": [{"value": "bot_test@huma.ai" if url.endswith("/8") else "Dr.Who@Site.org"}]}
             return type("R", (), {"raise_for_status": lambda s: None, "json": lambda s: data})()
     assert GoogleChatChannel(session=Session()).members("spaces/G") == ["dr.who@site.org"]
 
