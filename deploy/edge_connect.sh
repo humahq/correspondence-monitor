@@ -50,20 +50,28 @@ case "${1:-}" in
     gcloud secrets versions list "$SECRET" --project "$PROJECT" --filter state=enabled --limit 1 --format 'value(name)' \
       | grep -q . || { echo "no app password in $SECRET yet" >&2; exit 1; }
     remote "sudo test -s /opt/cormon/secrets/gchat_token.json" || { echo "run '$0 chat' first" >&2; exit 1; }
+    cormon auth imap
+    # Every other study gets no room: the live bot's rooms refuse this account, and one refusal stops all Chat.
     remote "cd /opt/cormon && sudo -u cormon .venv/bin/python - <<'EOF'
+from pathlib import Path
 from ruamel.yaml import YAML
 p = 'config/settings.local.yaml'
 y = YAML(); cfg = y.load(open(p))
 cfg['channels'] = {'email': 'imap', 'teams': 'gchat'}
-cfg.setdefault('chat', {})['rooms'] = {'$STUDY': {
-    'study_channel': {'space': '$STUDY_SPACE', 'name': 'study room (test)'},
-    'alert_channel': {'space': '$ALERT_SPACE', 'name': 'urgent room (test)'}}}
+none = {'space': '', 'name': 'none on this server'}
+rooms = {f.parent.name: {'study_channel': none, 'alert_channel': none} for f in Path('studies').glob('*/study.yaml')}
+rooms['$STUDY'] = {'study_channel': {'space': '$STUDY_SPACE', 'name': 'study room (test)'},
+                   'alert_channel': {'space': '$ALERT_SPACE', 'name': 'urgent room (test)'}}
+cfg.setdefault('chat', {})['rooms'] = rooms
 y.dump(cfg, open(p, 'w'))
 EOF"
-    cormon auth imap
-    remote "sudo systemctl restart cormon && sleep 5 && systemctl is-active cormon && curl -fsS 127.0.0.1:8091/health"
+    sleep 30   # the bot records the change and, until a second person approves it, keeps the old settings
+    id=$(remote "sudo sqlite3 'file:/opt/cormon/data/cormon.db?mode=ro' \"SELECT max(id) FROM config_versions
+      WHERE path='config/settings.local.yaml' AND waiting=1 AND approved_by IS NULL\"" 2>/dev/null | tr -dc 0-9)
     echo
-    echo "$VM now reads and answers $ACCOUNT's mail (study addresses only) and its own Chat rooms."
+    echo "Settings changes need a second person. Someone other than the one who ran this approves with:"
+    echo "  CORMON_VM=$VM ./bin/cormon-cloud config approve settings ${id:-<id from: config history settings>}"
+    echo "Then $VM reads and answers $ACCOUNT's mail (study addresses only) and its own Chat rooms."
     ;;
   *)
     sed -n '2,12p' "$0"; exit 1 ;;
