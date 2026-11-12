@@ -34,6 +34,7 @@ if [ "${1:-}" = restore ]; then
 fi
 
 mkdir -p "$DIR"
+id cormon >/dev/null 2>&1 && chown cormon:cormon "$DIR"   # the bot writes its own backups here too
 stamp=$(date -u +%Y%m%d-%H%M%S)
 out="$DIR/hindsight-$stamp.dump"
 trap 'rm -f "$out.part"; in_hindsight "\$B/dropdb --if-exists restore_check" >/dev/null 2>&1 || true' EXIT
