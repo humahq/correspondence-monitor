@@ -5,7 +5,8 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY cormon ./cormon
-RUN pip install --no-cache-dir .
+# editable: the web page's CSS/JS sit beside the code and are not part of a normal install
+RUN pip install --no-cache-dir -e .
 
 COPY config ./config
 COPY studies ./studies
