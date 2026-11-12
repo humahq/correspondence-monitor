@@ -1962,6 +1962,7 @@ def test_without_ack_on_page_the_phone_email_still_gives_the_command(monkeypatch
 
     said = []
     monkeypatch.setattr(alerts, "notify", lambda key, subject, body, **k: said.append(body))
+    monkeypatch.setattr(settings, "feature", lambda name: False)
     iid = _safety_item(config.study("NCT05842941"), "DNL-1012 had a mild headache.")
     body = _to_the_phone(iid)
     assert f'(cormon ack {iid} --by <person> --note "phoned").' in body
