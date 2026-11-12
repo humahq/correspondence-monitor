@@ -51,6 +51,17 @@ case "${1:-}" in
       | grep -q . || { echo "no app password in $SECRET yet" >&2; exit 1; }
     remote "sudo test -s /opt/cormon/secrets/gchat_token.json" || { echo "run '$0 chat' first" >&2; exit 1; }
     cormon auth imap
+    # Chat push: Google notes each new message on the server's own topic, so it reads Chat at once.
+    TOPIC="$VM-chat-events"; SUB="$VM-chat-events-vm"
+    gcloud pubsub topics describe "$TOPIC" --project "$PROJECT" >/dev/null 2>&1 || {
+      gcloud pubsub topics create "$TOPIC" --project "$PROJECT"
+      gcloud pubsub topics add-iam-policy-binding "$TOPIC" --project "$PROJECT" --role roles/pubsub.publisher \
+        --member serviceAccount:chat-api-push@system.gserviceaccount.com >/dev/null; }
+    gcloud pubsub subscriptions describe "$SUB" --project "$PROJECT" >/dev/null 2>&1 || {
+      gcloud pubsub subscriptions create "$SUB" --project "$PROJECT" --topic "$TOPIC" --ack-deadline 30 \
+        --message-retention-duration 3600s --expiration-period never
+      gcloud pubsub subscriptions add-iam-policy-binding "$SUB" --project "$PROJECT" --role roles/pubsub.subscriber \
+        --member "serviceAccount:$VM-vm@$PROJECT.iam.gserviceaccount.com" >/dev/null; }
     # Every other study gets no room: the live bot's rooms refuse this account, and one refusal stops all Chat.
     remote "cd /opt/cormon && sudo -u cormon .venv/bin/python - <<'EOF'
 from pathlib import Path
@@ -75,6 +86,7 @@ EOF"
     echo "Then $VM reads and answers $ACCOUNT's mail (study addresses only) and its own Chat rooms."
     ;;
   restart)
+    cormon chat-events || echo "Chat push is not on yet (the bot still reads Chat every 20 seconds)"
     remote "sudo systemctl restart cormon && sleep 5 && systemctl is-active cormon && curl -fsS 127.0.0.1:8091/health"
     ;;
   *)
