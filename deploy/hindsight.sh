@@ -2,6 +2,8 @@
 # Starts Hindsight (patient memory, issue #32) next to the bot, or updates it to the pinned version.
 # The same on the live server (run as root, from setup_vm.sh) and on a laptop with Docker:
 #     ./deploy/hindsight.sh
+# On a laptop with Podman, POD=<name> puts it in that pod (the local chat demo's, where the bot runs too and the
+# pod publishes 8888 on 127.0.0.1): CONTAINER=podman POD=cormon-chat ./deploy/hindsight.sh. Without POD nothing changes.
 # It listens only on this machine (127.0.0.1:8888) and every call needs the key in secrets/hindsight_key.
 # Its data is in the Docker volume hindsight-data and is kept across updates.
 # The bot saves facts to it when memory.enabled is on (cormon/hindsight.py, plan step 3 in docs/hindsight-plan.md).
@@ -16,6 +18,9 @@ KEY_FILE="$ROOT/secrets/hindsight_key"
 DOCKER=(docker)
 [ "$(id -u)" = 0 ] || [ "$(uname)" = Darwin ] || DOCKER=(sudo docker)
 [ "${CONTAINER:-}" = podman ] && DOCKER=(podman)   # CONTAINER=podman ./deploy/hindsight.sh, next to the local chat
+
+PLACE=(-p 127.0.0.1:8888:8888)
+[ -n "${POD:-}" ] && PLACE=(--pod "$POD")   # the pod already publishes the port
 
 if [ "${DOCKER[0]}" = docker ] && ! command -v docker >/dev/null; then
   [ "$(uname)" = Linux ] || { echo "install Docker Desktop first" >&2; exit 1; }
@@ -46,7 +51,7 @@ fi
 # database has the original, and each fact names the message it came from. Its log of AI calls (llm_requests)
 # would hold each message's text for a day, and so every hourly backup, so it is off too.
 "${DOCKER[@]}" run -d --name hindsight --restart unless-stopped --memory 2g \
-  -p 127.0.0.1:8888:8888 -v hindsight-data:/home/hindsight/.pg0 \
+  "${PLACE[@]}" -v hindsight-data:/home/hindsight/.pg0 \
   "${LLM[@]}" \
   -e HINDSIGHT_API_ENABLE_OBSERVATIONS=false \
   -e HINDSIGHT_API_STORE_DOCUMENT_TEXT=false \

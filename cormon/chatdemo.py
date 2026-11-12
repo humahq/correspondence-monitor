@@ -10,6 +10,7 @@ bot from one team to another, so a demo needs no command line.
 
 from __future__ import annotations
 
+import hashlib
 import html
 import os
 import re
@@ -27,6 +28,51 @@ from urllib.parse import parse_qs
 import yaml
 
 HOME_NAME = "chat-demo"
+
+# On a laptop install the bot runs in the Podman pod of the cormon-chat repo, next to Mattermost and Hindsight
+# (they share localhost there). Start demo.command sets CORMON_LOCAL_POD=1; OPENBOOK_BOT=host brings back the old
+# way, the bot as a plain process on the laptop. The live (GCP) bot never comes here: it runs `cormon run` itself.
+POD = "cormon-chat"
+BOT_CONTAINER = "cormon-bot"
+
+
+def in_pod() -> bool:
+    return os.environ.get("CORMON_LOCAL_POD") == "1" and os.environ.get("OPENBOOK_BOT") != "host"
+
+
+def image_tag(code: Path) -> str:
+    """The bot image's tag: the code's commit, plus a hash of the unsaved changes, so editing the code builds anew."""
+    def git(*a: str) -> str:
+        r = subprocess.run(["git", "-C", str(code), *a], capture_output=True, text=True)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    tag = git("rev-parse", "--short", "HEAD") or "local"
+    diff = git("diff", "HEAD") + git("ls-files", "--others", "--exclude-standard")
+    return f"{tag}-dirty-{hashlib.sha256(diff.encode()).hexdigest()[:8]}" if diff else tag
+
+
+def bot_image(code: Path) -> str:
+    """cormon-bot:<tag>, built from the Dockerfile in the bot's folder when it is not there yet."""
+    image = f"cormon-bot:{image_tag(code)}"
+    if subprocess.call(["podman", "image", "exists", image]):
+        print(f"building the bot's image {image} (a few minutes the first time)")
+        if subprocess.call(["podman", "build", "-q", "-t", image, str(code)], stdout=subprocess.DEVNULL):
+            raise RuntimeError("could not build the bot's image")
+    return image
+
+
+def run_args(image: str, home: Path, live: Path, chat: Path, team: str, *cmd: str, name: str | None = None) -> list:
+    """`podman run` for the bot in the pod. The bot's folder and the chat repo are mounted at the same paths as on
+    the laptop, so the links and file paths in the team's copy work as they are. The database is in a Podman volume
+    (SQLite does not belong on a shared folder)."""
+    return ["podman", "run", "--rm", *(["-d", "--name", name] if name else []), "--pod", POD,
+            "--security-opt", "label=disable",
+            "-v", f"{live}:{live}", "-v", f"{chat}:{chat}", "-v", f"{volume(team)}:{home / 'data'}",
+            "-e", f"CORMON_HOME={home}", "-e", f"CORMON_OPERATOR={os.environ.get('CORMON_OPERATOR', 'demo')}",
+            "-e", "PYTHONUNBUFFERED=1", image, *cmd]
+
+
+def volume(team: str) -> str:
+    return f"cormon-demo-{team}"
 
 
 def _demo_settings(chat: Path) -> dict:
@@ -86,9 +132,12 @@ def prepare(live_root: Path, chat: Path, team: str | None = None) -> Path:
     # the chat server is on this laptop, so reading it often is free; only the studies with a demo room run
     cfg.setdefault("system", {}).update({"poll_seconds": 3, "chat_poll_seconds": 3,
                                          "studies": list((demo.get("rooms") or {}).keys())})
-    # the alert pages on this laptop only; memory in the laptop's Hindsight (deploy/hindsight.sh), in the team's banks
-    cfg.setdefault("web", {}).update({"enabled": True, "host": "127.0.0.1", "port": 8091,
-                                      "base_url": "http://localhost:8091"})
+    # the alert pages on this laptop only (in the pod it listens on all of the pod's addresses, and the pod publishes
+    # the port on 127.0.0.1 only); memory in the laptop's Hindsight (deploy/hindsight.sh), in the team's banks
+    # (the bot as a plain process, OPENBOOK_BOT=host, uses 8092: the pod holds 8091 on the laptop)
+    port = 8091 if in_pod() else 8092
+    cfg.setdefault("web", {}).update({"enabled": True, "host": "0.0.0.0" if in_pod() else "127.0.0.1", "port": port,
+                                      "base_url": f"http://localhost:{port}"})
     cfg.setdefault("memory", {}).update({"enabled": True, "bank_prefix": f"demo-{team}-"})
     # the demo shows every new feature; the live bot gets each one when it is switched on there (docs/features.md)
     cfg["features"] = {name: True for name in cfg.get("features") or {}}
@@ -100,6 +149,8 @@ def prepare(live_root: Path, chat: Path, team: str | None = None) -> Path:
     path.write_text(yaml.safe_dump(cfg, sort_keys=False))
     for name in ("studies", ".env", "secrets"):
         link, target = home / name, live_root / name
+        if link.is_symlink() and not link.exists():   # it points where the bot's folder used to be (it was moved)
+            link.unlink()
         if target.exists() and not link.exists():
             link.symlink_to(target)
     return home
@@ -134,6 +185,7 @@ class Demo:
         self.live, self.chat = live, chat
         self.default = _demo_settings(chat)["team"]
         self.child: subprocess.Popen | None = None
+        self.logs: subprocess.Popen | None = None   # in the pod: `podman logs -f`, so this window shows the bot's log
         self.lock = threading.Lock()
         self.busy = self.error = ""
 
@@ -145,6 +197,8 @@ class Demo:
     def start(self, team: str, fresh: bool = False) -> None:
         from . import db, settings
         home = prepare(self.live, self.chat, team)
+        if in_pod():
+            return self._start_in_pod(team, home, fresh)
         env = dict(os.environ, CORMON_HOME=str(home), CORMON_OPERATOR=os.environ.get("CORMON_OPERATOR", "demo"))
         if fresh or not (home / settings.get("system.data_dir", "data") / "cormon.db").exists():
             seed = db.db_path() if db.db_path().exists() else model_seed(self.live)
@@ -154,7 +208,49 @@ class Demo:
         (self.live / HOME_NAME / "active_team").write_text(team)
         print(f"the bot is on team {team} (email goes to the simulator); demo page {PAGE}")
 
+    def _start_in_pod(self, team: str, home: Path, fresh: bool) -> None:
+        from . import db, settings
+        image = bot_image(Path(settings.CODE_ROOT))
+        subprocess.call(["podman", "rm", "-f", BOT_CONTAINER], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        vol = volume(team)   # (a bot left over from a run that was killed would hold the name)
+        have = subprocess.call(["podman", "volume", "exists", vol]) == 0
+        if fresh and have:
+            subprocess.call(["podman", "volume", "rm", "-f", vol], stdout=subprocess.DEVNULL)
+            have = False
+        if not have:
+            subprocess.check_call(["podman", "volume", "create", vol], stdout=subprocess.DEVNULL)
+            data = home / settings.get("system.data_dir", "data")
+            if not fresh and (data / "cormon.db").exists():   # the team's database from before the bot ran in the pod
+                if subprocess.call(["podman", "run", "--rm", "--security-opt", "label=disable", "--entrypoint", "cp",
+                                    "-v", f"{vol}:/v", "-v", f"{data}:/src:ro", image, "-a", "/src/.", "/v/"]):
+                    raise RuntimeError("could not move the demo database into the pod")
+            else:
+                seed = db.db_path() if db.db_path().exists() else model_seed(self.live)
+                if subprocess.call(run_args(image, home, self.live, self.chat, team, "python", "-m",
+                                            "cormon.chatdemo", "--seed-from", str(seed))):
+                    raise RuntimeError("could not make the demo database")
+        if subprocess.call(run_args(image, home, self.live, self.chat, team, "cormon", "run", name=BOT_CONTAINER),
+                           stdout=subprocess.DEVNULL):
+            raise RuntimeError("could not start the bot in the pod")
+        self.logs = subprocess.Popen(["podman", "logs", "-f", BOT_CONTAINER])
+        (self.live / HOME_NAME / "active_team").write_text(team)
+        print(f"the bot is on team {team}, in the pod {POD} (email goes to the simulator); demo page {PAGE}")
+
+    def exited(self) -> int | None:
+        """The bot's exit code once it has stopped, else None."""
+        if in_pod():
+            r = subprocess.run(["podman", "container", "inspect", BOT_CONTAINER, "--format",
+                                "{{.State.Running}} {{.State.ExitCode}}"], capture_output=True, text=True)
+            running, _, code = r.stdout.strip().partition(" ")
+            return None if running == "true" else int(code or 1)
+        return self.child.returncode if self.child and self.child.poll() is not None else None
+
     def stop(self) -> None:
+        if in_pod():
+            subprocess.call(["podman", "rm", "-f", BOT_CONTAINER], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if self.logs and self.logs.poll() is None:
+                self.logs.terminate()
+            return
         if self.child and self.child.poll() is None:
             self.child.terminate()
             try:
@@ -272,7 +368,9 @@ def main(chat_dir: str, fresh: bool = False, team: str | None = None) -> int:
     if HOME_NAME in live.parts:
         sys.exit("already in a chat-demo copy: run `cormon chat-demo` from the bot's own folder")
     (live / HOME_NAME).mkdir(exist_ok=True)
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))   # stopped from outside: the bot stops too
+    # stopped from outside, or the Terminal window closed (SIGHUP): the bot stops too
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda *_: sys.exit(0))
     demo = Demo(live, chat)
     demo.start(team or demo.team, fresh)
     server = ThreadingHTTPServer(("127.0.0.1", PAGE_PORT), _handler(demo))
@@ -280,10 +378,10 @@ def main(chat_dir: str, fresh: bool = False, team: str | None = None) -> int:
     print(f"Ctrl-C stops it. Open {PAGE} to make a new demo team or move the bot to another")
     try:
         while True:
-            time.sleep(1)
+            time.sleep(5 if in_pod() else 1)
             with demo.lock:
-                if demo.child and demo.child.poll() is not None:
-                    return demo.child.returncode
+                if (code := demo.exited()) is not None:
+                    return code
     except KeyboardInterrupt:
         return 0
     finally:
