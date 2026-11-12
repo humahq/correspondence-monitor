@@ -1685,6 +1685,23 @@ def test_a_sum_written_in_the_answer_counts_only_when_code_agrees():
     assert answers._proof(res, q, [], [], [], [], "Week 12 is Day 84 ± 3", [], [])["traced"]
 
 
+def test_a_number_inside_a_name_the_documents_use_is_not_an_amount(monkeypatch):
+    from cormon import answers
+    q = {"question": "What are the baseline activities?", "participant": ""}
+    secs = [{"id": "s", "kind": "section", "title": "SOA", "text": "Baseline / Day 0: ALSAQ-40, 12-lead ECG, "
+             "vital signs. CSF within 7 days. Week-4 visit."}]
+    proof = lambda text: answers._proof({"answer": text, "quotes": [], "calculations": []}, q, secs, [], [], [],  # noqa: E731
+                                        "baseline on Day 0", [], [])
+    said = "On Day 0: ALSAQ-40, a 12-lead ECG and vital signs."
+    assert not proof(said)["traced"]                                     # as live: the switch is off
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "name_numbers")
+    assert proof(said)["traced"]
+    assert not proof("On Day 0: ALSAQ-30 and a 12-lead ECG.")["traced"]  # not the name the protocol uses
+    assert not proof("On Day 0: a 12-lead ECG, then CSF within 7 days.")["traced"]  # an amount stays an amount
+    assert not proof("ALSAQ-40 on Day 0, and 40 mg of drug.")["traced"]  # the same number as an amount
+    assert not proof("A 28-day window from Day 0.")["traced"] and not proof("A Week-4 visit from Day 0.")["traced"]
+
+
 def test_the_full_text_finds_an_exception_the_headings_do_not_show():
     from cormon import answers
     secs = [{"id": "a", "title": "Missed Visits and Procedures", "text": "Procedures not performed will be reported "

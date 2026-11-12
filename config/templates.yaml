@@ -431,7 +431,7 @@ templates:
       The full message: {{ item.link }}
 
       When the medical monitor or the safety backup has it, they reply with: ACK {{ safety.ack_code }}
-      Or the study team records who answered the phone (cormon ack {{ item.id }} --by <person> --note "phoned").
+      Or the study team records who answered the phone{{ safety.record_phone }}.
 
       {{ study.monitor_signature }}
 

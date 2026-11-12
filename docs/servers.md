@@ -18,7 +18,6 @@
    running, it picks up the new code only when restarted: restart it, unless a demo may be on (ask first on demo
    days, and never during Friday's or Monday's demo).
 4. A new feature switch needs nothing more: server 2 and Mattermost turn every switch on by themselves.
-5. Write the new version in the table below.
 
 ## Server 1 (live): only when John says
 
@@ -27,6 +26,5 @@ live bot" (the steps in `docs/features.md`). Eliot: no live change before Friday
 
 ## Versions in use
 
-| Date | Server 1 (live) | Server 2 (test) | Mattermost |
-|---|---|---|---|
-| 12 Nov 2026 | bc195a1 | bc195a1 | main (4b6714b: same bot code as bc195a1) |
+Each release moves its server's tag: `live` (server 1) and `live-cormon-edge` (server 2). To see them:
+`git fetch --tags --force && git show -s --oneline live live-cormon-edge`. Mattermost runs `main`.

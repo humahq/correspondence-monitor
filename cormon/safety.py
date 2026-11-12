@@ -8,7 +8,8 @@ clock starts when the message was received (ingestion), not when the bot read it
 
 Acknowledgment (SAF-04): only the medical monitor or the safety backup (`safety.ack_roles`) acknowledges: by
 replying "ACK <code>" (the code is in every safety email) from their address on the study's people list, passing
-the sender check, or by phone, which an admin records with `cormon ack N --by <person>` naming who answered. It is
+the sender check, or by phone, which an admin records with `cormon ack N --by <person>` naming who answered (or,
+with features.ack_on_page, a person on the safety contact list records on the alert's page, webview.py). It is
 a disposition: who, when, how and who recorded it, in the audit trail. Anyone else on the people list who replies
 is told it did not count; a sender not on the list, or failing the sender check, is told nothing. A safety item is
 still never cleared or disregarded.
@@ -71,7 +72,53 @@ def context(study: Study, item: dict) -> dict:
             "due": drafting.local_time(item.get("ack_due_at")), "step": item.get("escalation_step") or 0,
             "phones": "; ".join(f"{p.name} ({study.role_label(r)}): {p.phone}" for r in ("medical_monitor", "pv_backup")
                                 for p in study.people_with_role(r, item.get("site")) if p.phone)
-                      or "no phone number is on file"}
+                      or "no phone number is on file",
+            "record_phone": " on the alert's page (the link above)" if page_on() else
+                            f" (cormon ack {item.get('id')} --by <person> --note \"phoned\")"}
+
+
+class NotAllowed(PermissionError):
+    """Someone who may not record a phone acknowledgment on the alert's page tried to."""
+
+
+def page_on() -> bool:
+    return settings.feature("ack_on_page")
+
+
+def ackers(study: Study, item: dict) -> list:
+    """Who can have acknowledged by phone: the study's people in an acknowledging role, the item's site first."""
+    roles = conf(study)["ack_roles"]
+    return sorted((p for p in study.people if set(roles) & set(p.roles)),
+                  key=lambda p: bool(p.sites) and item.get("site") not in p.sites)
+
+
+def may_record(study: Study, email: str | None) -> bool:
+    """Who may record a phone acknowledgment on the page: a study person in an acknowledging role or on the safety
+    contact list (the people the escalation emails go to), or an admin."""
+    if not email:
+        return False
+    c = conf(study)
+    p = study.person_by_email(email)
+    admins = [e.lower() for e in settings.get("web.admin.emails") or []]
+    return bool(p and set(p.roles) & set(c["ack_roles"] + c["chain"])) or email.lower() in admins
+
+
+def check_phone_ack(item: dict, study: Study, email: str | None, person_id: str, note: str) -> dict:
+    """The phone acknowledgment form, checked before the confirm step: who answered, and a note."""
+    if not may_record(study, email):
+        raise NotAllowed(f"{email} may not record a safety acknowledgment in this study")
+    if item["kind"] != "out_of_scope":
+        raise ValueError(f"#{item['id']} is not a safety item")
+    if item["acked_at"]:
+        raise ValueError(f"it was already acknowledged by {item['acked_by']}")
+    p = ack_person(study, person_id)
+    return {"person": p.id, "who": f"{p.name} <{p.email}>", "label": label(study, p),
+            "note": " ".join((note or "").split())[:500] or "phoned"}
+
+
+def label(study: Study, p) -> str:
+    roles = conf(study)["ack_roles"]
+    return f"{p.name} ({', '.join(study.role_label(r) for r in p.roles if r in roles)})"
 
 
 def start(item_id: int, msg: dict) -> None:
@@ -206,8 +253,12 @@ def escalate(log=print) -> list[int]:
                           f"Safety alert #{item['id']} ({sev}) was due to be acknowledged by "
                           f"{drafting.local_time(item['ack_due_at'])} and nobody has. Phone the medical monitor now. "
                           f"Phone numbers: {context(study, item)['phones']}. This is recorded as a deviation.\n\n"
-                          f"When the medical monitor or the safety backup has it, record who: cormon ack {item['id']} "
-                          f"--by <person id> --note \"phoned\"\n\n{drafting.item_link(item)}",
+                          + ("When the medical monitor or the safety backup has it, record who answered on the "
+                             "alert's page (sign in with Google, then \"Record who answered the phone\"): "
+                             if page_on() else
+                             f"When the medical monitor or the safety backup has it, record who: cormon ack "
+                             f"{item['id']} --by <person id> --note \"phoned\"\n\n")
+                          + drafting.item_link(item),
                           every_minutes=0)
         done = terminus and reminder >= c["terminus_reminders"]
         db.ex("UPDATE items SET escalation_step=?, next_step_at=?, updated_at=? WHERE id=?",

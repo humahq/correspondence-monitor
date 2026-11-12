@@ -300,6 +300,24 @@ def _numbers_traced(answer: str, backing: str) -> bool:
     return _norm_nums(answer) <= _norm_nums(backing)
 
 
+NAMED = re.compile(r"(?<![\w-])(?=[\w-]*\d)(?=[\w-]*[A-Za-z])[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+(?![\w-])")
+AMOUNT_WORD = re.compile(r"(?i)(?:days?|weeks?|months?|years?|hours?|hrs?|h|minutes?|mins?|seconds?|secs?|visits?|"
+                         r"doses?|times?|fold|cycles?|mg|mcg|µg|ug|g|kg|ml|l|dl|mmol|iu|units?|percent)")
+
+
+def _names_read(answer: str, read: str) -> str:
+    """The answer without its names that hold a number ("12-lead", "ALSAQ-40") when the name is word for word in
+    the documents read: that number is part of a name, not an amount. "Day-28" or "500-mg" stays an amount."""
+    low = read.lower()
+
+    def name(m: re.Match) -> str:
+        t = m.group(0)
+        if any(AMOUNT_WORD.fullmatch(p) for p in t.split("-")):
+            return t
+        return " " if re.search(rf"(?<![\w-]){re.escape(t.lower())}(?![\w-])", low) else t
+    return NAMED.sub(name, answer)
+
+
 FACT_LINE = re.compile(r"^(?:earlier fact|NO LONGER TRUE)[^:]*?, reported on (\d{1,2}) (\w{3}) (\d{4}) by (.+?): (.*)$")
 PLAIN_WORDS = {"participant", "reported", "started", "taking", "stopped", "screening", "protocol", "medicine",
                "medication", "monitoring", "coordinator", "research", "associate", "because", "before", "after",
@@ -461,7 +479,7 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
     found = _proof(res, q, secs, checklists, sources, visits, email, record, given)
     unsourced = _unsourced(found["text"], record, f"{q['question']} {email}")
     if (not found["traced"] or unsourced) and (found["proven"] or found["from_record"]):
-        loose = sorted(_norm_nums(found["text"]) - _norm_nums(found["backing"]), key=len)
+        loose = sorted(_norm_nums(found["checked"]) - _norm_nums(found["backing"]), key=len)
         why = found["conflict"] or (f"These numbers in your answer are not in the protocol's words or the record: "
                                     f"{', '.join(loose)}. Give each one as a calculation from the protocol's or "
                                     f"the record's numbers, or leave it out." if loose else "")
@@ -565,9 +583,11 @@ def _proof(res: dict, q: dict, secs: list[dict], checklists: list[dict], sources
             if not first or int(first.group()) != g:
                 conflict = f"Code finds the {extreme.group(1).lower()} gap is Day {a} to Day {b}: {g} days."
     backing += " " + " ".join(r for _, r in sums)
-    return {"text": text, "proven": proven, "sums": sums, "backing": backing,
+    checked = _names_read(text, " ".join(i["text"] for i in secs + checklists)) \
+        if settings.feature("name_numbers") else text
+    return {"text": text, "proven": proven, "sums": sums, "backing": backing, "checked": checked,
             "from_record": record_used(res.get("record_used") or [], record),
-            "traced": _numbers_traced(text, backing) and not conflict, "conflict": conflict,
+            "traced": _numbers_traced(checked, backing) and not conflict, "conflict": conflict,
             "code_answer": code_answer}
 
 

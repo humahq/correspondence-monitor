@@ -1,6 +1,7 @@
 """Item and answer detail pages, reached only through the unguessable link in a draft or a reply, and the admin
 pages under /admin (adminview.py). Read-only except an admin's corrections to patient memory and, with
-features.close_on_page, closing an alert on its page (closing.py)."""
+features.close_on_page, closing an alert on its page (closing.py), and, with features.ack_on_page, recording who
+answered the phone for a safety alert (safety.py)."""
 
 from __future__ import annotations
 
@@ -158,6 +159,34 @@ def _closing_part(item: dict, email: str | None, path: str) -> str:
 <p><button>Check before saving</button></p></form>"""
 
 
+def _ack_part(item: dict, email: str | None, path: str) -> str:
+    """Record who answered the phone for a safety alert (safety.py), for whoever may."""
+    from . import safety
+    if not safety.page_on() or item["kind"] != "out_of_scope":
+        return ""
+    if item.get("acked_at"):
+        return (f"<h2>Acknowledged</h2><p class=\"muted\">By {_e(item['acked_by'])}, "
+                f"{_e(local_time(item['acked_at']))}.</p>")
+    s = config.study(item["study_id"])
+    head = "<h2>Record who answered the phone</h2>"
+    if not email:
+        if not weblogin.ready():
+            return head + '<p class="muted">Recording it here needs Google sign-in, which is not set up here.</p>'
+        return head + (f'<p><a href="{_e(weblogin.sign_in_url(path))}">Sign in with Google</a> to record that the '
+                       f'medical monitor or the safety backup has it.</p>')
+    if not safety.may_record(s, email):
+        return head + f'<p class="muted">You are signed in as {_e(email)}, who may not record it here.</p>'
+    who = {p.id: safety.label(s, p) for p in safety.ackers(s, item)}
+    if not who:
+        return head + '<p class="muted">Nobody on the study list can acknowledge a safety message.</p>'
+    return head + f"""<form method="post" action="/items/{_e(item['link_token'])}/ack">
+<input type="hidden" name="step" value="check"><p>Who answered the phone and has it now?</p>
+{_radios("person", who)}
+<p><label>Note (for example the time of the call)<br>
+<textarea name="note" rows="2" cols="70" maxlength="500"></textarea></label></p>
+<p><button>Check before saving</button></p></form>"""
+
+
 def render_confirm(item: dict, lines: list[str], action: str, sealed: str) -> str:
     """The confirm step (DSP-02): exactly what will be kept, before it counts."""
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Check: item #{item['id']}</title>
@@ -212,6 +241,7 @@ def render_item(item: dict, email: str | None = None, path: str = "") -> str:
 <p class="muted">Check: {_e(ev.get('method'))} · recipient: {_e(item['recipient_person'])}
 ({_e(item['recipient_reason'])})</p>
 {_closing_part(item, email, path or f"/items/{item['link_token']}")}
+{_ack_part(item, email, path or f"/items/{item['link_token']}")}
 <h2>History</h2><table><tr><th>When</th><th>Who</th><th>What</th></tr>{rows}</table>
 <p class="muted">This monitor does not review safety information. {SAFETY_NOTICE}</p>
 </body></html>"""
@@ -366,12 +396,56 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, KeyError, items.StepOrder) as e:
             return self._send(400, render_problem(item, str(e).strip("'")))
 
+    def _ack_post(self, token: str):
+        """The phone acknowledgment form on a safety alert's page (safety.py): the same guards and check step as
+        the close form."""
+        from . import safety
+        row = db.q1("SELECT id, study_id FROM items WHERE link_token=?", (token,))
+        if not row or not safety.page_on():
+            return self._send(404, "not found", "text/plain")
+        item = items.get(row["id"])
+        study = config.study(item["study_id"])
+        email = weblogin.signed_in(self.headers.get("Cookie"))
+        origin = (self.headers.get("Origin") or "").rstrip("/")
+        size = int(self.headers.get("Content-Length") or 0)
+        if (origin and origin != (settings.get("web.base_url") or "").rstrip("/")) or not 0 < size <= 20000:
+            db.audit("safety_ack_page_refused", entity_type="item", entity_id=item["id"], study_id=study.study_id,
+                     email=email, why="not from the alert's page")
+            return self._send(403, render_problem(item, "this form did not come from the alert's page"))
+        if not email or not weblogin.may_see(email, study.study_id):
+            return self._send(403, render_problem(item, "please sign in with Google first, from the alert's page"))
+        form = parse_qs(self.rfile.read(size).decode("utf-8", "replace"))
+        f = lambda k: (form.get(k) or [""])[0]
+        try:
+            if f("step") == "confirm":
+                got = weblogin.unseal(f("sealed"))
+                if not got or got.get("email") != email or got.get("item") != item["id"] or got.get("action") != "ack":
+                    raise ValueError("this check has run out of time or is not yours. Please start again")
+                a = safety.check_phone_ack(item, study, email, got["person"], got["note"])
+                safety.acknowledge(item["id"], a["who"], "phone", actor_type="page", note=a["note"],
+                                   recorded_by=email)
+                return self._send(303, "", "text/plain", {"Location": f"/items/{token}"})
+            a = safety.check_phone_ack(item, study, email, f("person"), f("note"))
+            sealed = weblogin.seal({"person": a["person"], "note": a["note"], "email": email, "item": item["id"],
+                                    "action": "ack"}, minutes=15)
+            return self._send(200, render_confirm(item, [f"Signed in as: {email}", f"Who answered the phone and has "
+                                                          f"it: {a['label']}", f"Note: {a['note']}",
+                                                         "The safety contact list stops here."], "ack", sealed))
+        except safety.NotAllowed as e:
+            db.audit("safety_ack_page_refused", entity_type="item", entity_id=item["id"], study_id=study.study_id,
+                     email=email, why=str(e))
+            return self._send(403, render_problem(item, str(e)))
+        except (ValueError, KeyError) as e:
+            return self._send(400, render_problem(item, str(e).strip("'")))
+
     def do_POST(self):
         from . import adminview
         if self.path.startswith("/items/"):
             token, _, action = self.path.split("/items/", 1)[1].split("?")[0].partition("/")
             if action in ("close", "review"):
                 return self._closing_post(token, action)
+            if action == "ack":
+                return self._ack_post(token)
         if self.path != "/admin/api/memory/change":
             return self._send(404, "not found", "text/plain")
         stop, email = weblogin.admin_gate(self.path, self.headers.get("Cookie"), log=False)
