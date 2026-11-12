@@ -15,6 +15,9 @@ chat:
   receipt: true
   # One of these is picked at random each time; empty: the texts in cormon/pipeline.py (RECEIPTS).
   receipt_texts: []
+  # A server with its own bot account posts in its own rooms, set in its settings.local.yaml:
+  # {NCT05842941: {study_channel: {space: spaces/<id>, name: ...}, alert_channel: {...}}}. Empty: study.yaml's.
+  rooms: {}
 
 bot:
   # This deployment's name for the bot, as people see it in email, the admin pages and ops warnings.

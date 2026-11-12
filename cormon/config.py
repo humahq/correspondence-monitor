@@ -130,11 +130,13 @@ def _person(d: dict) -> Person:
 
 def _chat_rooms(raw: dict) -> dict:
     """The study's chat rooms: study.yaml's, or with a local Mattermost the rooms mattermost.rooms gives it
-    ({study_channel: {space: spaces/<id>, name: ...}}), so the demo never posts to the real rooms."""
+    ({study_channel: {space: spaces/<id>, name: ...}}), so the demo never posts to the real rooms. A second
+    server with its own bot account names its own rooms in chat.rooms, the same way."""
     teams = raw.get("teams", {}) or {}
-    if settings.get("channels.teams") != "mattermost":
-        return teams
-    return dict((settings.get("mattermost.rooms") or {}).get(raw["study_id"]) or {})
+    if settings.get("channels.teams") == "mattermost":
+        return dict((settings.get("mattermost.rooms") or {}).get(raw["study_id"]) or {})
+    own = (settings.get("chat.rooms") or {}).get(raw["study_id"])
+    return dict(own) if own else teams
 
 
 def load_study(path: Path) -> Study:

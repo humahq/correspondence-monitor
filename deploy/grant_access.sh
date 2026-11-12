@@ -6,7 +6,8 @@ set -euo pipefail
 PROJECT="${PROJECT:-optical-depth-506808-t0}"
 ZONE="${ZONE:-us-east1-b}"
 NAME="${NAME:-cormon-demo}"
-SA="cormon-vm@$PROJECT.iam.gserviceaccount.com"
+SA_ID=$([ "$NAME" = cormon-demo ] && echo cormon-vm || echo "$NAME-vm")   # the machine account create_vm.sh made
+SA="$SA_ID@$PROJECT.iam.gserviceaccount.com"
 G=(gcloud --project "$PROJECT" --quiet)
 [ $# -gt 0 ] || { echo "usage: $0 email [email ...]"; exit 1; }
 
