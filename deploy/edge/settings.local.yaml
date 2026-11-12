@@ -21,6 +21,10 @@ mailbox:
 
 gchat:
   account: bot_test@huma.ai
+  # Instant push, its own topic so it never mixes with the live bot's (deploy/edge_connect.sh makes them).
+  events:
+    topic: projects/optical-depth-506808-t0/topics/cormon-edge-chat-events
+    subscription: projects/optical-depth-506808-t0/subscriptions/cormon-edge-chat-events-vm
 
 chat:
   # The test bot's own rooms, filled in by deploy/edge_connect.sh once Eliot has made them.
@@ -29,7 +33,4 @@ chat:
 memory:
   enabled: true
 
-features:
-  privacy_check: true
-  openbook_look: true
-  confirm_orders: true
+# Every feature is on here without listing it: create_vm.sh sets CORMON_TEST_FEATURES=all for the service.

@@ -1,0 +1,14 @@
+---
+description: Keep server 2 (cormon-edge) and the Mattermost demo on the newest code; server 1 only when John says
+alwaysApply: true
+---
+# Three bots: follow `docs/servers.md`
+
+- **Server 2 (`cormon-edge`, bot_test@huma.ai) and the Mattermost demo always run the newest main, with every
+  feature on.** After every merge to main, once main's gate passes, update both without asking John
+  (the steps in `docs/servers.md`), then update its versions table. John should never have to ask.
+- **Server 1 (`cormon-demo`, the live bot) changes only when John says so.** John runs `./deploy/release.sh`
+  himself; never release to it, never change its settings, never switch a feature on there without his "yes".
+- Never restart the Mattermost demo while a demo may be on: ask first on demo days.
+- Settings changes on a server wait for a second person (John approves with
+  `CORMON_VM=<server> ./bin/cormon-cloud config approve settings <id>`); study rooms need a restart after.
