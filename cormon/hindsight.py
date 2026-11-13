@@ -286,13 +286,7 @@ def _submit(fn, *args) -> Future:
     return fut
 
 
-def participant_tags(study_id: str, pid: str | None, timeout: float = 30) -> list[str]:
-    """Every participant tag in the study's bank that means this participant. Hindsight's AI writes the code as
-    it reads it ('1001-022' one time, '1001022' the next) and tags cannot be edited, so the spellings are matched
-    here with the same rule the bot matches codes with (memory.key). A short form the site wrote ('212' for
-    1001-212) counts when it fits no other participant (memory.same_person)."""
-    if not memory.key(pid):
-        return []
+def _all_participant_tags(study_id: str, timeout: float) -> list[str]:
     every, offset = [], 0
     while True:
         try:
@@ -306,7 +300,28 @@ def participant_tags(study_id: str, pid: str | None, timeout: float = 30) -> lis
         every += [t["tag"] for t in page]
         offset += len(page)
         if not page or offset >= (res.get("total") or 0):
-            break
+            return every
+
+
+def participants(study_id: str, timeout: float = 5) -> dict[str, str]:
+    """{code key: the code as memory wrote it} for every participant memory holds facts about; {} when memory is
+    off or could not be read in time."""
+    if not enabled():
+        return {}
+    try:
+        return {memory.key(t.split(":", 1)[1]): t.split(":", 1)[1] for t in _all_participant_tags(study_id, timeout)}
+    except Exception:
+        return {}
+
+
+def participant_tags(study_id: str, pid: str | None, timeout: float = 30) -> list[str]:
+    """Every participant tag in the study's bank that means this participant. Hindsight's AI writes the code as
+    it reads it ('1001-022' one time, '1001022' the next) and tags cannot be edited, so the spellings are matched
+    here with the same rule the bot matches codes with (memory.key). A short form the site wrote ('212' for
+    1001-212) counts when it fits no other participant (memory.same_person)."""
+    if not memory.key(pid):
+        return []
+    every = _all_participant_tags(study_id, timeout)
     keys = {memory.key(t.split(":", 1)[1]) for t in every}
     mine = memory.same_person(pid, keys | memory.known_keys(study_id))
     return [t for t in every if memory.key(t.split(":", 1)[1]) in mine]

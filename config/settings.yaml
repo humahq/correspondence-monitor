@@ -65,6 +65,8 @@ features:
   safety_backstop: false     # a severe safety word the AI did not send to the medical monitor is sent anyway
   ack_on_page: true          # who answered the phone for a safety alert is recorded on its page, not with `cormon ack`
   name_numbers: true         # a number inside a name the documents use ("12-lead ECG", "ALSAQ-40") is not an amount
+  ask_which_participant: false  # a short code ("131") that fits two participants gets "which one?", not a guess
+  message_dates_win: false   # an answer uses the dates its own message gives ("Monday"), not an older one for the same thing
 
 # The language everyone in a study shares (language_courtesy). A person's own are `languages:` in study.yaml.
 language:

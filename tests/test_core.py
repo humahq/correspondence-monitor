@@ -487,6 +487,31 @@ def test_an_answer_on_what_happened_stands_on_the_record_lines_it_cites(monkeypa
     assert not answers.answer_one(study, msg, q, [], [], "")["found"], "a line that is not in the record"
 
 
+def test_the_messages_own_date_replaces_an_earlier_one_for_the_same_thing(monkeypatch):
+    from cormon import answers, hindsight, llm, memory
+    friday = {"label": "next dose", "kind": "dose", "date": "2026-11-13"}
+    monday = {"label": "Next dose", "kind": "other", "date": "2026-11-16"}
+    baseline = {"label": "baseline", "kind": "baseline", "date": "2026-10-01"}
+    monkeypatch.setattr(memory, "history", lambda *a, **kw: [
+        {"message_id": 32, "when": "12 Nov 2026 20:44", "dates": [friday, baseline], "events": []},
+        {"message_id": 35, "when": "12 Nov 2026 21:38", "dates": [monday], "events": []}])
+    monkeypatch.setattr(hindsight, "recall", lambda *a: ([], set()))
+    prompts = []
+    said = {"answerable": True, "serious_event": False, "calculations": [], "quotes": [], "record_used": [],
+            "answer": "Stop it before the next dose on 16 Nov 2026."}
+    monkeypatch.setattr(llm, "structured", lambda task, sys, user, *a, **kw:
+                        {"ids": []} if task == "answer_pick" else prompts.append(user) or said)
+    msg = {"id": 35, "sent_at": "2026-11-13T02:38:46+00:00"}
+    q = {"question": "Anything to sort out before G-708-071's next dose on Monday?", "participant": "G-708-071"}
+    study = type("S", (), {"study_id": "S1", "raw": {}, "documents": []})()
+    answers.answer_one(study, msg, q, [], [], "next dose on Monday")
+    assert "2026-11-13" in prompts[-1] and "GIVES" not in prompts[-1]   # switch off: as before
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "message_dates_win")
+    answers.answer_one(study, msg, q, [], [], "next dose on Monday")
+    record, own = prompts[-1].split("PARTICIPANT RECORD")[1], prompts[-1].split("MESSAGE GIVES")[1]
+    assert "2026-11-13" not in prompts[-1] and "baseline: 2026-10-01" in record and "2026-11-16" in own
+
+
 def test_an_answers_numbers_may_come_from_the_message_date():
     from cormon import answers
     res = {"answer": "Yes: she is 54 on 29 Oct 2026.", "quotes": [],
@@ -1683,6 +1708,26 @@ def test_a_sum_written_in_the_answer_counts_only_when_code_agrees():
     assert right["traced"] and ("the maximum gap", "84 - 14 = 70") in right["sums"]
     res = {"answer": "Days 81 to 87.", "quotes": [], "calculations": []}
     assert answers._proof(res, q, [], [], [], [], "Week 12 is Day 84 ± 3", [], [])["traced"]
+
+
+def test_a_short_code_that_fits_two_participants_is_asked_about_not_guessed(monkeypatch):
+    from cormon import answers, config, hindsight
+    study = config.study("NCT05842941")
+    two = {"G708131": "G708131", "G718131": "G718131"}
+    monkeypatch.setattr(hindsight, "participants", lambda s, timeout=5: two)
+    picked = {"question": "What medicines is G-708-131 on?", "participant": "G-708-131"}
+    ask = answers.which_participant(study, picked, "@mira what medicines is 131 on?", [])
+    assert "G-708-131 or G718131" in ask and "131" in ask
+    left_short = {"question": "What medicines is 131 on?", "participant": "131"}
+    assert answers.which_participant(study, left_short, "what medicines is 131 on?", []).startswith("Which")
+    assert answers.which_participant(study, picked, "what medicines is G-708-131 on?", []) == ""
+    one_named = [{"who": "John", "text": "G-708-131 has gout."}]
+    both_named = one_named + [{"who": "John", "text": "G-718-131 uses an inhaler."}]
+    assert answers.which_participant(study, picked, "and what is 131 on?", one_named) == ""
+    assert answers.which_participant(study, picked, "and what is 131 on?", both_named).startswith("Which")
+    assert answers.which_participant(study, picked, "G-708-131 takes 131 mg of it?", []) == ""
+    monkeypatch.setattr(hindsight, "participants", lambda s, timeout=5: {"G708131": "G708131"})
+    assert answers.which_participant(study, picked, "what medicines is 131 on?", []) == ""
 
 
 def test_a_number_inside_a_name_the_documents_use_is_not_an_amount(monkeypatch):
