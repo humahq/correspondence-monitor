@@ -73,9 +73,11 @@ def _instant(s: str | None) -> datetime | None:
         return None
 
 
-def history(study_id: str, pid: str | None, msg: dict, *, include_current: bool = False) -> list[dict]:
+def history(study_id: str, pid: str | None, msg: dict, *, include_current: bool = False,
+            allowed=None) -> list[dict]:
     """Earlier messages' facts about a participant, oldest first; each with the message it came from. Facts saved
-    under a short form of the code count (same_person)."""
+    under a short form of the code count (same_person). allowed(message_id): only those messages' facts (scoped
+    memory: the reader's own sites)."""
     keys = sorted(same_person(pid, known_keys(study_id)))
     if not keys:
         return []
@@ -84,6 +86,8 @@ def history(study_id: str, pid: str | None, msg: dict, *, include_current: bool 
     for r in db.q(f"SELECT * FROM patient_facts WHERE study_id=? AND participant_key IN ({','.join('?' * len(keys))})"
                   " ORDER BY sent_at, id", (study_id, *keys)):
         if r["message_id"] == msg.get("id") and not include_current:
+            continue
+        if allowed and r["message_id"] != msg.get("id") and not allowed(r["message_id"]):
             continue
         when = _instant(r["sent_at"])
         if when and (when > now + timedelta(minutes=1) or when < now - timedelta(days=KEEP_DAYS)):

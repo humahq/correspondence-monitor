@@ -128,6 +128,19 @@ def reader_sites(study, msg: dict) -> set[str]:
     return mine
 
 
+def dates_allowed(study, msg: dict):
+    """For the participant's saved dates (memory.history): None when memory is not scoped; else a check that an
+    earlier message's dates come from one of the reader's sites (its site worked out the way facts are filed)."""
+    if not scoped():
+        return None
+    sites = reader_sites(study, msg)
+
+    def allowed(message_id) -> bool:
+        row = db.q1("SELECT from_addr, subject, body_text FROM messages WHERE id=?", (message_id,))
+        return bool(row) and site_of(study, dict(row)) in sites
+    return allowed
+
+
 def site_tag(site: str) -> str:
     return f"site:{site}"
 

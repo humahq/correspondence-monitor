@@ -4180,6 +4180,24 @@ def test_scoped_memory_answers_only_from_the_askers_own_sites_and_never_says_who
     assert not [c for c in calls if c[0] == "POST"]
 
 
+def test_scoped_memory_gives_the_saved_visit_dates_only_from_the_askers_own_sites(monkeypatch):
+    from cormon import hindsight, memory
+    study = _two_sites()
+    for mid, sender in ((90, "johnrohit94@gmail.com"), (91, "crc2@rival.org")):
+        db.ex("INSERT INTO messages (id, channel, external_id, thread_key, route, visibility, from_addr, body_text,"
+              " sent_at, received_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (mid, "email", f"x{mid}", "t", "study", "direct",
+                                                                    sender, "G-708-777 visit", "2026-11-01T10:00:00+00:00",
+                                                                    "2026-11-01T10:00:00+00:00"))
+        memory.save(study.study_id, "G-708-777", {"id": mid, "sent_at": "2026-11-01T10:00:00+00:00"},
+                    [{"label": "Baseline", "kind": "baseline", "date": f"2026-10-0{mid - 89}"}], [])
+    ask = {"id": 92, "from_addr": "johnrohit94@gmail.com", "channel": "email", "sent_at": "2026-11-12T10:00:00+00:00"}
+    assert hindsight.dates_allowed(study, ask) is None, "off: as before"
+    assert len(memory.history(study.study_id, "G-708-777", ask)) == 2
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "scoped_memory")
+    mine = memory.history(study.study_id, "G-708-777", ask, allowed=hindsight.dates_allowed(study, ask))
+    assert [h["message_id"] for h in mine] == [90], "the rival site's dates stay at the rival site"
+
+
 def test_scoped_memory_prompts_drop_who_reported_and_keep_rules_to_the_protocol(monkeypatch):
     from cormon import answers
     every = answers.FIND_SYSTEM + answers.ANSWER_SYSTEM + answers.PLAIN_SYSTEM + answers.UNSOURCED_WHY

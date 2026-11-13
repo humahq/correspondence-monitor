@@ -210,7 +210,7 @@ one bank per study, each fact tagged with the patient's code.
 - A fact never says who reported it. "Who reported ...?" and questions about how staff work are turned down
   (EU AI Act: no AI to judge staff).
 - Each fact is tagged with its site and reporter. A search must match the patient and one of the asker's own
-  sites, and code drops anything else. A study has many sites, which may be competitors. In a shared room, memory
+  sites, and code drops anything else. The patient's saved visit dates follow the same rule. A study has many sites, which may be competitors. In a shared room, memory
   is used only when the study has one site.
 - Study staff review their facts at `/memory/<study>`. The PI also sees the site's facts. Each correction needs a
   reason and goes in the audit trail.

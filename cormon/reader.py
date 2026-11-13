@@ -1806,7 +1806,8 @@ def _check(study, msg, email, use_cache, log, save, pool) -> tuple[list[Finding]
             trace["parts"].append({"participant": part["participant"], "findings": [], "only_in_an_order": True,
                                    "statements": part.get("statements", [])})
             continue
-        past = memory.history(study.study_id, part["participant"], msg) if part["participant"] else []
+        past = memory.history(study.study_id, part["participant"], msg,
+                              allowed=hindsight.dates_allowed(study, msg)) if part["participant"] else []
         recall = pool.submit(hindsight.recall, study, part["participant"], part["summary"], msg) \
             if part["participant"] and hindsight.enabled() else None
         anchors = memory.anchor_dates(past, part["dates"])

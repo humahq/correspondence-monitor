@@ -563,7 +563,8 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
                use_cache: bool = True) -> dict:
     """One question's answer: {question, participant, text, quotes: [(heading, words)], found, serious, ...}."""
     pid = q["participant"].strip()
-    past = memory.history(study.study_id, pid, msg, include_current=True) if pid else []
+    past = memory.history(study.study_id, pid, msg, include_current=True,
+                          allowed=hindsight.dates_allowed(study, msg)) if pid else []
     known_anchors = {memory.anchor_kind(d) for h in past for d in h["dates"]}
     past += [dict(h, dates=[d for d in h["dates"] if d["kind"] not in known_anchors])
              for h in stated_anchors(q["question"], reader._email_date(msg).date())]
