@@ -198,6 +198,7 @@ def find(text: str, use_cache: bool = True, earlier: list[dict] | None = None) -
 
 
 WHICH = "Which participant do you mean: {codes}? More than one participant's code ends in {short}, so I won't guess."
+UNITS = r"mg|mcg|µg|g|kg|ml|l|mmol|%|days?|d|weeks?|wks?|months?|years?|yrs?|hours?|hrs?|h|min|bpm|mmhg|cm|mm"
 
 
 def _codes(study_id: str) -> dict[str, str]:
@@ -217,11 +218,12 @@ def which_participant(study: Study, q: dict, email: str, earlier: list[dict]) ->
     conversation before."""
     p = memory.key(q.get("participant"))
     written = hindsight.written_codes(email or "")
-    if not p:
-        return ""
+    if not p:   # the finder may not take a bare number for a participant: the message's own short codes
+        written = {w for w in written if w.isdigit() and re.search(rf"(?<![\w.-]){w}(?![\w.-]|\s*(?:{UNITS})\b)",
+                                                                    email or "", re.I)}
     codes = None
-    for w in sorted(written | {p}, key=len):
-        if w != p and (p in written or not memory.short_for(w, p)):
+    for w in sorted(written | ({p} if p else set()), key=len):
+        if p and w != p and (p in written or not memory.short_for(w, p)):
             continue
         codes = _codes(study.study_id) if codes is None else codes
         fits = {x for x in set(codes) | {p} if memory.short_for(w, x)}

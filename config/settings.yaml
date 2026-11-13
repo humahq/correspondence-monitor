@@ -68,6 +68,7 @@ features:
   ask_which_participant: false  # a short code ("131") that fits two participants gets "which one?", not a guess
   message_dates_win: false   # an answer uses the dates its own message gives ("Monday"), not an older one for the same thing
   record_answers: false      # an answer that only repeats a participant's record, adding no judgment, is not held back
+  thread_context: false      # a reply in a chat thread is read with that thread, not the room's latest talk
 
 # The language everyone in a study shares (language_courtesy). A person's own are `languages:` in study.yaml.
 language:
