@@ -20,6 +20,7 @@ ACTIONS = {
     "restore": "replace the database with a backup",
     "purge": "clear message text older than the retention period",
     "forget-participant": "delete what the bot remembers about a participant",
+    "forget-study-memory": "delete a study's whole patient memory",
     "import-model": "replace the study model",
     "disregard": "disregard an alert the sponsor would see",
     "not-counted": "mark an alert the sponsor would see as not counting",
