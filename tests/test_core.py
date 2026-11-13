@@ -487,6 +487,28 @@ def test_an_answer_on_what_happened_stands_on_the_record_lines_it_cites(monkeypa
     assert not answers.answer_one(study, msg, q, [], [], "")["found"], "a line that is not in the record"
 
 
+def test_an_answer_only_from_the_record_stands_though_the_finder_took_it_for_a_rule_question(monkeypatch):
+    from cormon import answers, hindsight, llm, memory
+    line = ("earlier fact, reported on 12 Nov 2026 by John Huma (Sponsor ClinOps lead): G-708-305 has gout and "
+            "takes allopurinol 100 mg daily.")
+    monkeypatch.setattr(hindsight, "recall", lambda *a: ([line], set()))
+    monkeypatch.setattr(memory, "history", lambda *a, **kw: [])
+    said = {"answerable": True, "serious_event": False, "calculations": [], "quotes": [],
+            "answer": "He takes allopurinol 100 mg daily. John Huma reported this on 12 Nov 2026.",
+            "record_used": [line]}
+    monkeypatch.setattr(llm, "structured", lambda task, *a, **kw: {"ids": []} if task == "answer_pick" else said)
+    judged = {"score": 0.0}
+    monkeypatch.setattr(llm, "decide", lambda *a, **kw: {k: judged["score"] for k in answers.outcheck.JUDGMENT})
+    msg = {"id": 42, "sent_at": "2026-11-13T05:02:00+00:00"}
+    q = {"question": "What is G708305 taking?", "participant": "G708305", "harm": False, "record_only": False}
+    study = type("S", (), {"study_id": "S1", "raw": {}, "documents": []})()
+    assert not answers.answer_one(study, msg, q, [], [], "G708305")["found"]   # switch off: as before
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "record_answers")
+    assert answers.answer_one(study, msg, q, [], [], "G708305")["found"]
+    judged["score"] = 0.9   # the answer adds a judgment ("so he must stop it"): still held back
+    assert not answers.answer_one(study, msg, q, [], [], "G708305")["found"]
+
+
 def test_the_messages_own_date_replaces_an_earlier_one_for_the_same_thing(monkeypatch):
     from cormon import answers, hindsight, llm, memory
     friday = {"label": "next dose", "kind": "dose", "date": "2026-11-13"}
