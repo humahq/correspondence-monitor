@@ -115,6 +115,19 @@ def _rooms(chat: Path, demo: dict, team: str) -> dict:
     return out
 
 
+def _cast(demo: dict) -> tuple[dict, list]:
+    """bot.yaml local_accounts: (sign-in name -> the study person's email, for entries whose demo address is not
+    under people: and so cannot sign in)."""
+    people = demo.get("people") or {}
+    out, skipped = {}, []
+    for name, addr in (demo.get("local_accounts") or {}).items():
+        if people.get(addr):
+            out[str(name)] = people[addr]
+        else:
+            skipped.append((str(name), str(addr)))
+    return out, skipped
+
+
 def prepare(live_root: Path, chat: Path, team: str | None = None) -> Path:
     demo = _demo_settings(chat)
     team = team or demo["team"]
@@ -138,6 +151,16 @@ def prepare(live_root: Path, chat: Path, team: str | None = None) -> Path:
     port = 8091 if in_pod() else 8092
     cfg.setdefault("web", {}).update({"enabled": True, "host": "0.0.0.0" if in_pod() else "127.0.0.1", "port": port,
                                       "base_url": f"http://localhost:{port}"})
+    local = cfg["web"].setdefault("admin", {}).setdefault("local", {})
+    cast, skipped = _cast(demo)   # bot.yaml local_accounts: sign-in name -> the study person's email (people:)
+    for name, addr in skipped:
+        print(f"bot.yaml local_accounts: {name} -> {addr} is not under people:, skipped")
+    local.update({"enabled": True, "user": "operator", "password_env": "ADMIN_PASSWORD",
+                  "password_file": str(chat / ".env"), "accounts": cast})
+    cfg["web"]["admin"]["emails"] = [*(cfg["web"]["admin"].get("emails") or []), "operator@localhost"]
+    from dotenv import dotenv_values
+    if not (dotenv_values(chat / ".env").get("ADMIN_PASSWORD") or os.environ.get("ADMIN_PASSWORD")):
+        print(f"no ADMIN_PASSWORD in {chat / '.env'}: the admin pages stay shut until ./up.sh adds one")
     cfg.setdefault("memory", {}).update({"enabled": True, "bank_prefix": f"demo-{team}-"})
     # the demo shows every new feature; the live bot gets each one when it is switched on there (docs/features.md)
     cfg["features"] = {name: True for name in cfg.get("features") or {}}
@@ -154,6 +177,15 @@ def prepare(live_root: Path, chat: Path, team: str | None = None) -> Path:
         if target.exists() and not link.exists():
             link.symlink_to(target)
     return home
+
+
+def admin_hint(chat: Path, port: int) -> str:
+    """The line the demo window prints about the admin pages: the sign-in names and where the password lives
+    (the value itself is never printed)."""
+    cast, _ = _cast(_demo_settings(chat))
+    names = ["operator", *cast]
+    return (f"Admin pages: http://localhost:{port}/admin   (users {', '.join(names)}, "
+            f"one password: ADMIN_PASSWORD in {chat}/.env)")
 
 
 LOGINS = ("crc", "pi", "cra", "sponsor", "medmonitor")   # the study roles; eliot, peter and john are testers
@@ -207,6 +239,7 @@ class Demo:
         self.child = subprocess.Popen([sys.executable, "-m", "cormon.cli", "run"], env=env)
         (self.live / HOME_NAME / "active_team").write_text(team)
         print(f"the bot is on team {team} (email goes to the simulator); demo page {PAGE}")
+        print(admin_hint(self.chat, 8091 if in_pod() else 8092))
 
     def _start_in_pod(self, team: str, home: Path, fresh: bool) -> None:
         from . import db, settings
@@ -235,6 +268,7 @@ class Demo:
         self.logs = subprocess.Popen(["podman", "logs", "-f", BOT_CONTAINER])
         (self.live / HOME_NAME / "active_team").write_text(team)
         print(f"the bot is on team {team}, in the pod {POD} (email goes to the simulator); demo page {PAGE}")
+        print(admin_hint(self.chat, 8091 if in_pod() else 8092))
 
     def exited(self) -> int | None:
         """The bot's exit code once it has stopped, else None."""

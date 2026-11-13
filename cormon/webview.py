@@ -30,6 +30,18 @@ def _e(v) -> str:
     return html.escape("" if v is None else str(v))
 
 
+def _switch(path: str) -> str:
+    """A link to the local sign-in page, so the demo cast can change person without logging out."""
+    return f' <a href="{_e(weblogin.login_url(path))}">Sign in as someone else</a>.' if weblogin.local_enabled() else ""
+
+
+def _signin_word() -> str:
+    """What the item pages say when a form needs a sign-in: Google on a server copy; on this computer the local
+    account (weblogin.login_url), so no "Google"."""
+    return "please sign in from the alert's page" if weblogin.local_enabled() else \
+        "please sign in with Google first, from the alert's page"
+
+
 _NO_QUOTE = "Exact words not found: please read this section of the study documents."
 
 
@@ -134,12 +146,14 @@ def _closing_part(item: dict, email: str | None, path: str) -> str:
         f"<h2>Waiting for a second person's review</h2>{record}"
     token = item["link_token"]
     if not email:
+        if weblogin.local_enabled():
+            return head + f'<p><a href="{_e(weblogin.login_url(path))}">Sign in</a> as a person who may close alerts here (on the demo: peter).</p>'
         if not weblogin.ready():
             return head + '<p class="muted">Closing an alert here needs Google sign-in, which is not set up here.</p>'
         return head + f'<p><a href="{_e(weblogin.sign_in_url(path))}">Sign in with Google</a> to close this alert.</p>'
     if item["state"] == "open":
         if not closing.person(s, email, "close"):
-            return head + f'<p class="muted">You are signed in as {_e(email)}, who may not close alerts here.</p>'
+            return head + f'<p class="muted">You are signed in as {_e(email)}, who may not close alerts here.{_switch(path)}</p>'
         return head + f"""{f'<p class="muted">Earlier:</p>{record}' if record else ''}
 <form method="post" action="/items/{_e(token)}/close"><input type="hidden" name="step" value="check">
 {_radios("choice", closing.CHOICES)}
@@ -149,9 +163,9 @@ def _closing_part(item: dict, email: str | None, path: str) -> str:
 <textarea name="details" rows="3" cols="70" maxlength="2000"></textarea></label></p>
 <p><button>Check before closing</button></p></form>"""
     if not closing.person(s, email, "review"):
-        return head + '<p class="muted">A person who reviews alerts in this study will look at it.</p>'
+        return head + f'<p class="muted">A person who reviews alerts in this study will look at it.{_switch(path)}</p>'
     if c and c["by_email"] == email.lower():
-        return head + '<p class="muted">You closed it, so a second person must review it.</p>'
+        return head + f'<p class="muted">You closed it, so a second person must review it.{_switch(path)}</p>'
     return head + f"""<form method="post" action="/items/{_e(token)}/review"><input type="hidden" name="step" value="check">
 {_radios("decision", closing.REVIEWS)}
 <p><label>Your note (needed unless you approve)<br>
@@ -170,12 +184,15 @@ def _ack_part(item: dict, email: str | None, path: str) -> str:
     s = config.study(item["study_id"])
     head = "<h2>Record who answered the phone</h2>"
     if not email:
+        if weblogin.local_enabled():
+            return head + (f'<p><a href="{_e(weblogin.login_url(path))}">Sign in</a> to record that the medical '
+                           f'monitor or the safety backup has it.</p>')
         if not weblogin.ready():
             return head + '<p class="muted">Recording it here needs Google sign-in, which is not set up here.</p>'
         return head + (f'<p><a href="{_e(weblogin.sign_in_url(path))}">Sign in with Google</a> to record that the '
                        f'medical monitor or the safety backup has it.</p>')
     if not safety.may_record(s, email):
-        return head + f'<p class="muted">You are signed in as {_e(email)}, who may not record it here.</p>'
+        return head + f'<p class="muted">You are signed in as {_e(email)}, who may not record it here.{_switch(path)}</p>'
     who = {p.id: safety.label(s, p) for p in safety.ackers(s, item)}
     if not who:
         return head + '<p class="muted">Nobody on the study list can acknowledge a safety message.</p>'
@@ -368,10 +385,9 @@ class Handler(BaseHTTPRequestHandler):
         """A change must come from the admin app itself: its own header (a form or a link on another site cannot
         send one without asking first, and nothing here allows it), JSON, and no other site's Origin."""
         origin = self.headers.get("Origin")
-        base = (settings.get("web.base_url") or "").rstrip("/")
         return (self.headers.get("X-Cormon-Admin") == "1"
                 and (self.headers.get("Content-Type") or "").startswith("application/json")
-                and (not origin or origin.rstrip("/") == base))
+                and weblogin.origin_ok(origin))
 
     def _closing_post(self, token: str, action: str):
         """The close and review forms on an alert's page (closing.py). Only the signed-in person may act, from
@@ -384,14 +400,14 @@ class Handler(BaseHTTPRequestHandler):
         item = items.get(row["id"])
         study = config.study(item["study_id"])
         email = weblogin.signed_in(self.headers.get("Cookie"))
-        origin = (self.headers.get("Origin") or "").rstrip("/")
+        origin = self.headers.get("Origin")
         size = int(self.headers.get("Content-Length") or 0)
-        if (origin and origin != (settings.get("web.base_url") or "").rstrip("/")) or not 0 < size <= 20000:
+        if not weblogin.origin_ok(origin) or not 0 < size <= 20000:
             db.audit("closing_refused", entity_type="item", entity_id=item["id"], study_id=study.study_id,
                      email=email, why="not from the alert's page")
             return self._send(403, render_problem(item, "this form did not come from the alert's page"))
         if not email or not weblogin.may_see(email, study.study_id):
-            return self._send(403, render_problem(item, "please sign in with Google first, from the alert's page"))
+            return self._send(403, render_problem(item, _signin_word()))
         form = parse_qs(self.rfile.read(size).decode("utf-8", "replace"))
         f = lambda k: (form.get(k) or [""])[0]
         try:
@@ -435,14 +451,14 @@ class Handler(BaseHTTPRequestHandler):
         item = items.get(row["id"])
         study = config.study(item["study_id"])
         email = weblogin.signed_in(self.headers.get("Cookie"))
-        origin = (self.headers.get("Origin") or "").rstrip("/")
+        origin = self.headers.get("Origin")
         size = int(self.headers.get("Content-Length") or 0)
-        if (origin and origin != (settings.get("web.base_url") or "").rstrip("/")) or not 0 < size <= 20000:
+        if not weblogin.origin_ok(origin) or not 0 < size <= 20000:
             db.audit("safety_ack_page_refused", entity_type="item", entity_id=item["id"], study_id=study.study_id,
                      email=email, why="not from the alert's page")
             return self._send(403, render_problem(item, "this form did not come from the alert's page"))
         if not email or not weblogin.may_see(email, study.study_id):
-            return self._send(403, render_problem(item, "please sign in with Google first, from the alert's page"))
+            return self._send(403, render_problem(item, _signin_word()))
         form = parse_qs(self.rfile.read(size).decode("utf-8", "replace"))
         f = lambda k: (form.get(k) or [""])[0]
         try:
@@ -537,6 +553,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self._closing_post(token, action)
             if action == "ack":
                 return self._ack_post(token)
+        if self.path.split("?")[0] == weblogin.LOGIN:
+            try:
+                size = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                size = 0
+            if not 0 < size <= 4096:
+                return self._send(400, "bad request", "text/plain")
+            code, headers, text = weblogin.login_post(self.rfile.read(size), host=self.headers.get("Host") or "",
+                origin=self.headers.get("Origin"), ctype=self.headers.get("Content-Type") or "",
+                client=self.client_address[0])
+            return self._send(code, text, "text/plain; charset=utf-8", headers)
         if self.path != "/admin/api/memory/change":
             return self._send(404, "not found", "text/plain")
         stop, email = weblogin.admin_gate(self.path, self.headers.get("Cookie"), log=False)
@@ -569,6 +596,12 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/auth/logout"):
             code, headers, body = weblogin.logout()
             return self._send(code, body, "text/plain; charset=utf-8", headers)
+        if self.path.split("?")[0] == weblogin.LOGIN:
+            if not weblogin.local_enabled():
+                return self._send(404, "not found", "text/plain")
+            q = parse_qs(self.path.partition("?")[2])
+            code, headers, body = weblogin.login_page((q.get("next") or [""])[0], bad="bad" in q)
+            return self._send(code, body, headers=headers)
         if self.path == "/admin" or self.path.startswith(("/admin/", "/admin?")):
             return self._admin()
         if self.path.startswith("/memory/"):

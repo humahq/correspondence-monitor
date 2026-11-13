@@ -4503,6 +4503,375 @@ def test_a_memory_change_must_come_from_the_admin_page(monkeypatch):
         server.shutdown()
 
 
+# ------------------------------------------------------------------ the local admin account (a laptop copy)
+
+LOCAL_PW = "s3cret&=+é"
+
+
+def _web_server(monkeypatch, conf):
+    """A test web server whose settings come from `conf`. The port is ephemeral, so a laptop conf's web.base_url is
+    pointed at it here and requests must send Host: localhost:<port> (the local sign-in checks the Host header)."""
+    import threading
+    from http.server import ThreadingHTTPServer
+    from cormon import settings, webview
+    real = settings.get
+    monkeypatch.setattr(settings, "get", lambda k, d=None: conf.get(k, real(k, d)))
+    monkeypatch.setenv("ADMIN_PASSWORD", LOCAL_PW)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), webview.Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    conf.setdefault("web.base_url", f"http://localhost:{server.server_port}")
+    return server
+
+
+def _call(server, method, path, body=None, cookie=None, headers=None):
+    import http.client
+    c = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+    c.request(method, path, body=body,
+              headers={"Host": f"localhost:{server.server_port}",
+                       **({"Cookie": cookie} if cookie else {}), **(headers or {})})
+    r = c.getresponse()
+    return r.status, dict(r.getheaders()), r.read().decode()
+
+
+def _form(**kv):
+    from urllib.parse import urlencode
+    return urlencode(kv)
+
+
+def _signin(server, user, password=LOCAL_PW, next_="/admin"):
+    """POST /admin/login: (status, headers, the cookie=value part of Set-Cookie, or '')."""
+    status, head, _ = _call(server, "POST", "/admin/login", body=_form(user=user, password=password, next=next_),
+                            headers={"Content-Type": "application/x-www-form-urlencoded"})
+    return status, head, head.get("Set-Cookie", "").split(";", 1)[0]
+
+
+def _demo_item(iid, kind="finding", state="open"):
+    db.ex("INSERT INTO items (id, study_id, thread_key, first_message_id, last_message_id, dedup_key, kind, site,"
+          " polarity, title, tier, evidence, link_token, created_at, updated_at, state, routed)"
+          " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (iid, "NCT05842941", "t", 1, 1, f"k{iid}", kind, "site-01",
+           "problem" if kind == "finding" else "neutral", "Check-in missed", "medium", "{}", f"tok{iid}",
+           db.now(), db.now(), state, 1))
+
+
+def test_local_account_opens_the_admin_pages_on_a_laptop(monkeypatch):
+    from cormon import adminview, weblogin
+    monkeypatch.setattr(weblogin, "_fails", {})
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    conf = {"web.admin.local.enabled": True, "web.admin.local.user": "operator",
+            "web.admin.local.password_env": "ADMIN_PASSWORD", "web.admin.emails": ["peter@huma.ai"]}
+    server = _web_server(monkeypatch, conf)
+    try:
+        status, head, _ = _call(server, "GET", "/admin")
+        assert status == 302 and head["Location"] == "/admin/login?next=%2Fadmin"
+        status, head, body = _call(server, "GET", "/admin/login?next=%2Fadmin")
+        assert status == 200 and "default-src 'none'" in head["Content-Security-Policy"]
+        assert "Names: operator." in body and "<button>Sign in</button>" in body
+        status, head, _ = _signin(server, "operator", "wrong")
+        assert status == 303 and head["Location"] == "/admin/login?next=%2Fadmin&bad=1"
+        assert "Set-Cookie" not in head
+        assert db.q1("SELECT 1 FROM audit_log WHERE action='sign_in_failed'")
+        status, head, cookie = _signin(server, "operator", LOCAL_PW)
+        assert status == 303 and head["Location"] == "/admin"
+        assert head["Set-Cookie"].split("; ", 1)[1] == "Path=/; HttpOnly; SameSite=Lax; Max-Age=43200"
+        status, head, body = _call(server, "GET", "/admin", cookie=cookie)
+        assert status == 200 and 'data-email="operator@localhost"' in body
+        status, head, _ = _call(server, "GET", "/admin/api/home", cookie=cookie)
+        assert status == 200 and head["Content-Type"] == "application/json"
+        assert _call(server, "GET", f"/admin/static/{next(iter(adminview.STATIC))}", cookie=cookie)[0] == 200
+        row = db.unjs(db.q1("SELECT details FROM audit_log WHERE action='signed_in'")["details"], {})
+        assert row["email"] == "operator@localhost" and row["account"] == "operator"
+        assert db.q1("SELECT 1 FROM audit_log WHERE action='admin_viewed'")
+    finally:
+        server.shutdown()
+
+
+def test_local_account_is_off_on_a_server(monkeypatch):
+    import time as _t
+    from cormon import weblogin
+    conf = {"web.base_url": "https://mon.example", "web.login.client_id": "cid", "web.login.enabled": True,
+            "web.admin.emails": ["peter@huma.ai"]}
+    server = _web_server(monkeypatch, conf)
+    try:
+        assert _call(server, "GET", "/admin/login")[0] == 404
+        assert _call(server, "POST", "/admin/login", body=_form(user="operator", password=LOCAL_PW),
+                     headers={"Content-Type": "application/x-www-form-urlencoded"})[0] == 404
+        forged = f"{weblogin.COOKIE}=" + weblogin._sign({"email": "operator@localhost", "local": True, "pv": "x",
+                                                        "exp": _t.time() + 60})
+        status, _, body = _call(server, "GET", "/admin", cookie=forged)
+        assert status == 403 and weblogin.LOCAL_OFF in body
+        assert weblogin.signed_in(forged) is None
+        assert db.q1("SELECT 1 FROM audit_log WHERE action='admin_refused'")
+    finally:
+        server.shutdown()
+
+
+def test_local_account_is_off_in_the_live_copy(monkeypatch):
+    from cormon import config, weblogin
+    monkeypatch.setattr(config, "live", lambda: True)
+    conf = {"web.admin.local.enabled": True, "web.admin.local.user": "operator"}
+    server = _web_server(monkeypatch, conf)
+    try:
+        assert _call(server, "GET", "/admin/login")[0] == 404
+        assert _call(server, "POST", "/admin/login", body=_form(user="operator", password=LOCAL_PW),
+                     headers={"Content-Type": "application/x-www-form-urlencoded"})[0] == 404
+        monkeypatch.setattr(config, "live", lambda: False)      # a cookie minted on a laptop-like copy
+        cookie = _signin(server, "operator")[2]
+        assert cookie and weblogin.signed_in(cookie) == "operator@localhost"
+        monkeypatch.setattr(config, "live", lambda: True)
+        assert weblogin.signed_in(cookie) is None
+        status, _, body = _call(server, "GET", "/admin", cookie=cookie)
+        assert status == 403 and weblogin.LOCAL_OFF in body
+        assert db.q1("SELECT 1 FROM audit_log WHERE action='admin_refused'")
+    finally:
+        server.shutdown()
+
+
+def test_local_sign_in_refuses_another_site_and_a_bad_next(monkeypatch):
+    from cormon import weblogin
+    conf = {"web.admin.local.enabled": True, "web.admin.local.user": "operator"}
+    server = _web_server(monkeypatch, conf)
+    form = {"Content-Type": "application/x-www-form-urlencoded"}
+    try:
+        for origin in ("https://evil.example", "http://localhost:8065", "http://127.0.0.1:8090"):
+            status, _, body = _call(server, "POST", "/admin/login", body=_form(user="operator", password=LOCAL_PW),
+                                    headers={**form, "Origin": origin})
+            assert status == 403 and "did not come from this computer" in body
+        assert db.q1("SELECT 1 FROM audit_log WHERE action='sign_in_refused'")
+        status, _, _ = _call(server, "POST", "/admin/login", body=_form(user="operator", password=LOCAL_PW),
+                             headers={**form, "Host": "evil.example"})
+        assert status == 403
+        status, head, _ = _call(server, "POST", "/admin/login", body=_form(user="operator", password=LOCAL_PW),
+                                headers={**form, "Origin": f"http://127.0.0.1:{server.server_port}"})
+        assert status == 303 and "Set-Cookie" in head, "a loopback alias on the same port is this page"
+        for bad in ("//evil.com", "/\\evil.com", "https://evil.com", "/admin/login", "/admin/login?x=1",
+                    "/item\x00", "/ü", "javascript:alert(1)", "/" + "a" * 501):
+            assert weblogin.safe_next(bad) == "/admin"
+        status, head, _ = _signin(server, "operator", next_="//evil.com")
+        assert status == 303 and head["Location"] == "/admin"
+    finally:
+        server.shutdown()
+
+
+def test_local_session_ends_when_the_password_changes(monkeypatch):
+    from cormon import weblogin
+    conf = {"web.admin.local.enabled": True, "web.admin.local.user": "operator"}
+    server = _web_server(monkeypatch, conf)
+    try:
+        cookie = _signin(server, "operator")[2]
+        assert _call(server, "GET", "/admin", cookie=cookie)[0] == 200
+        monkeypatch.setenv("ADMIN_PASSWORD", "other")
+        assert weblogin.signed_in(cookie) is None
+        assert _call(server, "GET", "/admin", cookie=cookie)[0] == 302
+    finally:
+        server.shutdown()
+
+
+def test_local_account_needs_a_password(monkeypatch):
+    from cormon import weblogin
+    conf = {"web.admin.local.enabled": True, "web.admin.local.user": "operator"}
+    server = _web_server(monkeypatch, conf)
+    try:
+        monkeypatch.delenv("ADMIN_PASSWORD")
+        status, _, body = _call(server, "GET", "/admin")
+        assert status == 403 and weblogin.LOCAL_NOT_SET_UP in body and "ADMIN_PASSWORD" in body
+        assert _call(server, "GET", "/admin/login")[0] == 404
+        monkeypatch.setenv("ADMIN_PASSWORD", "   ")
+        assert _call(server, "GET", "/admin")[0] == 403
+    finally:
+        server.shutdown()
+
+
+def test_lockout(monkeypatch):
+    from cormon import weblogin
+    monkeypatch.setattr(weblogin, "_fails", {})
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    conf = {"web.admin.local.enabled": True, "web.admin.local.user": "operator"}
+    server = _web_server(monkeypatch, conf)
+    try:
+        for _ in range(10):
+            status, head, cookie = _signin(server, "operator", "wrong")
+            assert status == 303 and not cookie
+        status, head, cookie = _signin(server, "operator", LOCAL_PW)
+        assert status == 429 and not cookie
+        assert db.q1("SELECT 1 FROM audit_log WHERE action='sign_in_refused'")
+    finally:
+        server.shutdown()
+        weblogin._fails.clear()
+
+
+def test_nothing_changes_for_the_server_config(monkeypatch):
+    import time as _t
+    from cormon import weblogin
+    conf = {"web.login.enabled": True, "web.login.client_id": "cid", "web.base_url": "https://mon.example",
+            "web.admin.emails": ["staff@huma.ai"], "compliance.live": True}
+    server = _web_server(monkeypatch, conf)
+    try:
+        status, head, _ = _call(server, "GET", "/admin")
+        assert status == 302 and head["Location"].startswith(weblogin.AUTH)
+        assert _call(server, "GET", "/admin/login")[0] == 404
+        state = weblogin._sign({"back": "/items/x", "n": "0", "exp": _t.time() + 600})
+        claims = {"aud": "cid", "iss": "https://accounts.google.com", "email_verified": True,
+                  "exp": _t.time() + 60, "email": "staff@huma.ai"}
+        monkeypatch.setattr(weblogin, "exchange", lambda code: claims)
+        status, head, _ = _call(server, "GET", f"/auth/callback?code=c&state={state}")
+        assert status == 302 and head["Location"] == "/items/x"
+        assert head["Set-Cookie"].split("; ", 1)[1] == "Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=43200"
+        status, head, _ = _call(server, "GET", "/auth/logout")
+        assert head["Set-Cookie"] == f"{weblogin.COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"
+        assert weblogin.origin_ok("http://127.0.0.1:1") is False
+        assert weblogin.may_see("operator@localhost", "NCT05842941") is False
+    finally:
+        server.shutdown()
+
+
+def test_phone_ack_is_allowed_for_the_local_operator(monkeypatch):
+    from cormon import config, safety, weblogin
+    conf = {"web.admin.local.enabled": True, "web.admin.local.user": "operator",
+            "web.admin.emails": ["peter@huma.ai", "operator@localhost"], "features.ack_on_page": True}
+    server = _web_server(monkeypatch, conf)
+    _demo_item(21, kind="out_of_scope", state="out_of_scope")
+    _demo_item(22)
+    study = config.study("NCT05842941")
+    form = {"Content-Type": "application/x-www-form-urlencoded"}
+    try:
+        assert weblogin.may_see("operator@localhost", study.study_id)
+        assert safety.may_record(study, "operator@localhost")
+        cookie = _signin(server, "operator")[2]
+        status, _, body = _call(server, "GET", "/items/tok21", cookie=cookie)
+        assert 'action="/items/tok21/ack"' in body
+        status, _, body = _call(server, "POST", "/items/tok21/ack", cookie=cookie,
+                                body=_form(step="check", person="medical-monitor", note="phoned at 10"), headers=form)
+        assert status == 200 and "Confirm" in body
+        status, _, body = _call(server, "POST", "/items/tok22/close", cookie=cookie,
+                                body=_form(step="check", choice="done"), headers=form)
+        assert status == 403 and "may not close alerts" in body
+        conf.update({"web.base_url": "https://mon.example", "web.admin.emails": ["peter@huma.ai"]})
+        assert weblogin.may_see("operator@localhost", study.study_id) is False
+        assert safety.may_record(study, "operator@localhost") is False
+    finally:
+        server.shutdown()
+
+
+def test_the_demo_cast_closes_and_reviews_an_alert(monkeypatch):
+    import re
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from cormon import items, settings, weblogin
+    conf = {"web.admin.local.enabled": True, "web.admin.local.user": "operator",
+            "web.admin.local.accounts": {"peter": "peter@huma.ai", "eliot": "eliot@huma.ai"},
+            "web.admin.emails": ["peter@huma.ai", "eliot@huma.ai"], "features.close_on_page": True}
+    server = _web_server(monkeypatch, conf)
+    _demo_item(23)
+    now = datetime.now(ZoneInfo(settings.get("system.timezone", "America/New_York"))).strftime("%Y-%m-%dT%H:%M")
+    form = {"Content-Type": "application/x-www-form-urlencoded"}
+    sealed = lambda body: re.search(r'name="sealed" value="([^"]+)"', body).group(1)
+    try:
+        op = _signin(server, "operator")[2]                      # the operator has no study role
+        status, _, body = _call(server, "POST", "/items/tok23/close", cookie=op,
+                                body=_form(step="check", choice="other", details="gave another vial", done_at=now),
+                                headers=form)
+        assert status == 403 and "may not close alerts" in body
+        peter = _signin(server, "peter")[2]
+        assert weblogin.signed_in(peter) == "peter@huma.ai"
+        assert 'action="/items/tok23/close"' in _call(server, "GET", "/items/tok23", cookie=peter)[2]
+        status, _, body = _call(server, "POST", "/items/tok23/close", cookie=peter,
+                               body=_form(step="check", choice="other", details="gave another vial", done_at=now),
+                               headers=form)
+        assert status == 200 and "gave another vial" in body and items.get(23)["state"] == "open"
+        check = sealed(body)
+        eliot = _signin(server, "eliot")[2]                      # the check step's form is peter's, not eliot's
+        assert weblogin.signed_in(eliot) == "eliot@huma.ai"
+        status, _, body = _call(server, "POST", "/items/tok23/close", cookie=eliot,
+                                body=_form(step="confirm", sealed=check), headers=form)
+        assert status == 400 and "not yours" in body
+        status, _, _ = _call(server, "POST", "/items/tok23/close", cookie=peter,
+                             body=_form(step="confirm", sealed=check), headers=form)
+        assert status == 303 and items.get(23)["state"] == "waiting"
+        status, _, body = _call(server, "POST", "/items/tok23/review", cookie=peter,
+                                body=_form(step="check", decision="approve"), headers=form)
+        assert status == 403 and "you closed it yourself" in body
+        assert 'action="/items/tok23/review"' in _call(server, "GET", "/items/tok23", cookie=eliot)[2]
+        status, _, body = _call(server, "POST", "/items/tok23/review", cookie=eliot,
+                                body=_form(step="check", decision="approve"), headers=form)
+        assert status == 200 and "Your decision" in body
+        status, _, _ = _call(server, "POST", "/items/tok23/review", cookie=eliot,
+                             body=_form(step="confirm", sealed=sealed(body)), headers=form)
+        assert status == 303 and items.get(23)["state"] == "cleared"
+        chosen = db.q1("SELECT actor FROM audit_log WHERE action='item_closing_chosen'")["actor"]
+        reviewed = db.q1("SELECT actor FROM audit_log WHERE action='item_closing_reviewed'")["actor"]
+        assert "peter@huma.ai" in chosen and "eliot@huma.ai" in reviewed
+    finally:
+        server.shutdown()
+
+
+def test_cast_sessions_are_dead_off_the_laptop(monkeypatch):
+    from cormon import config, weblogin
+    conf = {"web.admin.local.enabled": True, "web.admin.local.user": "operator",
+            "web.admin.local.accounts": {"peter": "peter@huma.ai"}, "web.admin.emails": ["peter@huma.ai"]}
+    server = _web_server(monkeypatch, conf)
+    try:
+        cookie = _signin(server, "peter")[2]
+        assert weblogin.signed_in(cookie) == "peter@huma.ai"
+        conf["web.base_url"] = "https://mon.example"
+        assert weblogin.signed_in(cookie) is None
+        assert _call(server, "GET", "/admin", cookie=cookie)[0] == 403
+        assert weblogin.may_see("operator@localhost", "NCT05842941") is False
+        monkeypatch.setattr(config, "live", lambda: True)
+        conf["web.base_url"] = f"http://localhost:{server.server_port}"
+        assert weblogin.signed_in(cookie) is None
+        monkeypatch.setattr(config, "live", lambda: False)
+        conf["web.admin.local.enabled"] = False
+        assert weblogin.signed_in(cookie) is None
+        conf["web.admin.local.enabled"] = True
+        monkeypatch.setenv("ADMIN_PASSWORD", "changed")
+        assert weblogin.signed_in(cookie) is None
+        monkeypatch.setenv("ADMIN_PASSWORD", LOCAL_PW)
+        conf["web.admin.local.accounts"] = {}
+        assert weblogin.signed_in(cookie) is None
+        assert _call(server, "GET", "/admin", cookie=cookie)[0] == 302
+    finally:
+        server.shutdown()
+
+
+def test_admin_pages_need_the_admin_list_for_cast_accounts(monkeypatch):
+    conf = {"web.admin.local.enabled": True, "web.admin.local.user": "operator",
+            "web.admin.local.accounts": {"peter": "peter@huma.ai", "mallory": "mallory@evil.example"},
+            "web.admin.emails": ["peter@huma.ai"]}
+    server = _web_server(monkeypatch, conf)
+    try:
+        cookie = _signin(server, "peter")[2]
+        status, _, body = _call(server, "GET", "/admin", cookie=cookie)
+        assert status == 200 and 'data-email="peter@huma.ai"' in body
+        cookie = _signin(server, "mallory")[2]
+        status, _, body = _call(server, "GET", "/admin", cookie=cookie)
+        assert status == 403 and "not on the admin list" in body
+        cookie = _signin(server, "operator")[2]
+        status, _, body = _call(server, "GET", "/admin", cookie=cookie)
+        assert status == 200 and 'data-email="operator@localhost"' in body
+    finally:
+        server.shutdown()
+
+
+def test_origin_ok_pins_the_port(monkeypatch):
+    from cormon import settings, weblogin
+    conf = {"web.base_url": "http://localhost:8091", "web.admin.local.enabled": True,
+            "web.admin.local.user": "operator"}
+    real = settings.get
+    monkeypatch.setattr(settings, "get", lambda k, d=None: conf.get(k, real(k, d)))
+    monkeypatch.setenv("ADMIN_PASSWORD", LOCAL_PW)
+    assert weblogin.origin_ok(None) and weblogin.origin_ok("")
+    assert weblogin.origin_ok("http://localhost:8091")
+    assert weblogin.origin_ok("http://127.0.0.1:8091"), "a loopback alias with the same port"
+    assert weblogin.origin_ok("http://127.0.0.1:8091/"), "a trailing / is still this page"
+    assert weblogin.origin_ok("http://localhost:8065") is False
+    assert weblogin.origin_ok("https://127.0.0.1:8091") is False, "the scheme is pinned"
+    conf.update({"web.base_url": "https://mon.example", "web.admin.emails": ["peter@huma.ai"]})
+    assert weblogin.origin_ok("https://mon.example")
+    assert weblogin.origin_ok("http://127.0.0.1:8091") is False
+    assert weblogin.origin_ok("https://other.example") is False
+
+
 def _memory_store(monkeypatch, facts):
     """A fake Hindsight holding `facts`: list (by state and date), DELETE of a document, PATCH of a fact."""
     from cormon import hindsight

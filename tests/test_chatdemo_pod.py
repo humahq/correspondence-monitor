@@ -2,6 +2,8 @@
 import subprocess
 from pathlib import Path
 
+import yaml
+
 from cormon import chatdemo
 
 
@@ -56,3 +58,48 @@ def test_in_pod_only_when_asked(monkeypatch):
     assert chatdemo.in_pod()
     monkeypatch.setenv("OPENBOOK_BOT", "host")
     assert not chatdemo.in_pod()
+
+
+def test_the_demo_copy_gets_the_local_account(tmp_path, monkeypatch, capsys):
+    chat = tmp_path / "chat"
+    chat.mkdir()
+    (chat / "bot.yaml").write_text("""\
+team: huma-demo
+bot_name: Mira Belle
+rooms: {}
+people:
+  peter@demo.local: peter@huma.ai
+  eliot@demo.local: eliot@huma.ai
+local_accounts:   # ghost is not under people:, so it is skipped
+  peter: peter@demo.local
+  eliot: eliot@demo.local
+  ghost: ghost@demo.local
+""")
+    (chat / ".env").write_text("MM_BOT_TOKEN=x\n")
+    live = tmp_path / "live"
+    (live / "config").mkdir(parents=True)
+    (live / "config" / "settings.yaml").write_text("web:\n  admin:\n    emails: [a@b.c]\n")
+    monkeypatch.setattr(chatdemo, "_rooms", lambda *a, **k: {})
+    monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
+
+    def local_cfg(home):
+        cfg = yaml.safe_load((home / "config" / "settings.yaml").read_text())
+        return cfg["web"]["admin"]
+
+    home = chatdemo.prepare(live, chat)
+    admin = local_cfg(home)
+    assert admin["local"]["enabled"] is True and admin["local"]["user"] == "operator"
+    assert admin["local"]["password_env"] == "ADMIN_PASSWORD"
+    assert admin["local"]["password_file"] == str(chat / ".env")
+    assert admin["local"]["accounts"] == {"peter": "peter@huma.ai", "eliot": "eliot@huma.ai"}
+    assert admin["emails"] == ["a@b.c", "operator@localhost"], "the existing email kept, appended once"
+    out = capsys.readouterr().out
+    assert "ghost -> ghost@demo.local is not under people:, skipped" in out
+    assert f"no ADMIN_PASSWORD in {chat / '.env'}" in out
+
+    (chat / ".env").write_text("MM_BOT_TOKEN=x\nADMIN_PASSWORD=abc123\n")
+    home = chatdemo.prepare(live, chat)
+    assert local_cfg(home)["emails"] == ["a@b.c", "operator@localhost"], "no duplicate on a second start"
+    assert "no ADMIN_PASSWORD" not in capsys.readouterr().out
+    hint = chatdemo.admin_hint(chat, 8091)
+    assert "http://localhost:8091/admin" in hint and "operator, peter, eliot" in hint and "ADMIN_PASSWORD" in hint
