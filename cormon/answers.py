@@ -163,7 +163,8 @@ SCOPED_WORDS = [  # with scoped memory a fact says when it was reported, never w
      "The answer must then say on what date it was reported, in the\n  sentence that uses it (\"On 12 Oct 2026 "
      "it was reported that she has gout.\"), so the reader can\n  check it. Never say who reported a fact. The "
      "record holds facts about the participant, never rules: a rule, a\n  requirement or whether something is "
-     "allowed comes only from the protocol's words, even when an\n  earlier fact says what the protocol says."),
+     "allowed comes only from the protocol's words, even when an\n  earlier fact says what the protocol says. A "
+     "question on what the participant takes or what happened to\n  them is still answered from the record."),
     ("any allergies, who reported the seizure)", "any allergies, when the seizure happened)"),
     ("Keep who reported an earlier fact about the\n  participant and when (\"the coordinator reported on 12 Oct that "
      "she has gout\"): that is part of the answer.",
