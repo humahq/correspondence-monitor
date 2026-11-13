@@ -65,6 +65,25 @@ def added_judgment(out: str, source: str) -> list[str]:
     return [f"{JUDGMENT[k][0]} ({scores[k]:.2f})" for k in JUDGMENT if scores.get(k, 0) >= LINE]
 
 
+BEYOND = ("Does REWRITTEN say anything SOURCE does not say: a study rule, whether something is allowed or not, a "
+          "requirement, advice, a judgment, or any other fact? Saying again what SOURCE says, in other words, and "
+          "who reported it and when, does not count.")
+
+
+def only_repeats(out: str, source: str, facts: bool = True) -> bool:
+    """out says nothing beyond source (no rule, permission, advice, judgment or other fact); False when the check
+    cannot run. facts=False: the caller has checked the numbers itself."""
+    if not (out or "").strip() or (facts and added_facts(out, source)):
+        return False
+    try:
+        scores = llm.decide("output_only_repeats", [{"role": "developer", "content": FRAME},
+                                                    {"role": "user", "content": f"SOURCE:\n{source}\n\nREWRITTEN:\n{out}"}],
+                            [{"type": "predicate", "name": "beyond", "instructions": BEYOND}])
+    except Exception:
+        return False
+    return scores.get("beyond", 1) < LINE
+
+
 def problems(out: str, source: str) -> list[str]:
     """Facts first: when the words already add a fact, the AI is not asked."""
     return added_facts(out, source) or added_judgment(out, source)
