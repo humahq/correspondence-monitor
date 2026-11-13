@@ -39,6 +39,14 @@ SORT_REPORTS = """
 A question on what the study's own messages reported about a participant (what she takes, what happened, who
 reported it and when) is study: the bot keeps those facts to answer such questions. about_bot is only for the bot's
 workings and for messages or data that are not about the study."""
+SORT_PEOPLE = """
+- people: asks who reported, said, told, wrote, did, left or missed something, or asks about a staff member's work
+  (how often they ask or write, their mistakes, how fast they reply, how they compare with others). A question on
+  what happened to a participant, or on what the study documents say, is never people."""
+SORT_REPORTS_SCOPED = """
+A question on what the study's own messages reported about a participant (what she takes, what happened, when it
+was reported) is study: the bot keeps those facts to answer such questions. about_bot is only for the bot's
+workings and for messages or data that are not about the study."""
 SORT_EARLIER = """
 EARLIER IN THIS CONVERSATION is only there to understand MESSAGE: sort only what MESSAGE asks. A follow-up ("and
 week 8?", "make slides of that") or a correction ("sorry, I meant 012") has the kind and topic of what it now asks,
@@ -54,7 +62,13 @@ SORT_SCHEMA = llm.obj({"requests": {"type": "array", "items": llm.obj({
 DECLINE = {
     "improper": "I can't help with that. Study records must stay complete and accurate. Please talk to your CRA.",
     "about_bot": "I can't share that. I only answer questions about the study from its documents.",
+    "people": "I don't say who reported or did something, and I don't keep track of how people work. I only keep "
+              "facts about the participants. Your site's own records show who entered what.",
 }
+SCOPED_SCHEMA = llm.obj({"requests": {"type": "array", "items": llm.obj({
+    "request": {"type": "string"},
+    "kind": {"type": "string", "enum": KINDS + ["people"]},
+    "topic": {"type": "string"}})}})
 LEAD = {  # what the bot does not do itself, but can give the documents' facts for, to use with another AI
     "opinion": "I can't judge that for you. It needs an opinion, or knowledge I don't have, such as about your site, "
                "your team or your patients. I only know what the study documents say.",
@@ -78,10 +92,13 @@ def private(msg: dict) -> bool:
 def sort(text: str, use_cache: bool = True, earlier: list[dict] | None = None) -> list[dict]:
     prompt = (f"EARLIER IN THIS CONVERSATION:\n{conversation.block(earlier)}\n\n" if earlier else "") + \
         f"MESSAGE:\n{text}"
-    system = SORT_SYSTEM + (SORT_REPORTS if settings.feature("asks_about_reports") else "")
-    res = llm.structured("asks_sort", system + (SORT_EARLIER if earlier else ""), prompt, SORT_SCHEMA,
-                         "requests", use_cache=use_cache)
-    return [r for r in res["requests"] if r["kind"] in KINDS]
+    scoped = settings.feature("scoped_memory")
+    reports = SORT_REPORTS_SCOPED if scoped else SORT_REPORTS
+    system = SORT_SYSTEM.replace("\n- other:", SORT_PEOPLE + "\n- other:") if scoped else SORT_SYSTEM
+    system += reports if settings.feature("asks_about_reports") or scoped else ""
+    res = llm.structured("asks_sort", system + (SORT_EARLIER if earlier else ""), prompt,
+                         SCOPED_SCHEMA if scoped else SORT_SCHEMA, "requests", use_cache=use_cache)
+    return [r for r in res["requests"] if r["kind"] in KINDS or (scoped and r["kind"] == "people")]
 
 
 def _link(url: str, label: str, chat: bool) -> str:

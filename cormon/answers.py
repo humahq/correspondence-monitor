@@ -155,6 +155,31 @@ Rules:
 
 PLAIN_SCHEMA = llm.obj({"text": {"type": "string"}})
 
+UNSOURCED_WHY = " Your answer uses earlier facts without saying who reported them and when: "
+SCOPED_WORDS = [  # with scoped memory a fact says when it was reported, never who reported it
+    ("consent, who reported something and when)", "consent, when something was reported)"),
+    ("The answer must then say who reported it and on what date, in the\n  sentence that uses it (\"The study "
+     "coordinator reported on 12 Oct 2026 that she has gout.\"), so the reader can\n  check it.",
+     "The answer must then say on what date it was reported, in the\n  sentence that uses it (\"On 12 Oct 2026 "
+     "it was reported that she has gout.\"), so the reader can\n  check it. Never say who reported a fact. The "
+     "record holds facts about the participant, never rules: a rule, a\n  requirement or whether something is "
+     "allowed comes only from the protocol's words, even when an\n  earlier fact says what the protocol says."),
+    ("any allergies, who reported the seizure)", "any allergies, when the seizure happened)"),
+    ("Keep who reported an earlier fact about the\n  participant and when (\"the coordinator reported on 12 Oct that "
+     "she has gout\"): that is part of the answer.",
+     "Keep when an earlier fact about the\n  participant was reported (\"on 12 Oct it was reported that she has "
+     "gout\"): that is part of the answer.\n  Never say who reported it."),
+    (UNSOURCED_WHY, " Your answer uses earlier facts without saying when they were reported: "),
+]
+
+
+def _scoped(prompt: str) -> str:
+    if not hindsight.scoped():
+        return prompt
+    for old, new in SCOPED_WORDS:
+        prompt = prompt.replace(old, new)
+    return prompt
+
 ASK_SYSTEM = """A clinical-trial study monitor bot could not settle a site's question from the protocol with what it
 knows. Decide whether one or two facts that the person who asked can give would let the protocol settle it: a date
 (baseline, a visit, a dose, an event), which participant, visit, sample or medicine they mean, or what exactly
@@ -204,7 +229,7 @@ def find(text: str, use_cache: bool = True, earlier: list[dict] | None = None) -
     it, if none of its own questions is about the harm. earlier: the conversation just before (follow-ups)."""
     prompt = (f"EARLIER IN THIS CONVERSATION:\n{conversation.block(earlier)}\n\n" if earlier else "") + \
         f"MESSAGE:\n{text}"
-    res = llm.structured("answer_find", FIND_SYSTEM + (FIND_EARLIER if earlier else ""), prompt, FIND_SCHEMA,
+    res = llm.structured("answer_find", _scoped(FIND_SYSTEM) + (FIND_EARLIER if earlier else ""), prompt, FIND_SCHEMA,
                          "questions", use_cache=use_cache)
     qs = [q for q in res["questions"] if q["question"].strip()][:MAX_QUESTIONS]
     if res["harm"] and not any(q["harm"] for q in qs):
@@ -417,7 +442,7 @@ def _names_read(answer: str, read: str) -> str:
     return NAMED.sub(name, answer)
 
 
-FACT_LINE = re.compile(r"^(?:earlier fact|NO LONGER TRUE)[^:]*?, reported on (\d{1,2}) (\w{3}) (\d{4}) by (.+?): (.*)$")
+FACT_LINE = re.compile(r"^(?:earlier fact|NO LONGER TRUE)[^:]*?, reported on (\d{1,2}) (\w{3}) (\d{4})(?: by (.+?))?: (.*)$")
 PLAIN_WORDS = {"participant", "reported", "started", "taking", "stopped", "screening", "protocol", "medicine",
                "medication", "monitoring", "coordinator", "research", "associate", "because", "before", "after",
                "during", "visit", "study", "daily", "every", "today", "yesterday", "earlier", "should", "would",
@@ -439,7 +464,7 @@ def _unsourced(answer: str, record: list[str], asked: str) -> list[str]:
         dated = re.search(rf"\b0?{int(day)}\s+{mon}|{mon}\w*\s+0?{int(day)}\b", answer, re.I) or \
             f"{year}-{datetime.strptime(mon, '%b').month:02d}-{int(day):02d}" in low
         if used and not dated:
-            out.append(f"'{used[0]}' (reported on {day} {mon} {year} by {who})")
+            out.append(f"'{used[0]}' (reported on {day} {mon} {year}" + (f" by {who})" if who else ")"))
     return out
 
 
@@ -582,7 +607,8 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
                + "\n".join(f"- {x}" for x in own) if own else "")
             + f"\n\nTHE SITE'S MESSAGE:\n{email}\n\nQUESTION TO ANSWER: {q['question']}")
     sourced = settings.feature("sentence_sources")
-    system, schema = (ANSWER_SYSTEM + SENTENCES_RULE, ANSWER_SCHEMA_S) if sourced else (ANSWER_SYSTEM, ANSWER_SCHEMA)
+    plain = _scoped(ANSWER_SYSTEM)
+    system, schema = (plain + SENTENCES_RULE, ANSWER_SCHEMA_S) if sourced else (plain, ANSWER_SCHEMA)
     res = llm.structured("answer_question", system, user, schema, "answer", use_cache=use_cache)
     given = sched + own + [f"message date {reader._email_date(msg):%d %B %Y}"]   # numbers the AI was given
     args = (q, secs, checklists, sources, visits, email, record, given)
@@ -596,10 +622,9 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
                                     f"{', '.join(loose)}. Give each one as a calculation from the protocol's or "
                                     f"the record's numbers, or leave it out." if loose else "")
         if unsourced:
-            why += (" Your answer uses earlier facts without saying who reported them and when: "
-                    + "; ".join(unsourced) + ". Say it in the sentence that uses each one.")
+            why += (_scoped(UNSOURCED_WHY) + "; ".join(unsourced) + ". Say it in the sentence that uses each one.")
         fix = f"\n\nYOUR ANSWER:\n{json.dumps(res, ensure_ascii=False)}\n\n{why.strip()} Answer again in full."
-        res2 = llm.structured("answer_question", ANSWER_SYSTEM, user + fix, ANSWER_SCHEMA, "answer",
+        res2 = llm.structured("answer_question", plain, user + fix, ANSWER_SCHEMA, "answer",
                               use_cache=use_cache)
         again = _proof(res2, q, secs, checklists, sources, visits, email, record, given)
         if again["traced"] and again["proven"] and (not found["traced"] or len(
@@ -705,8 +730,7 @@ def _by_sentence(res: dict, found: dict, args: tuple, user: str, system: str, sc
     if dropped or loose(kept):
         why = " ".join(f'Dropped "{t}": {w}.' for t, w in dropped)
         if unsourced := loose(kept):
-            why += (" Your answer uses earlier facts without saying who reported them and when: "
-                    + "; ".join(unsourced) + ". Say it in the sentence that uses each one.")
+            why += (_scoped(UNSOURCED_WHY) + "; ".join(unsourced) + ". Say it in the sentence that uses each one.")
         fix = f"\n\nYOUR ANSWER:\n{json.dumps(res, ensure_ascii=False)}\n\n{why.strip()} Answer again in full."
         res2 = llm.structured("answer_question", system, user + fix, schema, "answer", use_cache=use_cache)
         found2 = _proof(res2, *args)
@@ -816,7 +840,7 @@ def _plain_said(a: dict, reader_role: str, use_cache: bool) -> str:
     earlier = a.get("from_record") or []
     rule = careful.tone(a.get("tone"))
     try:
-        said = _clean(llm.structured("answer_plain", PLAIN_SYSTEM + (f"\n{rule}" if rule else ""),
+        said = _clean(llm.structured("answer_plain", _scoped(PLAIN_SYSTEM) + (f"\n{rule}" if rule else ""),
                                      f"READER: {reader_role}\n\nQUESTION: "
                                      f"{a['question']}\n\nCHECKED ANSWER:\n{facts}\n\nPROTOCOL'S WORDS:\n{words}"
                                      + ("\n\nEARLIER MESSAGES' FACTS IT RESTS ON:\n"

@@ -205,6 +205,35 @@ def render_problem(item: dict, why: str) -> str:
 <p><a href="/items/{_e(item['link_token'])}">Back to item #{item['id']}</a></p></body></html>"""
 
 
+def _fact_rows(study_id: str, facts: list[dict]) -> str:
+    if not facts:
+        return '<p class="muted">None.</p>'
+    rows = []
+    for f in facts:
+        state = '<span class="tag">taken out of answers</span>' if f["retired"] else ""
+        change = "" if f["retired"] else f"""<details><summary>Correct it or take it out</summary>
+<form method="post" action="/memory/{_e(study_id)}/change"><input type="hidden" name="fact" value="{_e(f['id'])}">
+<p><label>Corrected fact (leave empty to take it out of answers)<br><textarea name="text" rows="2" cols="70"></textarea>
+</label></p><p><label>Why<br><input name="reason" size="70" required></label></p><p><button>Save</button></p></form>
+</details>"""
+        rows.append(f"<tr><td>{_e(', '.join(f['participants']) or 'no participant')}</td><td>{_e(f['text'])} {state}"
+                    f"{change}</td><td>{_e(f['happened'])}</td><td>{_e(f['reported'])}</td></tr>")
+    return ("<table><tr><th>Participant</th><th>Fact</th><th>Happened</th><th>Reported</th></tr>"
+            + "".join(rows) + "</table>")
+
+
+def render_memory(study, person, seen: dict) -> str:
+    """A study person's review of patient memory: the facts they reported, and the facts at the sites they lead.
+    No fact shows who reported it."""
+    site = (f"<h2>Facts at your site</h2>{_fact_rows(study.study_id, seen['site'])}"
+            if seen.get("site") or seen.get("leads") else "")
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>Patient memory: {_e(study.short_name)}</title>
+<style>{CSS}</style></head><body><h1>Patient memory: {_e(study.short_name)}</h1>
+<p class="muted">Signed in as {_e(person.email)}. The bot keeps facts about participants from the study's messages,
+to answer questions about them. Each change needs a reason and is kept in the audit trail.</p>
+<h2>Facts you reported</h2>{_fact_rows(study.study_id, seen['mine'])}{site}</body></html>"""
+
+
 def render_item(item: dict, email: str | None = None, path: str = "") -> str:
     s = config.study(item["study_id"])
     ev = item["evidence"]
@@ -438,8 +467,70 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, KeyError) as e:
             return self._send(400, render_problem(item, str(e).strip("'")))
 
+    def _memory_person(self, study_id: str):
+        """(study, person, email) for the memory review page, or None after a sign-in redirect or refusal."""
+        from . import hindsight
+        study = config.studies().get(study_id)
+        if not study or not hindsight.enabled() or not hindsight.scoped():
+            self._send(404, "not found", "text/plain")
+            return None
+        if not weblogin.ready():
+            self._send(403, "This page needs Google sign-in set up.", "text/plain; charset=utf-8")
+            return None
+        email = weblogin.signed_in(self.headers.get("Cookie"))
+        if not email:
+            self._send(302, "", "text/plain", {"Location": weblogin.sign_in_url(self.path)})
+            return None
+        person = study.person_by_email(email)
+        if not person:
+            db.audit("page_refused", entity_type="memory_review", entity_id=study_id, study_id=study_id, email=email)
+            self._send(403, f"You are signed in as {email}, which is not on this study's people list.",
+                       "text/plain; charset=utf-8")
+            return None
+        return study, person, email
+
+    def _memory_get(self, study_id: str):
+        from . import hindsight
+        got = self._memory_person(study_id)
+        if not got:
+            return
+        study, person, email = got
+        try:
+            seen = dict(hindsight.review(study, person), leads=bool(hindsight.review_sites(study, person)))
+        except Exception as e:
+            return self._send(502, f"Patient memory could not be read: {str(e)[:200]}", "text/plain; charset=utf-8")
+        db.audit("page_viewed", entity_type="memory_review", entity_id=study_id, study_id=study_id, email=email)
+        return self._send(200, render_memory(study, person, seen))
+
+    def _memory_post(self, study_id: str):
+        from . import hindsight
+        got = self._memory_person(study_id)
+        if not got:
+            return
+        study, person, email = got
+        origin = (self.headers.get("Origin") or "").rstrip("/")
+        size = int(self.headers.get("Content-Length") or 0)
+        if (origin and origin != (settings.get("web.base_url") or "").rstrip("/")) or not 0 < size <= 20000:
+            db.audit("memory_change_refused", entity_type="memory_review", entity_id=study_id, study_id=study_id,
+                     email=email, why="not from the memory page")
+            return self._send(403, "This form did not come from the memory page.", "text/plain; charset=utf-8")
+        form = parse_qs(self.rfile.read(size).decode("utf-8", "replace"))
+        f = lambda k: (form.get(k) or [""])[0].strip()  # noqa: E731
+        try:
+            hindsight.staff_change(study, email, f("fact"), "correct" if f("text") else "retire", f("reason"),
+                                   f("text"))
+        except PermissionError as e:
+            return self._send(403, str(e), "text/plain; charset=utf-8")
+        except ValueError as e:
+            return self._send(400, str(e), "text/plain; charset=utf-8")
+        except Exception as e:
+            return self._send(502, f"Patient memory could not be changed: {str(e)[:200]}", "text/plain; charset=utf-8")
+        return self._send(303, "", "text/plain", {"Location": f"/memory/{study_id}"})
+
     def do_POST(self):
         from . import adminview
+        if self.path.startswith("/memory/") and self.path.endswith("/change"):
+            return self._memory_post(self.path.split("/")[2])
         if self.path.startswith("/items/"):
             token, _, action = self.path.split("/items/", 1)[1].split("?")[0].partition("/")
             if action in ("close", "review"):
@@ -480,6 +571,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(code, body, "text/plain; charset=utf-8", headers)
         if self.path == "/admin" or self.path.startswith(("/admin/", "/admin?")):
             return self._admin()
+        if self.path.startswith("/memory/"):
+            return self._memory_get(self.path.split("/memory/", 1)[1].split("?")[0].strip("/"))
         if self.path.startswith("/items/"):
             token = self.path.split("/items/", 1)[1].split("?")[0]
             row = db.q1("SELECT id, study_id FROM items WHERE link_token=?", (token,))
