@@ -487,6 +487,28 @@ def test_an_answer_on_what_happened_stands_on_the_record_lines_it_cites(monkeypa
     assert not answers.answer_one(study, msg, q, [], [], "")["found"], "a line that is not in the record"
 
 
+def test_an_answer_only_from_the_record_stands_though_the_finder_took_it_for_a_rule_question(monkeypatch):
+    from cormon import answers, hindsight, llm, memory
+    line = ("earlier fact, reported on 12 Nov 2026 by John Huma (Sponsor ClinOps lead): G-708-305 has gout and "
+            "takes allopurinol 100 mg daily.")
+    monkeypatch.setattr(hindsight, "recall", lambda *a: ([line], set()))
+    monkeypatch.setattr(memory, "history", lambda *a, **kw: [])
+    said = {"answerable": True, "serious_event": False, "calculations": [], "quotes": [],
+            "answer": "He takes allopurinol 100 mg daily. John Huma reported this on 12 Nov 2026.",
+            "record_used": [line]}
+    monkeypatch.setattr(llm, "structured", lambda task, *a, **kw: {"ids": []} if task == "answer_pick" else said)
+    judged = {"score": 0.0}
+    monkeypatch.setattr(llm, "decide", lambda *a, **kw: {k: judged["score"] for k in answers.outcheck.JUDGMENT})
+    msg = {"id": 42, "sent_at": "2026-11-13T05:02:00+00:00"}
+    q = {"question": "What is G708305 taking?", "participant": "G708305", "harm": False, "record_only": False}
+    study = type("S", (), {"study_id": "S1", "raw": {}, "documents": []})()
+    assert not answers.answer_one(study, msg, q, [], [], "G708305")["found"]   # switch off: as before
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "record_answers")
+    assert answers.answer_one(study, msg, q, [], [], "G708305")["found"]
+    judged["score"] = 0.9   # the answer adds a judgment ("so he must stop it"): still held back
+    assert not answers.answer_one(study, msg, q, [], [], "G708305")["found"]
+
+
 def test_the_messages_own_date_replaces_an_earlier_one_for_the_same_thing(monkeypatch):
     from cormon import answers, hindsight, llm, memory
     friday = {"label": "next dose", "kind": "dose", "date": "2026-11-13"}
@@ -1726,6 +1748,10 @@ def test_a_short_code_that_fits_two_participants_is_asked_about_not_guessed(monk
     assert answers.which_participant(study, picked, "and what is 131 on?", one_named) == ""
     assert answers.which_participant(study, picked, "and what is 131 on?", both_named).startswith("Which")
     assert answers.which_participant(study, picked, "G-708-131 takes 131 mg of it?", []) == ""
+    none_picked = {"question": "What is 131 taking?", "participant": ""}
+    assert answers.which_participant(study, none_picked, "@mira what is 131 taking?", []).startswith("Which")
+    assert answers.which_participant(study, none_picked, "is 131 mg a usual dose?", []) == ""
+    assert answers.which_participant(study, none_picked, "what does section 5.131 say?", []) == ""
     monkeypatch.setattr(hindsight, "participants", lambda s, timeout=5: {"G708131": "G708131"})
     assert answers.which_participant(study, picked, "what medicines is 131 on?", []) == ""
 
@@ -3424,6 +3450,33 @@ def test_privacy_check_reads_an_email_reply_by_its_one_reader_and_skips_answers_
     monkeypatch.setattr(rooms, "members", lambda s: {"emails": {CRC}, "complete": False, "error": "403"})
     privacy.screen(study, with_stranger, [_hiv_answer()])
     assert len(calls) == 2 and "could not list" in calls[1]   # an unreadable member list counts as a stranger
+
+
+def test_a_reply_in_a_chat_thread_is_read_with_that_thread_not_the_rooms_latest_talk(monkeypatch):
+    from cormon import capture, conversation
+
+    def said(mid, thread, text, mins_ago):
+        db.ex("INSERT INTO messages (id, channel, external_id, thread_key, study_id, route, visibility, from_name,"
+              " body_text, received_at, status) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+              (mid, "teams", f"x{mid}", f"teams:spaces/R/threads/{thread}", "NCT05842941", "study", "group",
+               "John Rohit", text, db.later(-mins_ago), "processed"))
+    said(1, "A", "@bot G-708-301's next dose was moved to Tuesday. Anything to sort out first?", 55)
+    db.ex("INSERT INTO outbox (message_id, purpose, channel, destination, to_addrs, body, status, created_at,"
+          " sent_at, meta) VALUES (?,?,?,?,?,?,?,?,?,?)",
+          (1, "question_answer", "teams", "teams_study_channel", "[]", "Yes. G-708-301 started St John's wort.",
+           "sent", db.later(-54), db.later(-54), '{"target": {"space": "spaces/R", "thread": "spaces/R/threads/A"}}'))
+    said(2, "B", "@bot what is 305 taking?", 20)
+    said(3, "B", "G708305", 19)
+    said(4, "A", "Who reported the St John's wort, and when?", 0)
+    reply = capture.message(4)
+    texts = " ".join(t["text"] for t in conversation.recent(reply))
+    assert "305" in texts and "301" not in texts   # switch off: the room's last half hour, as before
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "thread_context")
+    texts = " ".join(t["text"] for t in conversation.recent(reply))
+    assert "G-708-301" in texts and "St John's wort" in texts and "305" not in texts
+    assert "305" in " ".join(t["text"] for t in conversation.about(reply, "G-708-301"))   # privacy: whole room
+    said(5, "C", "@bot and week 8?", 0)   # a new message in the room still reads the room
+    assert "305" in " ".join(t["text"] for t in conversation.recent(capture.message(5)))
 
 
 def test_privacy_check_reads_what_the_room_already_saw_about_the_participant(monkeypatch):

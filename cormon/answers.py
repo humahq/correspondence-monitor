@@ -198,6 +198,7 @@ def find(text: str, use_cache: bool = True, earlier: list[dict] | None = None) -
 
 
 WHICH = "Which participant do you mean: {codes}? More than one participant's code ends in {short}, so I won't guess."
+UNITS = r"mg|mcg|µg|g|kg|ml|l|mmol|%|days?|d|weeks?|wks?|months?|years?|yrs?|hours?|hrs?|h|min|bpm|mmhg|cm|mm"
 
 
 def _codes(study_id: str) -> dict[str, str]:
@@ -217,11 +218,12 @@ def which_participant(study: Study, q: dict, email: str, earlier: list[dict]) ->
     conversation before."""
     p = memory.key(q.get("participant"))
     written = hindsight.written_codes(email or "")
-    if not p:
-        return ""
+    if not p:   # the finder may not take a bare number for a participant: the message's own short codes
+        written = {w for w in written if w.isdigit() and re.search(rf"(?<![\w.-]){w}(?![\w.-]|\s*(?:{UNITS})\b)",
+                                                                    email or "", re.I)}
     codes = None
-    for w in sorted(written | {p}, key=len):
-        if w != p and (p in written or not memory.short_for(w, p)):
+    for w in sorted(written | ({p} if p else set()), key=len):
+        if p and w != p and (p in written or not memory.short_for(w, p)):
             continue
         codes = _codes(study.study_id) if codes is None else codes
         fits = {x for x in set(codes) | {p} if memory.short_for(w, x)}
@@ -233,6 +235,16 @@ def which_participant(study: Study, q: dict, email: str, earlier: list[dict]) ->
         shown = [q["participant"].strip() if x == p else codes.get(x) or x for x in sorted(fits)]
         return WHICH.format(codes=", ".join(shown[:-1]) + f" or {shown[-1]}", short=w)
     return ""
+
+
+def _only_reports(res: dict, found: dict, from_record: list[str], question: str) -> bool:
+    """A question the finder took for a rule question ('What is G708305 taking?', rebuilt from a reply) whose answer
+    rests on the participant's record alone, quoting no protocol words, and adds no clinical judgment or care
+    instruction to what was reported: it is a question on what happened, answered from the record."""
+    if not (settings.feature("record_answers") and res["answerable"] and from_record and found["traced"]
+            and not found["proven"] and not res.get("quotes") and not found["sums"]):
+        return False
+    return not outcheck.added_judgment(found["text"], "\n".join([question] + from_record))
 
 
 def _label(d: dict) -> str:
@@ -555,10 +567,11 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
     # an answer that says the protocol is silent but gives its proven numbers is still shown; one on what happened
     # to the participant stands on the record lines it rests on
     from_record = found["from_record"] if pid else []
+    record_only = q.get("record_only") or _only_reports(res, found, from_record, q["question"])
     return {"question": q["question"], "participant": pid, "text": found["text"], "quotes": found["proven"][:4],
             "ask": ask, "from_record": from_record,
             "sums": found["sums"], "serious": bool(res["serious_event"]),
-            "found": bool(found["proven"] or (q.get("record_only") and res["answerable"] and from_record)),
+            "found": bool(found["proven"] or (record_only and res["answerable"] and from_record)),
             "traced": found["traced"], "picked": [i["id"] for i in secs + checklists],
             "read": [reader._heading(i) for i in secs + checklists], "record": record, "windows": sched,
             "chosen": [x for x in dict.fromkeys(picked_ids) if x in known and known[x]["kind"] == "section"]}
