@@ -25,4 +25,4 @@ for who in "$@"; do
   "${G[@]}" iam service-accounts add-iam-policy-binding "$SA" \
     --member "$m" --role roles/iam.serviceAccountUser >/dev/null
 done
-echo "done. They can now run ./bin/cormon-cloud status (see README, 'Testing guide')."
+echo "done. They can now run ./bin/cormon-cloud status (see PETER_SETUP.md, Part 4)."

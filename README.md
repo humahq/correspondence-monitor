@@ -1,78 +1,85 @@
 # Correspondence Monitor
 
-A monitor for clinical trial messages. It reads the emails and Google Chat messages it is included on, checks them against the study's own documents, and tells the right people when something breaks the protocol. It never reviews safety information.
+A monitor for clinical trial messages. It reads the emails and chat messages it is included on, checks them
+against the study's own documents, and tells the right people when something breaks the protocol. It answers
+questions about the study and about each patient, from the documents and from what earlier messages reported. It
+never judges safety information.
 
-**Live study:** HEALEY ALS Platform Trial, **Regimen G (DNL343), NCT05842941**. The documents are the Master Protocol V6.0 and the Regimen G Appendix V2.0 (`studies/NCT05842941/docs/`).
+**Live study:** HEALEY ALS Platform Trial, **Regimen G (DNL343), NCT05842941**. The documents are the Master
+Protocol V6.0 and the Regimen G Appendix V2.0 (`studies/NCT05842941/docs/`). An older demo study, **MAP
+(NCT04098666)**, is still in the code; its lab manual is a placeholder.
 
-An older demo study, **MAP (NCT04098666)**, is still in the code. Its lab manual is a placeholder written for the demo.
+**To install it on your laptop and test it, see [PETER_SETUP.md](PETER_SETUP.md).**
 
-## Testing guide (for Eliot and Peter)
+## The three bots
 
-**New to Terminal? Use the simple step-by-step guide: [PETER_SETUP.md](PETER_SETUP.md)** (Mac, Windows and Linux).
+| | Server 1: live | Server 2: test | Laptop demo |
+|---|---|---|---|
+| Talk to it in | Google Chat (DNL343 rooms) and email | Google Chat (Test Study Room) | Mattermost on your laptop |
+| Bot | bot@huma.ai | bot_test@huma.ai | Mira Belle |
+| New features | only those John said yes to | all of them | all of them |
+| Updated | only when John runs the release | after every merge to main | when you pull (see PETER_SETUP.md) |
 
-**How it's set up:** the bot runs on a small Google Cloud server that is always on (project `optical-depth-506808-t0`, server `cormon-demo`). You don't install the bot. You talk to it in Google Chat or by email. To run test sets or look inside, you type short commands in Terminal, signed in with your own huma.ai Google account.
+Details and the update steps: [docs/servers.md](docs/servers.md). Every new feature has a switch, off on the live
+bot until John says yes: [docs/features.md](docs/features.md).
 
-Only one copy of the bot should read the inbox and chat, so **don't start the bot on your own laptop.** Always use `./bin/cormon-cloud`.
+## The workflow: what happens to a message
 
-### Part 1: One-time setup (about 5 minutes; only needed for the Terminal commands)
+1. **A message arrives.** An email with the study address in To or Cc (`bot+NCT05842941@huma.ai`), or a chat
+   message in a room the bot is in. It is stored whole: text, headers, attachments, time and channel. It belongs to
+   the study of its address or chat room; the bot never guesses the study.
+2. **The bot reads it.** For each patient it works out what happened and when, and whether it is **done**,
+   **planned** or **old news**. Dates like "9/15" or "wk2 done 10/6" become days from Baseline (Day 0).
+3. **It remembers.** The facts about each patient (medicines, events, visits, dates, who reported them) are saved
+   in patient memory, tagged with the patient's code. Only messages from people on the study's list are saved. A
+   correction ("the fall was on 5 Nov, not 3 Nov") replaces the old fact.
+4. **It checks the rules.**
+   - Dates, times and numbers are checked by plain **code**, so the same message always gets the same answer.
+   - Rules without a number ("consent before any study procedure") are judged by the **AI**.
+   - A second AI reads the original protocol section and must agree. The site's words must be in the message, and
+     the protocol's words must be found word for word in the document.
+5. **It decides how urgent it is, and who to tell** (see "Who gets what").
+6. **It answers** when someone talks to it: a question, a request, or a reply to its alert.
+7. **It records everything.** Every message, decision, send and person's action goes into an append-only log.
 
-**Step 1. Install the Google Cloud tool.** Open the Terminal app and type:
+### Where the rules come from
 
-```
-brew install --cask google-cloud-sdk
-```
+`cormon ingest` reads the study documents into sections. From them it builds the **study model**:
 
-No Homebrew? Download it from <https://cloud.google.com/sdk/docs/install> instead.
+- **code checks**: each date, time or number limit with its quote (`cormon/checks.py`);
+- **topic briefs**: short summaries for the AI, each line citing its section (`cormon/guide.py`).
 
-**Step 2. Sign in with your huma.ai Google account:**
+`cormon rules --report` shows what was kept, dropped or merged, and why. `cormon rules --checklist` lists every
+inclusion/exclusion criterion and lab-manual step, with its rule or the reason it has none. The live model is kept
+in `studies/model/model.sql`, so every server checks with the same rules.
 
-```
-gcloud auth login
-```
+## Who's who
 
-A browser window opens. Choose your huma.ai account and click **Allow**. (John must first give you access: `./deploy/grant_access.sh you@huma.ai`.)
-
-**Step 3. Download the code:**
-
-```
-git clone https://github.com/humahq/correspondence-monitor.git
-cd correspondence-monitor
-```
-
-**Step 4. Check that it works:**
-
-```
-./bin/cormon-cloud status
-```
-
-The first time, it asks to create a key. Press **Enter**. If you see the bot's status, you're ready. Run all commands from inside the `correspondence-monitor` folder.
-
-### Who's who
-
-The bot tells people by their **role** in the study. Right now the roles use John's test addresses:
+The bot tells people by their **role** in the study (`studies/<study>/study.yaml`). Right now the roles use test
+addresses:
 
 | Role | What they do | Test address now |
 |---|---|---|
 | **Coordinator (CRC)** | Works at the site. Writes the day-to-day messages about patients. | `johnrohit94@gmail.com` |
 | **CRA** | The sponsor's monitor for the site. Gets the bot's alerts and decides what to do. | `johnernest978@gmail.com` |
 | **Sponsor lead (ClinOps)** | Runs the study for the sponsor. Gets urgent alerts and the daily summary. | `john@huma.ai` |
-| **Medical monitor** | The doctor who handles safety. The bot never alerts them; it tells people to contact them. | none |
-| **Principal investigator (PI)** | The doctor in charge at the site. The bot is careful with them (see "Doctors in the chat"). | `eliot@huma.ai` (for testing) |
-| **The bot (email)** | Reads every email it is copied on. | `bot+NCT05842941@huma.ai` |
-| **The bot (chat)** | Reads and posts in the study's chat spaces. | spaces **DNL343 Study Updates** and **DNL343 URGENT** |
+| **Medical monitor** | The doctor who handles safety. Gets safety information, unjudged. | `john+medicalmonitor@huma.ai` |
+| **Principal investigator (PI)** | The doctor in charge at the site. The bot is careful with them. | `eliot@huma.ai` (for testing) |
+| **Testers** | Peter and Eliot. Can clear and disregard alerts; get no alert emails. | |
 
-### Who gets what
+## Who gets what
 
 | What the bot finds | Where it goes |
 |---|---|
-| **Immediate** (a consent problem, or a problem planned within 48 hours) | Its own post in **DNL343 URGENT** and **DNL343 Study Updates**, an email to the CRA, and an email to the sponsor lead. If a site coordinator wrote the message, they get a short careful note too. |
-| **Medium** (a problem that already happened, or one planned later) | A post in **DNL343 Study Updates** and an email to the CRA, with the sponsor lead in CC. It goes in the sponsor lead's daily summary. |
-| **Low** (for example, a visit a few days outside its window) | A post in **DNL343 Study Updates**, an email to the CRA (subject "For your to-do list"), the CRA's to-do list and the daily summary. |
-| **Safety** (a death, side effects, falls, hospital visits) | Nobody is emailed. The bot records it as "safety information received; not reviewed" (it shows in the item list and daily summary). Nothing is judged. |
+| **Immediate** (a consent problem, or a problem planned within 48 hours) | Its own post in the urgent room and the study room, an email to the CRA and to the sponsor lead. If a site coordinator wrote the message, they get a short careful note too. |
+| **Medium** (a problem that already happened, or one planned later) | A post in the study room and an email to the CRA, sponsor lead in CC. It is in the daily summary. |
+| **Low** (for example, a visit a few days outside its window) | A post in the study room, an email to the CRA ("For your to-do list") and the daily summary. |
+| **Safety** (a death, side effects, falls, hospital stays) | Recorded as "safety information received; not reviewed" and sent to the medical monitor unjudged. A serious event gets the reporting warning (see below). |
 | **Nothing wrong, or not about the study** | Nobody. The bot stays quiet. |
-| **A question** ("what is the Week 4 window?", "when is G-708-002's Week 8 due?") | The bot answers the person who asked: in the same chat thread, or by email reply. See "Asking the bot a question". |
+| **A question** | The bot answers the person who asked, in the same thread or by email reply. |
 
-**One message, one alert.** If one site message has several problems, they come together in **one** chat post and **one** email, numbered 1, 2, 3. Immediate problems are the exception: they always go out on their own.
+**One message, one alert.** Several problems in one site message come together in **one** post and **one** email,
+numbered 1, 2, 3. Immediate problems always go out on their own.
 
 ### What an alert looks like
 
@@ -86,8 +93,6 @@ Medium · DNL343 · G-708-002 · Site 01 (MGH)
 
 What to do:
 1. Record a deviation ...
-2. Quarantine the affected supply ...
-3. Record the visit deviation ...
 
 ──────────
 Evidence for problem 1
@@ -96,209 +101,131 @@ Study rule: For the Baseline visit, CSF may be collected at any time within one 
 From: Regimen-Specific Appendix G, DNL343, V2.0, section 6.1 Baseline Visit
 ```
 
-- **Study rule** is always the protocol's own words, found word for word in the document. If the bot cannot find the exact words, it shows no quote. It writes "exact words not found, please read this section: ..." and marks the problem **please check**.
-- **Please check (not sure)** means the bot thinks it is a problem but is not certain. The line "Why not sure" says why.
-- Each problem has an **item number** (#19). The **details** link opens a web page with everything the bot used.
+- **Study rule** is always the protocol's own words, found word for word. If the bot can't find them, it shows no
+  quote, says which section to read, and marks the problem **please check**.
+- **Please check (not sure)** means the bot thinks it is a problem but is not certain. "Why not sure" says why.
+- Each problem has an **item number** (#19). The **details** link opens a page with everything the bot used.
 
 ### Replying to an alert: "cleared" and "disregard"
 
-Only the CRA or the sponsor lead can do this. It works in chat and by email.
+Only the CRA, the sponsor lead and the testers can do this, in chat or by email.
 
 | You write | What happens |
 |---|---|
-| `cleared` (in the alert's chat thread, or as a reply to the alert email) | Every problem in that alert is marked resolved. |
+| `cleared` (in the alert's thread, or as a reply to its email) | Every problem in that alert is marked resolved. |
 | `cleared #20` | Only problem #20 is marked resolved. |
-| `disregard` / `disregard #20` | The same, but the problem is dropped as not real (it no longer counts). |
-| `cleared #20` posted anywhere in the study space | Works too, by the number. |
+| `disregard` / `disregard #20` | The same, but the problem is dropped as not real. |
 
-In chat the bot answers in the thread, for example "Done: #20 cleared, by John Huma." If it can't tell which problem you mean, it says how to name one.
+The bot confirms in the thread, for example "Done: #20 cleared, by John Huma."
 
-### Asking the bot a question
+## Asking the bot a question
 
-Anyone can ask, in chat or by email. Example: "When is G-711-001's Week 8 visit due?"
+Anyone on the study's list can ask, in chat or by email. For example: "When is G-711-001's Week 8 visit due?"
 
 ```
 It is due between 21 Sep and 5 Oct 2026.
 
 Details and the protocol's words
-
-From the study documents. Please confirm with your CRA before acting on it.
 ```
 
-- The reply is short and plain. The link opens a details page with the protocol's own words (found word for word) and any sums.
-- It answers only from the study documents. If it can't find the words, it says "I could not find this in the study documents, so I won't guess."
-- If its answer has a number that is not in the documents or the patient's dates, it shows only the protocol's words.
-- Sums ("days between visits", "longest gap") are worked out by code from the protocol's numbers.
-- If the message says someone may be seriously hurt (death, hospital stay), the reply starts with "This may be a Serious Adverse Event. Contact the PI and the Medical Monitor now." and gives the reporting deadline.
-- Patient dates (like the window above) are worked out by code, from dates the site gave in **earlier** messages.
-- It does not answer messages meant for a person ("can you send kits?", "are you free at 3?").
-- It remembers the conversation: the last 20 messages (up to 30 minutes) of the same chat space or email thread, its own replies included. So "and week 8?" or "sorry, I meant 014" is understood. It never uses another chat.
-- If one fact would settle the question (a baseline date, which participant, which visit or medicine), it asks for it: "To tell if the Week 12 visit on 3 Oct was in window, what was the baseline date?" Reply in the same chat ("4 July") and it answers the first question with it. It never asks for names, birth dates or contact details, and never about dose changes, how severe an event is or whether it is related to the drug (the investigator decides those).
+**How an answer is made:**
 
-### When the bot speaks in chat
+1. The bot works out what is asked, and about which patient. A short code ("131") that fits two patients gets a
+   question back: "Which participant do you mean: G-708-131 or G-718-131?"
+2. It gathers what could answer it: the protocol sections on the topic, the patient's facts from memory, and the
+   visit windows worked out by code from the patient's dates.
+3. The AI writes the answer, saying for each sentence where it came from: a reported fact, the protocol's words,
+   a window code worked out, or the person's own message.
+4. **Code checks each sentence against its source.** The fact must really be in memory. The protocol words must
+   really be in the protocol. Every number must be in the source or worked out by code. A sentence with no
+   protocol words may not add a rule, a permission or a judgment. A sentence that fails is dropped.
+5. If nothing is left, the bot says "I couldn't find this in the study documents, so I won't guess. Please ask your
+   CRA." If one fact would settle it (a baseline date, which visit), it asks for that instead.
+6. The answer is reworded short and plain, and checked again: no new number, no medical opinion, and nothing
+   about a patient that the people in the chat should not see.
+
+**What answers always do:**
+
+- Name who reported a fact about a patient, and when: "The coordinator reported on 12 Oct that she has gout."
+- Use the latest fact when two disagree, and never use one that was corrected.
+- Work out sums (days between visits, a window from Baseline) in code.
+- Start with "This may be a Serious Adverse Event. Contact the PI and the Medical Monitor now." when someone may be
+  seriously hurt, with the reporting deadline.
+- Never ask for names, birth dates or contact details. Never judge dose changes, severity or whether an event is
+  related to the drug: the investigator decides those.
+
+**Follow-ups.** The bot reads the conversation before the message: a reply in a thread is read with that thread,
+so "and week 8?" or "what about the other one?" is understood.
+
+**Requests that are not study questions.** The bot sorts them first (`cormon/asks.py`). A request to hide or
+change records gets "I can't help with that". A question about the bot itself (passwords, settings, its database)
+gets "I can't share that". A task (slides, code) or an opinion ("which criteria will be hardest?") gets "I can't
+do that", with the protocol's sections on the topic as a file in a 1-on-1 chat or email. Every outgoing message
+is checked last for anything that looks like a key, password or server setting.
+
+## When the bot speaks in chat
 
 | Where | What the bot does |
 |---|---|
-| Group space, normal chat | Stays quiet. It still checks every message and posts an alert for a real problem. |
-| Group space, talking to the bot (@mention it, start with "bot,", or reply in a thread the bot started or that began by talking to it) | Always answers, in the thread. With nothing wrong: "I checked this against the protocol and found no problem." |
-| Group space, serious harm reported | Always gives the Serious Adverse Event warning. |
-| 1-on-1 chat with the bot | Always replies: an answer, the problem itself (what's wrong, why, what to do; the CRA is emailed, nothing is posted in the group), or "Thanks for letting me know." A message with a question and a problem gets both: the answer, then the problem. The bot account must accept a new 1-on-1 chat once before it can reply. Only for people on the study's people list (Peter and Eliot are there as testers: they can clear and disregard, and get no alert emails). |
-| Any other group chat or space the bot is added to | Same rules as the group space. Its alerts are posted only in that chat (the CRA is still emailed), never in the study's rooms. Read only for people on a study's people list; anyone else is ignored. Turn off with `gchat.read_group_chats: false`. |
-| Email | Unchanged: answers questions, emails alerts. |
-
-When someone talks to the bot (in chat, or by email with the bot in To), it first sorts what they ask (`cormon/asks.py`). Study questions are answered as before. For anything else, code picks the reply from fixed words. A request to hide or change records gets "I can't help with that" (and any problem in it is still raised). A question about the bot itself (passwords, settings, its database, other people's messages) gets "I can't share that". A task it doesn't do (slides, code, emails) gets "I can't do that". A request for its opinion ("which criteria will be hardest?") gets "I can't judge that" and, in a 1-on-1 chat or an email, the whole protocol sections on the topic as an attached file, to read or to give to another AI. In a group chat no file, link or protocol text is sent: the bot offers it in a 1-on-1 chat instead. An email reply goes only to its sender, so email counts as 1-on-1. In an email the bot is only copied on, opinion and task requests are left to the people; it still answers study questions and warns about serious harm. A question about the rules that names no participant and reports nothing done or planned ("what happens if they take St. John's wort?") is answered and raises no alert. A question that gives facts about a real person ("our participant's FSH came back at 34, can she count as postmenopausal?") is about that person, named or not: it is answered and its problem is raised. Every outgoing message is checked last: anything that looks like a key, password, server path or setting name is replaced by "I can't share that". Turn the sorting off with `answers.sort_requests: false`.
+| Study room, normal chat | Stays quiet. It still checks every message and posts an alert for a real problem. |
+| Study room, talking to the bot (tag it, start with "bot,", or reply in a thread it started) | Always answers, in the thread. With nothing wrong: "I checked this against the protocol and found no problem." |
+| Study room, serious harm reported | Always gives the Serious Adverse Event warning. |
+| 1-on-1 chat with the bot | Always replies: an answer, the problem itself (the CRA is emailed; nothing is posted in the group), or "Thanks for letting me know." |
+| Another group chat the bot is added to | Same rules as the study room. Its alerts stay in that chat. People not on a study's list are ignored. |
+| Email | Answers questions; emails alerts. |
 
 ### Doctors in the chat
 
-Principal investigators and other doctors matter most to a sponsor. If the bot embarrasses one in front of others, they may stop working with the sponsor. So the bot is careful when one of them is in a chat.
+Principal investigators and other doctors (`pi`, `sub_investigator` roles) matter most to a sponsor, so the bot
+never embarrasses them in front of others.
 
-- **Who is a doctor.** A person whose role in `study.yaml` is `pi` (Principal investigator) or `sub_investigator` (Sub-investigator). Eliot has the `pi` role too, for testing. These roles get no alert emails.
-- **Who is in a chat.** The chat's member list from Google Chat (kept 10 minutes), plus everyone who has written there. If the list can't be read, only the people who wrote there are known, and the log says the list may be incomplete.
-- **Alerts.** Before an alert is posted in a chat with a doctor in it, the bot checks if it could read as criticism of them. It checks with code first: the doctor wrote the message, or the alert names them ("Dr. Levitt", "the PI"). Then it asks the AI. If it could, the alert is **not posted** there. It goes by email to the CRA and the sponsor lead instead. Someone who already got the alert by email is not emailed again. If the AI check fails, the alert is kept out, to be safe.
-- **Replies.** A doctor who talks to the bot always gets a reply, worded calmly. If the bot found a problem in what the doctor wrote, it does not say they broke a rule. It replies "Thank you for letting me know. I have shared this with the study team so they can follow up." and the study team gets the alert privately. Any other reply that could read as blaming a doctor in the chat is reworded calmly first.
-- **Safety always goes.** "This may be a Serious Adverse Event. Contact the PI and the Medical Monitor now." is never held back.
-- **Chats with no doctor in them:** nothing changes, and no extra AI call is made.
-- **See what happened:** the item's details page ("How the bot reached this") says who was in the chat and what the bot did. The log has `careful_check`, `post_withheld_careful` and `reported_privately`.
+- Before an alert is posted in a chat with a doctor in it, code and then the AI check whether it could read as
+  criticism of them. If it could, it goes by email to the CRA and sponsor lead instead.
+- A doctor who talks to the bot always gets a calm reply. If the bot found a problem in what the doctor wrote, it
+  replies "Thank you for letting me know. I have shared this with the study team so they can follow up." and the
+  study team gets the alert privately.
+- The Serious Adverse Event warning is never held back.
+- Rules are in `config/careful.yaml` (or a `careful:` list in a study's `study.yaml`). Test:
+  `CORMON_HOME=practice7 .venv/bin/python tests/scenarios/doctor/run.py`.
 
-**To add a careful role** (for example a pharmacist): add the role to the study's `roles:` and to the people who have it, then add a rule to `config/careful.yaml` (for every study) or a `careful:` list in the study's `study.yaml` (that study only; a rule with the same `id` changes the general one):
+## Patient memory
 
-```
-careful:
-  - { id: pharmacists, label: pharmacists, roles: [pharmacist], in_group: private, tone: calm, report_to: [cra] }
-```
+Each study message's facts are saved in **Hindsight** (`cormon/hindsight.py`, [docs/hindsight-plan.md](docs/hindsight-plan.md)),
+one bank per study, each fact tagged with the patient's code.
 
-The calm reply and the calm wording are in `config/careful.yaml` and can be edited there. Test with the real AI: `CORMON_HOME=practice7 .venv/bin/python tests/scenarios/doctor/run.py`.
-
-### The bot remembers each patient
-
-The bot saves the dates each message gives about a patient (Baseline, first dose, visits, last dose). A later message is checked with them. Example: "G-711-001 week 4 visit done today", with Baseline given 6 weeks earlier, is caught as late. The evidence then names the earlier message, for example "(earlier message, 03 Aug 2026 10:00) baseline visit done today".
-
+- A later message is checked with the patient's earlier dates. "G-711-001 week 4 visit done today", with Baseline
+  given 6 weeks earlier, is caught as late, and the evidence names the earlier message.
+- Answers use the facts, saying who reported each one and when.
 - Old problems are never alerted again: a problem needs at least one fact from the new message.
-- Earlier facts are only used for day-counted windows. They are not used for hour-counted rules (a sample and an old dose) or order rules.
-- Memory started on 16 Oct 2026. Messages before that are not remembered.
+- Only messages from people on the study's list are saved. A code the memory AI copied wrong is fixed against the
+  codes the message writes, or logged.
+- Memory is on for server 2 and the laptop demo. On the live bot it is off until it is switched on through a
+  settings change.
+- `cormon forget-participant STUDY PID --yes` deletes what is remembered about one patient.
 
-### How the bot thinks (in 5 steps)
+## What the bot will NOT do, by design
 
-1. **Reads the message.** It works out which patient, what happened, and when. It decides if it is **done**, **planned**, or **old news**.
-2. **Works out the dates.** It turns "9/15" and "wk2 done 10/6" into days from Baseline (Day 0) and compares them with each visit's window.
-3. **Checks the rules.**
-   - Dates, times and numbers are checked by plain **code** (139 checks made from the documents), so the same message always gets the same answer. Example: Week 2 must be Day 11 to 17.
-   - Rules without a number ("consent before any study procedure") are judged by the **AI**, using short topic summaries of the documents (visit schedule, dosing, samples, eligibility, consent and others).
-4. **Double-checks.** A second AI reads the original protocol section and must agree. The bot must also find the site's words in the message and the protocol's words in the document.
-5. **Decides how urgent it is and who to tell** (see "Who gets what").
+- **Judge safety:** no judging of side effects, deaths or hospital visits.
+- **Alert old news:** no alert on past events that were already dealt with.
+- **Alert missing information:** no alert just because something wasn't mentioned.
+- **Guess:** no answer without a checked source behind it.
+- **Guess the study:** mail to the general address `bot+clinical@huma.ai` is never checked.
 
-**What it will NOT do, by design:**
+## How it works (code map)
 
-- **Safety:** no judging of side effects, deaths or hospital visits. It records the message and sends nothing.
-- **Old news:** no alert on past events that were already dealt with.
-- **Missing information:** no alert just because something wasn't mentioned.
-- **Guessing:** no answer to a question without the protocol's own words behind it.
-- **Unknown study:** mail to the general address `bot+clinical@huma.ai` is never checked, because the bot never guesses the study.
-
-**Key Regimen G limits (handy for writing tests).** Baseline is Day 0.
-
-| Area | Rule (from the study documents) |
-|---|---|
-| Visit windows | Week 2 phone: Day 14 ± 3 · Week 4 clinic: Day 28 ± 7 · Week 8 clinic: Day 56 ± 7 · Week 12 phone: Day 84 ± 3 · Week 16 clinic: Day 112 ± 7 · Week 20 phone: Day 140 ± 3 · Week 24: Day 168 ± 7 |
-| Samples | Baseline CSF within one week before the first dose · predose PK 0 to 2 hours before the dose · postdose PK 1 to 8 hours after the dose · samples labelled with a code, never the patient's name |
-| Study drug | stored below 30 °C · one dose a day in the morning · temperature excursions in transit resolved before use |
-| Medicines | strong CYP3A4/5 inducers (for example phenytoin) stopped at least 2 weeks before the first dose |
-| Consent | Master Protocol consent signed before any screening procedure |
-
-### Part 2: Test in chat or by email
-
-**In chat (easiest).** Post a message in **DNL343 Study Updates**, as a site coordinator would. For example:
-
-```
-Hi team, update on G-708-002: baseline + first dose were 9/15. Baseline CSF was drawn 9/5. Wk2 phone call done 10/6. Wk4 visit done 10/13, all fine. Also our kit fridge read 32C this morning.
-```
-
-Within about a minute you should get one post with 3 problems (CSF too early, fridge too warm, Week 2 late). The Week 4 visit is inside its window, so it should not be flagged. The CRA gets the same alert by email.
-
-**By email.** Send an email **to** the CRA (`johnernest978@gmail.com`) with the bot in **CC** (`bot+NCT05842941@huma.ai`). Any email account works as the sender.
-
-**Tips:**
-
-- Use a **new patient number** for each test (G-708-002, G-709-001 ...). Reusing one can make the bot treat it as a repeat.
-- An urgent test: `G-709-001 came in today for screening. We did the blood draws and ECG first, then he signed the master consent form after.` It should come as **Immediate** in DNL343 URGENT too.
-- See what the bot found: `./bin/cormon-cloud items --study NCT05842941`, then `./bin/cormon-cloud item 19 --drafts` for one item.
-
-### Part 3: Test many messages at once (nothing is sent)
-
-This runs test messages through a separate practice copy of the bot on the server. Nothing is posted or emailed, and the live data isn't touched.
-
-```
-./bin/cormon-cloud test demo/test-chat-g/chats --study NCT05842941
-```
-
-**Always add `--study NCT05842941`** for Regimen G. Without it, the test uses the old MAP study.
-
-**Write your own tests.** Make a folder, for example `my-tests`, with one file per message:
-
-- **A chat message:** a `.json` file, for example `my-tests/t1.json`:
-
-  ```
-  {"text": "G-801-001 wk2 call done 10/6, baseline was 9/15", "from": "crc", "expect": "visit_schedule"}
-  ```
-
-- **An email:** a `.txt` file:
-
-  ```
-  Subject: G-801-002 update
-  From: crc
-  Expect: sample_handling
-
-  Baseline CSF drawn 9/1, first dose 9/15.
-  ```
-
-- **Many at once:** one `.csv` spreadsheet with the columns `subject`, `body`, `from`, `expect` and (optional) `date`.
-- **A patient's story over several messages:** put an empty file named `.memory` in the folder, and dates in the csv. Then the bot remembers each patient from one message to the next. Without it, every message is a fresh patient. Example: `demo/test-questions-g` (30 messages: questions, follow-ups that need memory, and chit-chat).
-
-**Expect** (optional) is what the bot *should* find, so it can be scored: `eligibility`, `visit_schedule`, `procedure_sequence`, `sample_handling`, `study_drug`, `consent`, `none` (nothing wrong) or `out_of_scope` (safety). Several are allowed, separated by commas.
-
-Then run `./bin/cormon-cloud test my-tests --study NCT05842941`.
-
-**Testing the answers to questions:** `python -m cormon.qabench make demo/qa-new/questions.json --study NCT05842941 --seed 5` writes 100 realistic questions (protocol facts, visit dates, gaps, serious events, things the documents don't cover, chit-chat). `python -m cormon.qabench run demo/qa-new/questions.json --study NCT05842941 --out /tmp/qa` answers them and has a strong model grade each one: correct, partly, wrong or refused. Use a new `--seed` for a fresh set the bot has never seen. Sets so far: `demo/qa-g` and `demo/qa-g-fresh` (86 and 87 correct of 100, Oct 16 2026).
-
-**Reading the result.** Each message shows **RIGHT** or **WRONG** and what the bot found. At the end:
-
-- **Precision:** of the alerts raised, how many were real problems (fewer false alarms is higher).
-- **Recall:** of the real problems, how many were caught (fewer misses is higher).
-- **F1:** both combined. 1.00 is perfect.
-
-The results are saved on your laptop in `results/<date-time>/results.csv`. To see why the bot decided something in the last test run:
-
-```
-./bin/cormon-cloud sandbox item 2 --drafts    # what it found, both quotes, what it would send
-./bin/cormon-cloud sandbox message 4          # how it understood the message
-./bin/cormon-cloud sandbox log --message 4    # every step it took, including ideas it rejected
-```
-
-Each test message uses the AI, so a run costs a few cents.
-
-### Part 4: Other useful commands
-
-| Command | What it does |
-|---|---|
-| `./bin/cormon-cloud status` | What the bot did recently |
-| `./bin/cormon-cloud items --study NCT05842941` | Every problem found |
-| `./bin/cormon-cloud log --item 19` | The full history of item 19 |
-| `./bin/cormon-cloud digest --hours 24` | Preview the sponsor's daily summary |
-| `./bin/cormon-cloud pause` / `resume` | Stop the bot from acting (it still collects messages) / start it again |
-| `./bin/cormon-cloud logs` | The server's technical log |
-
-Anything you do is recorded under your own name.
-
-## How it works (technical)
-
-1. **Capture.** Every message is stored whole (body, headers, attachments, arrival time, channel). Mail to `bot+NCT05842941@huma.ai` belongs to Regimen G. Chat messages belong to the study whose space they are in.
-2. **Study model.** `cormon ingest` reads the documents into sections. `cormon/guide.py` writes short **topic briefs** (each line cites its section). `cormon/checks.py` holds the **code checks**: dates, times and numbers with their limits, each with a quote from the document.
-3. **Reader** (`cormon/reader.py`, chosen by `checker:` in `study.yaml`). For each patient in the message: scope (which visits and sections apply), date notes worked out in code, an AI judge reads the topic briefs, the code checks run on facts taken from the message, duplicates are merged, and a second AI confirms each finding against the original section.
-4. **Evidence.** The protocol quote is looked up sentence by sentence in the real documents. It is never a heading, another visit's line, or the bot's own summary, and a schedule table shows only the visit's own cell. Words that can't be proven are not shown, and the finding becomes "please check".
-5. **Safety boundary.** Safety events are recorded as out of scope and routed nowhere (`out_of_scope: []` in `config/routing.yaml`).
-6. **Triage.** Tiers (low / medium / immediate) come from `config/triage.yaml`, a first-match rule list.
-7. **Routing.** `config/routing.yaml` says where each tier goes. `config/templates.yaml` holds the message layouts. The problems of one message are sent as one alert (`routing.route_items`); immediate ones go alone. Replies ("cleared", "disregard", "#N") are matched to the alert by email headers or by chat thread.
-8. **Record.** Every message, decision, send and operator action goes to an append-only log.
+1. **Capture** (`cormon/capture.py`, `cormon/channels/`). Email (IMAP or the Gmail API), Google Chat, Microsoft
+   Teams and Mattermost. Edited and deleted chat messages are kept as new versions beside the original.
+2. **Study model** (`cormon/ingest.py`, `cormon/guide.py`, `cormon/checks.py`).
+3. **Reader** (`cormon/reader.py`, chosen by `checker:` in `study.yaml`). For each patient: scope, date notes in
+   code, an AI judge on the topic briefs, the code checks, duplicates merged, and a second AI confirming each
+   finding against the original section.
+4. **Evidence.** Quotes are looked up sentence by sentence in the real documents; words that can't be proven are
+   not shown.
+5. **Memory** (`cormon/hindsight.py`, `cormon/memory.py`) and **conversation** (`cormon/conversation.py`).
+6. **Answers** (`cormon/answers.py`, `cormon/asks.py`, `cormon/privacy.py`, `cormon/outcheck.py`).
+7. **Triage** (`config/triage.yaml`, a first-match rule list) and **routing** (`config/routing.yaml`,
+   `config/templates.yaml`). Replies ("cleared", "#N") are matched to the alert by email headers or chat thread.
+8. **Record.** An append-only audit log, sealed in a hash chain.
 
 ## Quick start (local, no accounts needed)
 
@@ -465,9 +392,8 @@ A personal Microsoft account cannot do this. You need a work tenant, for example
 ./deploy/grant_access.sh someone@huma.ai       # let a person use ./bin/cormon-cloud
 ```
 
-**Updating the cloud with new code.** Run the tests first (`python -m pytest -q tests/`), then `./deploy/create_vm.sh`. It copies the code, keeps the server's database and messages, sets the server's own web address in its settings, and restarts the bot. Check afterwards with `./bin/cormon-cloud status` and `./bin/cormon-cloud logs`.
+**Updating a server.** Follow [docs/servers.md](docs/servers.md). Server 2: `echo yes | CORMON_VM=cormon-edge ./deploy/release.sh` after every merge to main, once main's gate has passed. The live server: only John runs `./deploy/release.sh`. The release checks the gate, the packages and the study model, backs up the database and the code, restarts the bot and checks its health. `./deploy/create_vm.sh` is only for creating a new server.
 
-- Only use `SYNC_MODEL=1 ./deploy/create_vm.sh` after rebuilding and testing the study model on the laptop. It replaces the server's rules with the laptop's.
 - When copying single files by hand, make the archive with `COPYFILE_DISABLE=1 tar --no-xattrs ...`. Otherwise macOS adds hidden `._` files, which stop the bot reading its settings.
 
 What this sets up:
