@@ -1098,6 +1098,16 @@ def test_with_closing_on_a_page_a_cleared_reply_gets_the_link_instead(monkeypatc
 
 # ------------------------------------------------------------------ two people (SEC-04, DSP-05)
 
+def test_every_command_that_needs_a_second_person_can_ask_for_one():
+    import re
+    from pathlib import Path
+
+    from cormon.compliance import approvals
+    cli = (Path(__file__).parent.parent / "cormon" / "cli.py").read_text()
+    used = set(re.findall(r'second_person\(\s*args,\s*"([a-z-]+)"', cli))
+    assert "forget-study-memory" in used and used <= set(approvals.ACTIONS)
+
+
 def test_two_person_rule_one_asks_another_approves_once():
     from cormon.compliance import approvals
 
