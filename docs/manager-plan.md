@@ -74,6 +74,23 @@ told.
   again per site or person; the same questions again; alerts left uncleared; questions the bot couldn't answer.
 - **Test:** fake data with planted patterns: it must find them, and find nothing in random data.
 
+## Part D: Durable facts (from the Eliot/John call, 13 Nov)
+
+Hindsight keeps only facts about patients (`features.scoped_memory`). Everything else worth remembering is a
+**durable fact**, kept in a separate, simple store, never in Hindsight:
+
+- **Site events:** "the fridge door was left open", "the site was closed for the day", "five people didn't come
+  in today".
+- **How a site, practice or study works:** a site that does something differently from the lab manual, the lab's
+  location, the courier cut-off. This goes in a deliberately written document (a site protocol or site
+  operations manual), not in memory.
+- **Simple:** plain text or markdown lists, one per site, practice and study, like Eliot's list of paywalled
+  sites. Hindsight might later be replaced by this too.
+- **Scoped:** a site's facts only for that site, a practice's for its sites, a study's for all. Reviewed by a
+  person; written on purpose, not pulled from chat.
+- **Never about staff:** no "who left the fridge open" (no tattling, EU AI Act).
+- The site facts the manager needs (Part B: lab location, courier cut-off) come from here.
+
 ## To do (in order)
 
 - [ ] 1. **Spot more problems:** delay, risk of breaking the rules, risk of a patient dropping out (the
@@ -85,6 +102,8 @@ told.
 - [ ] 4. **Replies and check-ins:** the plan loop, "stuck" handed to a person, the limits.
 - [ ] 5. **Answer review and corrections.**
 - [ ] 6. **Activity table** (filled from past data too), the nightly pattern finder, the weekly report.
+- [ ] 7. **Durable facts store** (Part D): site, practice and study facts in simple files, scoped and reviewed.
+      Before or with step 3 if the manager needs site facts.
 - [ ] Each step: a test set of realistic cases (lab kit, consent, drug temperature, missed visit), scored before
       and after, using the cheapest AI models first.
 

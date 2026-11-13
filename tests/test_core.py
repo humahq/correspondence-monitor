@@ -4127,6 +4127,122 @@ def test_patient_memory_skips_unknown_senders_and_is_off_by_default(monkeypatch)
     assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_not_saved' AND entity_id='9'")
 
 
+def _two_sites():
+    from dataclasses import replace
+
+    from cormon import config
+    from cormon.config import Person
+    s = config.study("NCT05842941")
+    return replace(s, sites=s.sites + [{"id": "site-02", "name": "Site 02 (Rival)"}], people=s.people + [
+        Person("crc-02", "Rival Coordinator", "crc2@rival.org", ["crc"], ["site-02"]),
+        Person("pi-01", "Site One PI", "pi1@mgh.org", ["pi"], ["site-01"])])
+
+
+def test_scoped_memory_files_each_fact_under_the_senders_own_site_and_never_the_bots_alerts(monkeypatch):
+    from cormon import hindsight
+    calls, _ = _memory_on(monkeypatch)
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "scoped_memory")
+    study = _two_sites()
+    msg = {"id": 70, "from_addr": "johnrohit94@gmail.com", "channel": "email", "subject": "Site 02 update",
+           "sent_at": "2026-11-13T14:00:00+00:00", "thread_key": "t1", "attachments": []}
+    hindsight.save_message(study, msg, "G-708-401 started St John's wort.").result()
+    posts = [c for c in calls if c[0] == "POST"]
+    item = posts[0][2]["items"][0]
+    assert {"site:site-01", "reporter:rohit-crc"} <= set(item["tags"]), "naming another site files nothing there"
+    assert "Study coordinator" not in item["content"] and "Rohit" not in item["context"]
+    assert [c for c in calls if c[0] == "PATCH"][0][2]["updates"]["retain_mission"] == hindsight.SCOPED_MISSION
+    sponsor = dict(msg, id=71, from_addr="john@huma.ai", subject="update")   # covers both sites, names neither
+    hindsight.save_message(study, sponsor, "G-708-401 fell.")
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_not_saved' AND entity_id='71'")
+    assert hindsight.save_alert(5, kind="finding", participant_id="G-708-401") is None
+
+
+def test_scoped_memory_answers_only_from_the_askers_own_sites_and_never_says_who_reported(monkeypatch):
+    from cormon import answers, hindsight
+    fact = lambda i, site: {"id": i, "text": f"G-708-401 takes drug {i}", "mentioned_at": "2026-11-01T10:00:00",  # noqa
+                            "tags": ["participant:G708401", f"site:{site}"], "metadata": {"message_id": i,
+                                                                                        "sender": "Rohit"}}
+    calls, _ = _memory_on(monkeypatch, reply=lambda m, p: {"items": [{"tag": "participant:G708401"}], "total": 1}
+                          if "/tags" in p else {"results": [fact("A", "site-01"), fact("B", "site-02")]})
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "scoped_memory")
+    study = _two_sites()
+    ask = {"id": 80, "from_addr": "johnrohit94@gmail.com", "channel": "teams", "visibility": "direct"}
+    lines, _ = hindsight.recall(study, "G-708-401", "what is she taking?", ask)
+    body = [c[2] for c in calls if c[0] == "POST"][0]
+    assert {"tags": ["site:site-01"], "match": "any_strict"} in body["tag_groups"] and "tags" not in body
+    assert lines == ["earlier fact, reported on 01 Nov 2026: G-708-401 takes drug A"], "site-02's fact is dropped"
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_outside_scope_dropped'")
+    assert answers.FACT_LINE.match(lines[0]).group(4) is None
+    calls.clear()
+    room = dict(ask, id=81, visibility="space")
+    assert hindsight.recall(study, "G-708-401", "q", room) == ([], set()), "others in the room may be from site 02"
+    assert hindsight.recall(study, "G-708-401", "q", dict(ask, from_addr="x@y.org")) == ([], set())
+    assert not [c for c in calls if c[0] == "POST"]
+
+
+def test_scoped_memory_gives_the_saved_visit_dates_only_from_the_askers_own_sites(monkeypatch):
+    from cormon import hindsight, memory
+    study = _two_sites()
+    for mid, sender in ((90, "johnrohit94@gmail.com"), (91, "crc2@rival.org")):
+        db.ex("INSERT INTO messages (id, channel, external_id, thread_key, route, visibility, from_addr, body_text,"
+              " sent_at, received_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (mid, "email", f"x{mid}", "t", "study", "direct",
+                                                                    sender, "G-708-777 visit", "2026-11-01T10:00:00+00:00",
+                                                                    "2026-11-01T10:00:00+00:00"))
+        memory.save(study.study_id, "G-708-777", {"id": mid, "sent_at": "2026-11-01T10:00:00+00:00"},
+                    [{"label": "Baseline", "kind": "baseline", "date": f"2026-10-0{mid - 89}"}], [])
+    ask = {"id": 92, "from_addr": "johnrohit94@gmail.com", "channel": "email", "sent_at": "2026-11-12T10:00:00+00:00"}
+    assert hindsight.dates_allowed(study, ask) is None, "off: as before"
+    assert len(memory.history(study.study_id, "G-708-777", ask)) == 2
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "scoped_memory")
+    mine = memory.history(study.study_id, "G-708-777", ask, allowed=hindsight.dates_allowed(study, ask))
+    assert [h["message_id"] for h in mine] == [90], "the rival site's dates stay at the rival site"
+
+
+def test_scoped_memory_prompts_drop_who_reported_and_keep_rules_to_the_protocol(monkeypatch):
+    from cormon import answers
+    every = answers.FIND_SYSTEM + answers.ANSWER_SYSTEM + answers.PLAIN_SYSTEM + answers.UNSOURCED_WHY
+    assert all(old in every for old, _ in answers.SCOPED_WORDS), "each swap still finds its words"
+    assert answers._scoped(answers.ANSWER_SYSTEM) == answers.ANSWER_SYSTEM
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "scoped_memory")
+    scoped = answers._scoped(every)
+    assert "who reported" not in scoped.replace("Never say who reported", "")
+    assert "never rules" in answers._scoped(answers.ANSWER_SYSTEM)
+
+
+def test_scoped_memory_turns_down_who_did_it_and_staff_questions(monkeypatch):
+    from cormon import asks, llm
+    seen = []
+    monkeypatch.setattr(llm, "structured", lambda task, system, prompt, schema, *a, **kw:
+                        seen.append((system, schema)) or {"requests": [
+                            {"request": "who left the fridge open", "kind": "people", "topic": ""}]})
+    assert asks.sort("Who left the fridge open?") == [], "off: no such kind"
+    assert "people" not in seen[-1][1]["properties"]["requests"]["items"]["properties"]["kind"]["enum"]
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "scoped_memory")
+    assert [r["kind"] for r in asks.sort("Who left the fridge open?")] == ["people"]
+    assert "- people:" in seen[-1][0] and asks.SORT_REPORTS_SCOPED in seen[-1][0]
+    assert "who" in asks.DECLINE["people"].lower()
+
+
+def test_staff_review_their_own_facts_and_the_pi_their_sites(monkeypatch):
+    from cormon import hindsight
+    study = _two_sites()
+    rival = {"id": "f2", "tags": ["site:site-02", "reporter:crc-02"]}
+    pi, crc2 = study.person_by_email("pi1@mgh.org"), study.person_by_email("crc2@rival.org")
+    assert hindsight.may_review(study, crc2, rival)
+    assert not hindsight.may_review(study, pi, rival), "a PI sees only the sites they work at"
+    assert hindsight.may_review(study, pi, {"tags": ["site:site-01", "reporter:rohit-crc"]})
+    assert not hindsight.may_review(study, study.person_by_email("johnrohit94@gmail.com"), rival)
+    from cormon import webview
+    shown = hindsight._shown({"id": "f1", "text": "G-708-401 takes <b>x</b>", "tags": ["site:site-01",
+                              "participant:G708401"], "metadata": {"sender": "Rohit"}})
+    page = webview.render_memory(study, pi, {"mine": [], "site": [shown], "leads": True})
+    assert "Rohit" not in page and "&lt;b&gt;" in page and "Facts at your site" in page
+    _memory_on(monkeypatch, reply=lambda m, p: rival)
+    with pytest.raises(PermissionError):
+        hindsight.staff_change(study, "pi1@mgh.org", "f2", "retire", "wrong patient")
+    assert db.q1("SELECT 1 FROM audit_log WHERE action='memory_change_refused'")
+
+
 def test_a_memory_failure_is_logged_and_told_but_never_stops_the_read(monkeypatch):
     from cormon import config, hindsight
     _, told = _memory_on(monkeypatch, fail=ConnectionError("Hindsight is down"))

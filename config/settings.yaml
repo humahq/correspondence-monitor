@@ -45,6 +45,8 @@ memory:
   bank_prefix: ""
   # A search slower than this is given up (and logged): the answer goes out without memory.
   search_seconds: 5
+  # With features.scoped_memory: the roles that review every fact at their own sites on /memory/<study>.
+  site_reviewer_roles: [pi]
 
 # New features, each off on the live bot until John says "yes, put it in the live bot" (docs/features.md).
 # Patient memory's switch is memory.enabled above.
@@ -73,6 +75,7 @@ features:
   strip_bot_mention: false   # "@Test Bot" is taken out of a chat message's words, so it is never read as a code
   always_reply: false        # a message to the bot naming a known participant, or asking something, never gets silence
   asks_about_reports: false  # "who reported 410's turmeric?" is a study question, not one about the bot
+  scoped_memory: false       # memory keeps patient facts only, tagged by site and reporter, read back only inside the site
 
 # The language everyone in a study shares (language_courtesy). A person's own are `languages:` in study.yaml.
 language:

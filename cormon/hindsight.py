@@ -45,6 +45,23 @@ MISSION = (
     "in the language of the message, never mixing in words of another language."
 )
 
+SCOPED_MISSION = (
+    "This is the memory of a monitoring bot for one clinical trial. Keep only facts about the trial's participants "
+    "in the real world, for example: health events, symptoms, diagnoses, medicines, supplements and doses, dosing "
+    "mistakes, diet and habits (food, drinks, alcohol, smoking), lab and test results, a participant's samples and "
+    "kits (sent, arrived, lost, late), visits done or missed, consent, life changes that matter to the study "
+    "(moving, travel, a new caregiver), and the participant's own plans that matter to it (trying for a baby, a "
+    "trip, stopping a medicine), kept as plans. Write each fact about "
+    "the participant only, never who reported it, who said it or who did it: no names, roles or 'the coordinator "
+    "said'. When a message corrects itself (a typo, 'sorry, I meant 140/90'), keep only the corrected fact and do "
+    "not mention the mistake or write the wrong value at all. When it corrects an earlier message, keep the new "
+    "fact and say it replaces what was said before. Keep nothing else: no questions or what-ifs, nothing "
+    "about the messages, chats or emails themselves (who wrote, asked or replied), nothing about the bot, nothing "
+    "about staff or how they work, nothing about the site itself (equipment, fridges, closures, staffing), and "
+    "never what someone says the protocol, a manual or a rule says. Never record a participant's name: write "
+    "their study code. Write each fact in the language of the message, never mixing in words of another language."
+)
+
 LABELS = [{
     "key": "participant",
     "type": "multi-text",
@@ -72,6 +89,68 @@ def enabled() -> bool:
     return bool(settings.get("memory.enabled", False))
 
 
+def scoped() -> bool:
+    """Patient facts only, each tagged with its site and reporter, and read back only inside the reader's sites."""
+    return settings.feature("scoped_memory")
+
+
+def _bank_config() -> dict:
+    return dict(BANK_CONFIG, retain_mission=SCOPED_MISSION) if scoped() else BANK_CONFIG
+
+
+def sites_of(study, person) -> set[str]:
+    """The sites a person works at: every site of the study for someone who covers all ("*")."""
+    if not person:
+        return set()
+    if "*" in person.sites:
+        return {s["id"] for s in study.sites}
+    return set(person.sites)
+
+
+def site_of(study, msg: dict) -> str | None:
+    """The one site a message's facts are filed under: a site of the sender's that the message names, else the
+    sender's only site. None when it is not clear, or the sender is not on the study's list; a site the sender
+    does not work at is never taken from the text, so no one can file facts under another site."""
+    from .pipeline import _own_text, _sites_named
+    mine = sites_of(study, study.person_by_email(msg.get("from_addr")))
+    named = {s for s in _sites_named(study, f"{msg.get('subject') or ''}\n{_own_text(msg.get('body_text') or '')}")
+             if s in mine}
+    if len(named) == 1:
+        return named.pop()
+    return next(iter(mine)) if len(mine) == 1 else None
+
+
+def reader_sites(study, msg: dict) -> set[str]:
+    """The sites whose facts may be used to answer or read this message: the sender's own. In a room others read,
+    only when the study has one site, since anyone in the room may be from another site."""
+    from .asks import private
+    mine = sites_of(study, study.person_by_email(msg.get("from_addr")))
+    if not private(msg) and len(study.sites) != 1:
+        return set()
+    return mine
+
+
+def dates_allowed(study, msg: dict):
+    """For the participant's saved dates (memory.history): None when memory is not scoped; else a check that an
+    earlier message's dates come from one of the reader's sites (its site worked out the way facts are filed)."""
+    if not scoped():
+        return None
+    sites = reader_sites(study, msg)
+
+    def allowed(message_id) -> bool:
+        row = db.q1("SELECT from_addr, subject, body_text FROM messages WHERE id=?", (message_id,))
+        return bool(row) and site_of(study, dict(row)) in sites
+    return allowed
+
+
+def site_tag(site: str) -> str:
+    return f"site:{site}"
+
+
+def reporter_tag(person_id: str) -> str:
+    return f"reporter:{person_id}"
+
+
 def bank(study_id: str) -> str:
     return f"{settings.get('memory.bank_prefix', '') or ''}{study_id}"
 
@@ -97,9 +176,10 @@ def _call(method: str, path: str, body: dict | None = None, timeout: float = TIM
 def _ensure_bank(study_id: str) -> str:
     """The study's bank with our settings; sent again only when they change."""
     b = bank(study_id)
-    digest = hashlib.sha256(json.dumps(BANK_CONFIG, sort_keys=True).encode()).hexdigest()[:16]
+    config = _bank_config()
+    digest = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()[:16]
     if db.get_state(f"hindsight_bank:{b}") != digest:
-        _call("PATCH", f"/v1/default/banks/{b}/config", {"updates": BANK_CONFIG})
+        _call("PATCH", f"/v1/default/banks/{b}/config", {"updates": config})
         db.set_state(f"hindsight_bank:{b}", digest)
         db.audit("memory_bank_configured", entity_type="service", entity_id="hindsight", bank=b, config=digest)
     return b
@@ -114,8 +194,8 @@ def _speaker(study, msg: dict) -> tuple[str, str]:
 
 def message_content(study, msg: dict, own_text: str) -> str:
     name, role = _speaker(study, msg)
-    lines = [f"From: {name} ({role})", f"Sent: {local_time(msg.get('sent_at'))}",
-             f"Channel: {msg.get('channel')}"]
+    lines = ([] if scoped() else [f"From: {name} ({role})"]) + [f"Sent: {local_time(msg.get('sent_at'))}",
+                                                                 f"Channel: {msg.get('channel')}"]
     if msg.get("subject"):
         lines.append(f"Subject: {msg['subject']}")
     lines += ["", own_text.strip()]
@@ -146,15 +226,24 @@ def _save_message(study, msg: dict, own_text: str) -> None:
         db.audit("memory_not_saved", entity_type="message", entity_id=msg.get("id"), study_id=study.study_id,
                  why="an admin corrected, retired or linked its facts on the memory page")
         return
+    tags = [f"study:{study.study_id}", "source:message"]
+    if scoped():
+        site = site_of(study, msg)
+        if not site:
+            db.audit("memory_not_saved", entity_type="message", entity_id=msg.get("id"), study_id=study.study_id,
+                     why="not clear which site the message is about")
+            return
+        tags += [site_tag(site), reporter_tag(study.person_by_email(msg.get("from_addr")).id)]
     try:
         name, role = _speaker(study, msg)
         b = _ensure_bank(study.study_id)
         item = {"content": message_content(study, msg, own_text), "document_id": doc,
                 "timestamp": msg.get("sent_at") or "unset",
-                "context": f"a message in a clinical trial, from {name} ({role})",
+                "context": "a message in a clinical trial" if scoped()
+                else f"a message in a clinical trial, from {name} ({role})",
                 "metadata": {"message_id": str(msg["id"]), "channel": str(msg.get("channel")), "sender": name,
                              "role": role, "thread": str(msg.get("thread_key"))},
-                "tags": [f"study:{study.study_id}", "source:message"]}
+                "tags": tags}
         res = _call("POST", f"/v1/default/banks/{b}/memories", {"items": [item]})
         _saved("message", study.study_id, msg["id"], b, doc, res)
     except Exception as e:
@@ -269,6 +358,8 @@ def save_alert(item_id: int, *, kind: str | None = None, participant_id: str | N
     message from someone off the study's people list: what they said goes into nobody's record, the alert too."""
     if not enabled() or kind not in ("finding", "out_of_scope") or not participant_tag(participant_id):
         return None
+    if scoped():   # what the bot itself did is not a fact about the participant
+        return None
     from . import config
     row = db.q1("SELECT m.study_id, m.from_addr FROM items i JOIN messages m ON m.id = i.first_message_id "
                 "WHERE i.id=?", (item_id,))
@@ -344,11 +435,15 @@ def _who(r: dict) -> str:
 
 
 def _fact_line(r: dict, replaced_by: dict | None = None, corrected: dict | None = None) -> str:
+    """With scoped memory the line never says who reported or corrected the fact."""
     text, when = _parts(r)
     happened = f" (happened: {when})" if when else ""
     kind = (f"NO LONGER TRUE (a later report, on {_day(replaced_by)}, changed it)" if replaced_by
             else "earlier fact")
-    fixed = f" [corrected by {corrected['by']} on {_day({'mentioned_at': corrected['ts']})}]" if corrected else ""
+    on = _day({'mentioned_at': corrected['ts']}) if corrected else ""
+    if scoped():
+        return f"{kind}, reported on {_day(r)}: {text}{happened}" + (f" [corrected on {on}]" if corrected else "")
+    fixed = f" [corrected by {corrected['by']} on {on}]" if corrected else ""
     return f"{kind}, reported on {_day(r)} by {_who(r)}: {text}{happened}{fixed}"
 
 
@@ -398,19 +493,31 @@ def recall(study, pid: str | None, query: str, msg: dict) -> tuple[list[str], se
     up by memory."""
     if not enabled() or not memory.key(pid):
         return [], set()
+    sites = sorted(site_tag(s) for s in reader_sites(study, msg)) if scoped() else []
+    if scoped() and not sites:
+        db.audit("memory_not_searched", entity_type="message", entity_id=msg.get("id"), study_id=study.study_id,
+                 participant_id=pid, why="no site whose facts this reader may see")
+        return [], set()
     seconds = float(settings.get("memory.search_seconds", 5))
     began = time.monotonic()
     try:
         tags = participant_tags(study.study_id, pid, timeout=seconds)
+        where = ({"tag_groups": [{"tags": tags, "match": "any_strict"}, {"tags": sites, "match": "any_strict"}]}
+                 if sites else {"tags": tags, "tags_match": "any_strict"})
         found = _call("POST", f"/v1/default/banks/{bank(study.study_id)}/memories/recall", {
-            "query": query, "tags": tags, "tags_match": "any_strict", "budget": "mid", "max_tokens": 1500},
-            timeout=seconds) if tags else {}
+            "query": query, **where, "budget": "mid", "max_tokens": 1500}, timeout=seconds) if tags else {}
     except Exception as e:
         db.audit("memory_search_failed", entity_type="message", entity_id=msg.get("id"), study_id=study.study_id,
                  participant_id=pid, seconds=round(time.monotonic() - began, 2), error=str(e)[:300])
         return [], set()
     mine = str(msg.get("id"))
     rows = [r for r in found.get("results") or [] if (r.get("metadata") or {}).get("message_id") != mine]
+    if sites:   # whatever the search did, a fact outside the reader's sites never comes back
+        outside = [r.get("id") for r in rows if not set(r.get("tags") or []) & set(sites)]
+        if outside:
+            db.audit("memory_outside_scope_dropped", entity_type="message", entity_id=msg.get("id"),
+                     study_id=study.study_id, participant_id=pid, facts=outside)
+        rows = [r for r in rows if set(r.get("tags") or []) & set(sites)]
     rows = sorted(rows[:MAX_FACTS], key=lambda r: r.get("mentioned_at") or "")
     try:
         newer = _newest_wins(rows)
@@ -567,6 +674,58 @@ def change_fact(study_id: str, fact_id: str, action: str, by: str, reason: str, 
     else:
         raise ValueError(f"unknown change {action!r}")
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- the review page for study staff (webview.py)
+
+def _tagged(study_id: str, tags: list[str]) -> list[dict]:
+    if not tags:
+        return []
+    return _every(study_id, "".join(f"&tags={quote(t, safe='')}" for t in tags) + "&tags_match=any_strict")
+
+
+def review_sites(study, person) -> set[str]:
+    """The sites whose facts a person may review: their own sites, for a role that leads a site (the PI)."""
+    roles = settings.get("memory.site_reviewer_roles", ["pi"]) or []
+    return sites_of(study, person) if person and set(person.roles) & set(roles) else set()
+
+
+def _shown(r: dict) -> dict:
+    """A fact for the review page: what it says and about whom, never who reported it."""
+    text, when = _parts(r)
+    return {"id": r["id"], "text": text, "happened": when, "reported": local_time(r.get("mentioned_at")),
+            "reported_at": r.get("mentioned_at") or "", "participants": sorted({memory.key(p) for p in _pids(r)}),
+            "site": next((t.split(":", 1)[1] for t in r.get("tags") or [] if t.startswith("site:")), ""),
+            "retired": r.get("state") == "invalidated"}
+
+
+def review(study, person) -> dict:
+    """{mine: the facts this person reported, site: the facts at the sites they lead}, newest first."""
+    newest = lambda rows: sorted((_shown(r) for r in rows), key=lambda f: f["reported_at"], reverse=True)  # noqa
+    mine = _tagged(study.study_id, [reporter_tag(person.id)])
+    ids = {r["id"] for r in mine}
+    site = [r for r in _tagged(study.study_id, sorted(site_tag(s) for s in review_sites(study, person)))
+            if r["id"] not in ids]
+    return {"mine": newest(mine), "site": newest(site)}
+
+
+def may_review(study, person, fact: dict) -> bool:
+    tags = set(fact.get("tags") or [])
+    return bool(person) and (reporter_tag(person.id) in tags
+                             or bool(tags & {site_tag(s) for s in review_sites(study, person)}))
+
+
+def staff_change(study, email: str, fact_id: str, action: str, reason: str, text: str = "") -> dict:
+    """A study person's correction or retirement of a fact they reported or that is at a site they lead."""
+    person = study.person_by_email(email)
+    if action not in ("correct", "retire"):
+        raise ValueError("You can correct a fact or take it out of answers.")
+    fact = _call("GET", f"/v1/default/banks/{bank(study.study_id)}/memories/{quote(fact_id, safe='')}", timeout=30)
+    if not may_review(study, person, fact):
+        db.audit("memory_change_refused", entity_type="memory_fact", entity_id=fact_id, study_id=study.study_id,
+                 email=email, why="not their fact or their site's")
+        raise PermissionError("You can only change facts you reported, or facts at a site you lead.")
+    return change_fact(study.study_id, fact_id, action, email, reason, text)
 
 
 # ---------------------------------------------------------------- retention, forgetting and records
