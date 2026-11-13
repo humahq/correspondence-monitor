@@ -197,6 +197,54 @@ def find(text: str, use_cache: bool = True, earlier: list[dict] | None = None) -
     return qs
 
 
+WHICH = "Which participant do you mean: {codes}? More than one participant's code ends in {short}, so I won't guess."
+
+
+def _codes(study_id: str) -> dict[str, str]:
+    """{code key: the code as written} for every participant the bot knows of in the study."""
+    out = hindsight.participants(study_id)
+    for r in db.q("SELECT participant_id FROM patient_facts WHERE study_id=? UNION SELECT participant_id FROM items"
+                  " WHERE study_id=? AND participant_id IS NOT NULL", (study_id, study_id)):
+        if memory.key(r["participant_id"]):
+            out[memory.key(r["participant_id"])] = r["participant_id"].strip()
+    return out
+
+
+def which_participant(study: Study, q: dict, email: str, earlier: list[dict]) -> str:
+    """The question back when the message writes a code short ('131') and it fits more than one participant the
+    bot knows ('G-708-131', 'G-718-131'): the question finder picks one of them silently, and the answer would give
+    that one's record. '' when the code is clear: written in full, or only that participant named in the
+    conversation before."""
+    p = memory.key(q.get("participant"))
+    written = hindsight.written_codes(email or "")
+    if not p:
+        return ""
+    codes = None
+    for w in sorted(written | {p}, key=len):
+        if w != p and (p in written or not memory.short_for(w, p)):
+            continue
+        codes = _codes(study.study_id) if codes is None else codes
+        fits = {x for x in set(codes) | {p} if memory.short_for(w, x)}
+        if len(fits) < 2:
+            continue
+        named = fits & hindsight.written_codes(conversation.block(earlier)) if earlier else set()
+        if w != p and named == {p}:
+            continue
+        shown = [q["participant"].strip() if x == p else codes.get(x) or x for x in sorted(fits)]
+        return WHICH.format(codes=", ".join(shown[:-1]) + f" or {shown[-1]}", short=w)
+    return ""
+
+
+def _label(d: dict) -> str:
+    return " ".join(str(d.get("label") or d.get("kind") or "").lower().split())
+
+
+def _asked_which(q: dict, ask: str) -> dict:
+    return {"question": q["question"], "participant": "", "text": "", "quotes": [], "ask": ask, "from_record": [],
+            "sums": [], "serious": False, "found": False, "traced": False, "picked": [], "read": [], "record": [],
+            "windows": [], "chosen": []}
+
+
 def _day(s: str | None) -> date | None:
     try:
         return date.fromisoformat((s or "")[:10])
@@ -446,7 +494,13 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
     visits = [i for i in items if i["kind"] == "visit"]
     facts, corrected = hindsight.recall(study, pid, q["question"], msg)
     # the message's own dates are read in the message: in the record they would look like what already happened
-    record = memory.record_lines([h for h in past if h["message_id"] != msg.get("id")], corrected) + facts
+    earlier = [h for h in past if h["message_id"] != msg.get("id")]
+    own = memory.record_lines([h for h in past if h["message_id"] == msg.get("id")]) \
+        if settings.feature("message_dates_win") else []
+    if own:   # an earlier date for the same thing ("next dose" Friday, now Monday) is replaced by this message's
+        redated = {_label(d) for h in past if h["message_id"] == msg.get("id") for d in h["dates"]}
+        earlier = [dict(h, dates=[d for d in h["dates"] if _label(d) not in redated]) for h in earlier]
+    record = memory.record_lines(earlier, corrected) + facts
     sched = schedule(past, visits, msg.get("id"))
     # the numbered sections themselves, not topic briefs: a brief cites dozens of sections, too many to quote from
     pickable = sources + visits
@@ -473,9 +527,11 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
             + f"\n\nPARTICIPANT RECORD ({pid or 'no participant named'}):\n"
             + ("\n".join(f"- {x}" for x in record) or "- no dates on record")
             + "\n\nVISIT WINDOWS WORKED OUT BY CODE:\n" + ("\n".join(f"- {x}" for x in sched) or "- none")
+            + ("\n\nDATES THE SITE'S MESSAGE GIVES, WORKED OUT FROM ITS WORDS (they win over the record):\n"
+               + "\n".join(f"- {x}" for x in own) if own else "")
             + f"\n\nTHE SITE'S MESSAGE:\n{email}\n\nQUESTION TO ANSWER: {q['question']}")
     res = llm.structured("answer_question", ANSWER_SYSTEM, user, ANSWER_SCHEMA, "answer", use_cache=use_cache)
-    given = sched + [f"message date {reader._email_date(msg):%d %B %Y}"]   # numbers the AI was given
+    given = sched + own + [f"message date {reader._email_date(msg):%d %B %Y}"]   # numbers the AI was given
     found = _proof(res, q, secs, checklists, sources, visits, email, record, given)
     unsourced = _unsourced(found["text"], record, f"{q['question']} {email}")
     if (not found["traced"] or unsourced) and (found["proven"] or found["from_record"]):
@@ -741,7 +797,10 @@ def answer_message(study: Study, msg: dict, email: str, use_cache: bool = True,
     every = guide.load(study.study_id)
     items = reader.view(study, every)
     sources = [i for i in every if i["kind"] == "section"]
-    answers = [answer_one(study, msg, q, items, sources, email, use_cache) for q in qs]
+    which = {id(q): which_participant(study, q, email, earlier) for q in qs
+             if settings.feature("ask_which_participant") and not q.get("harm")}
+    answers = [_asked_which(q, which[id(q)]) if which.get(id(q)) else
+               answer_one(study, msg, q, items, sources, email, use_cache) for q in qs]
     # the reporting question was added on a hunch of harm: kept only when the protocol's definition makes it serious
     answers = [a for a in answers if a["question"] != REPORTING_QUESTION or a["serious"]]
     who = study.person_by_email(msg.get("from_addr"))
