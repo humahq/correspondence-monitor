@@ -49,7 +49,7 @@ is what stops them reaching the wrong person.
 1. Send Eliot the updated roles page (`docs/eliot/privacy-roles.pdf`, 6 Nov) and get his answer to its one
    question: may the sponsor hear why a participant takes a medicine, or a diagnosis that changes nothing in the
    study (BRCA1, SOD1)?
-2. Show Eliot the patient memory page (`/admin/memory`) and ask who may correct a fact.
+2. Show Eliot the patient memory page (`/admin/memory`) and ask who may correct a fact. On a laptop demo, sign in first as `operator` (the admin pages) or as `peter`/`eliot` (to close and review an alert as those study people).
 3. Decide how long facts are kept, and whether we need a BAA with OpenAI.
 4. Install Hindsight on the server (`deploy/hindsight.sh`).
 5. Then John says yes: the steps below, with `memory.enabled` and `features.privacy_check` switched on together.

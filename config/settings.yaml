@@ -173,10 +173,19 @@ web:
   host: 0.0.0.0
   port: 8091
   base_url: http://localhost:8091
-  # Read-only admin pages at /admin (health, messages, alerts, sign-ins). Only these Google accounts get in,
-  # and only while web.login is on.
+  # Read-only admin pages at /admin (health, messages, alerts, sign-ins). On a server only these Google accounts get in
+  # (needs web.login.client_id). A copy whose web.base_url is this computer uses the local account below instead.
   admin:
     emails: [peter@huma.ai, eliot@huma.ai, john@huma.ai]
+    # Local account: only when web.base_url is localhost/127.0.0.1/::1 AND this is not the live copy. A server never
+    # offers it. The demo generator (chatdemo.prepare) turns it on; it is off here.
+    local:
+      enabled: false
+      user: operator
+      password_env: ADMIN_PASSWORD    # name of an environment variable; the value is never written to YAML
+      password_file: ""               # optional dotenv file holding that name (the demo points at cormon-chat/.env)
+      accounts: {}                    # extra names sharing that password -> the study person's email they stand for
+                                       # (the demo fills it from bot.yaml: {peter: peter@huma.ai, eliot: eliot@huma.ai})
 
 data:
   # Message text, raw copies, model caches and saved participant facts older than this are cleared once a day.
