@@ -194,7 +194,7 @@ def screen(study: Study, msg: dict, answers: list[dict], use_cache: bool = True)
         sent = said
         if not res["ok"]:
             new = " ".join((res.get("text") or "").split())
-            fits = bool(new) and len(new) <= max(len(said), 200) and _numbers(new) <= _numbers(said)
+            fits = bool(new) and len(new) <= max(len(said), 200) and _numbers(new) <= _numbers(said) | _numbers(before)
             if fits:
                 try:
                     fits = _ask(new, [], listed, use_cache, before=before)["ok"]

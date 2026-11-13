@@ -3345,6 +3345,22 @@ def test_privacy_check_sends_the_safe_reply_when_the_rewording_adds_a_number_or_
     assert a["plain"] == privacy.SAFE_REPLY
 
 
+def test_a_rewording_may_use_numbers_the_question_gave_but_no_new_one(monkeypatch):
+    from cormon import config, llm, privacy, rooms
+    study = config.study("NCT05842941")
+    msg = {"id": 8, "from_addr": SPONSOR, "from_name": "Peter", "thread_key": "teams:spaces/R/threads/T",
+           "body_text": "Anything to sort out before G-708-002's next dose?"}
+    monkeypatch.setattr(rooms, "members", lambda s: {"emails": {SPONSOR}, "complete": True, "error": None})
+    kept = "Please ask the site investigator to review G-708-002's history before the next dose."
+    for text, want in ((kept, kept), (kept + " Wait 14 days.", privacy.SAFE_REPLY)):
+        replies = iter([{"ok": False, "not_for": [{"group": "sponsor and CRO study team", "what": "HIV status"}],
+                         "text": text}, {"ok": True, "not_for": [], "text": ""}])
+        monkeypatch.setattr(llm, "structured", lambda *a, **k: next(replies))
+        a = dict(_hiv_answer(), plain="She has HIV; ask the site investigator before her next dose.")
+        privacy.screen(study, msg, [a])
+        assert a["plain"] == want
+
+
 def test_privacy_check_reads_an_email_reply_by_its_one_reader_and_skips_answers_without_a_record(monkeypatch):
     from cormon import config, llm, privacy
     study = config.study("NCT05842941")
