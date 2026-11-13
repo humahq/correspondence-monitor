@@ -123,6 +123,21 @@ ANSWER_SCHEMA = llm.obj({
                                                        "expression": {"type": "string"}})},
     "quotes": {"type": "array", "items": llm.obj({"section_id": {"type": "string"}, "words": {"type": "string"}})}})
 
+SENTENCES_RULE = """
+- sentences: the answer again, sentence by sentence, each with where it comes from. record_lines: the PARTICIPANT
+  RECORD lines it rests on, copied exactly. quotes: the numbers (from 1) of the quotes that back it. windows: true
+  when it uses the visit windows worked out by code or the dates the site's message gives. message: true when it
+  says again what the site's message or question says. calculation: true when it gives a result from
+  calculations. Code checks each sentence against its sources and drops one they do not back, so: every sentence
+  needs a source; a yes or no goes in the same sentence as its reason; a sentence that gives a rule, a requirement
+  or whether something is allowed needs the quote of the protocol's words that say it. When answerable is false,
+  sentences is empty."""
+
+SENTENCE = llm.obj({"text": {"type": "string"}, "record_lines": {"type": "array", "items": {"type": "string"}},
+                    "quotes": {"type": "array", "items": {"type": "integer"}}, "windows": {"type": "boolean"},
+                    "message": {"type": "boolean"}, "calculation": {"type": "boolean"}})
+ANSWER_SCHEMA_S = llm.obj({**ANSWER_SCHEMA["properties"], "sentences": {"type": "array", "items": SENTENCE}})
+
 PLAIN_SYSTEM = """You turn a study monitor's checked answer into the reply a helpful human assistant would post in a
 clinical-trial team chat. The reader is busy site or study staff, often a nurse or a doctor.
 Rules:
@@ -209,6 +224,30 @@ def _codes(study_id: str) -> dict[str, str]:
         if memory.key(r["participant_id"]):
             out[memory.key(r["participant_id"])] = r["participant_id"].strip()
     return out
+
+
+def named_participant(codes: dict[str, str], question: str) -> str:
+    """The one participant the bot knows whose full code the question writes, in any form ('G708305' for
+    G-708-305); '' for none or more than one."""
+    named = {codes[k] for k in map(memory.key, hindsight.written_codes(question)) if k in codes}
+    return named.pop() if len(named) == 1 else ""
+
+
+def _whole_message(study: Study, email: str) -> list[dict]:
+    """A message to the bot that the question finder found nothing in ("Anything in G-708-370's diet we should
+    know about?"), asked as it is when it ends with a question mark, or names a participant the bot knows and asks
+    for what is known ("tell me about 370"): the person gets the checked answer or "I couldn't find this", never
+    silence. A report ("370 was admitted"), thanks and chatter stay unanswered."""
+    text = " ".join((email or "").split())
+    if not text or len(text) > 600:
+        return []
+    pid = named_participant(_codes(study.study_id), text)
+    asks = text.endswith("?") or (pid and ASK_FOR.match(text))
+    return [{"question": text, "participant": pid, "harm": False, "record_only": False}] if asks else []
+
+
+ASK_FOR = re.compile(r"^\W*(?:(?:hi|hey|hello|ok|okay|please)\W+)*(?:can you\s+|could you\s+)?"
+                     r"(?:tell|show|give|list|summari[sz]e|remind)\b", re.I)
 
 
 def which_participant(study: Study, q: dict, email: str, earlier: list[dict]) -> str:
@@ -542,11 +581,16 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
             + ("\n\nDATES THE SITE'S MESSAGE GIVES, WORKED OUT FROM ITS WORDS (they win over the record):\n"
                + "\n".join(f"- {x}" for x in own) if own else "")
             + f"\n\nTHE SITE'S MESSAGE:\n{email}\n\nQUESTION TO ANSWER: {q['question']}")
-    res = llm.structured("answer_question", ANSWER_SYSTEM, user, ANSWER_SCHEMA, "answer", use_cache=use_cache)
+    sourced = settings.feature("sentence_sources")
+    system, schema = (ANSWER_SYSTEM + SENTENCES_RULE, ANSWER_SCHEMA_S) if sourced else (ANSWER_SYSTEM, ANSWER_SCHEMA)
+    res = llm.structured("answer_question", system, user, schema, "answer", use_cache=use_cache)
     given = sched + own + [f"message date {reader._email_date(msg):%d %B %Y}"]   # numbers the AI was given
-    found = _proof(res, q, secs, checklists, sources, visits, email, record, given)
+    args = (q, secs, checklists, sources, visits, email, record, given)
+    found = _proof(res, *args)
     unsourced = _unsourced(found["text"], record, f"{q['question']} {email}")
-    if (not found["traced"] or unsourced) and (found["proven"] or found["from_record"]):
+    if sourced:
+        res, found = _by_sentence(res, found, args, user, system, schema, use_cache)
+    elif (not found["traced"] or unsourced) and (found["proven"] or found["from_record"]):
         loose = sorted(_norm_nums(found["checked"]) - _norm_nums(found["backing"]), key=len)
         why = found["conflict"] or (f"These numbers in your answer are not in the protocol's words or the record: "
                                     f"{', '.join(loose)}. Give each one as a calculation from the protocol's or "
@@ -567,11 +611,13 @@ def answer_one(study: Study, msg: dict, q: dict, items: list[dict], sources: lis
     # an answer that says the protocol is silent but gives its proven numbers is still shown; one on what happened
     # to the participant stands on the record lines it rests on
     from_record = found["from_record"] if pid else []
-    record_only = q.get("record_only") or _only_reports(res, found, from_record, q["question"])
+    record_only = not sourced and (q.get("record_only") or _only_reports(res, found, from_record, q["question"]))
     return {"question": q["question"], "participant": pid, "text": found["text"], "quotes": found["proven"][:4],
             "ask": ask, "from_record": from_record,
             "sums": found["sums"], "serious": bool(res["serious_event"]),
-            "found": bool(found["proven"] or (record_only and res["answerable"] and from_record)),
+            "found": found["kept"] if sourced else bool(found["proven"] or (record_only and res["answerable"]
+                                                                            and from_record)),
+            "dropped": found.get("dropped", []),
             "traced": found["traced"], "picked": [i["id"] for i in secs + checklists],
             "read": [reader._heading(i) for i in secs + checklists], "record": record, "windows": sched,
             "chosen": [x for x in dict.fromkeys(picked_ids) if x in known and known[x]["kind"] == "section"]}
@@ -597,6 +643,84 @@ def ask_back(q: dict, said: str, secs: list[dict], email: str, record: list[str]
     if len(ask) < 15 or len(ask) > 300 or PERSONAL.search(ask) or not _numbers_traced(ask, backing):
         return ""
     return ask if ask.endswith("?") else ask.rstrip(".") + ". Can you tell me?"
+
+
+def _check_sentences(res: dict, found: dict, args: tuple) -> tuple[list[dict], list[tuple[str, str]]]:
+    """The answer's sentences that their own sources back, and the others with why each was dropped. A sentence
+    needs a source that checks out: a record line or code's window that is there, protocol words that are in the
+    protocol, the site's message or a sum code worked out. Its numbers must be in those, the site's message or what
+    code worked out, and a sentence without protocol words may say nothing beyond its sources and the sentences
+    kept before it: no rule, permission, advice or judgment. A "Yes." is checked with the sentence after it."""
+    q, secs, checklists, sources, _, email, record, given = args
+    known = record + given
+    worked = given + [w for _, w in found["proven"]] + [i["text"].splitlines()[0] for i in checklists] \
+        + [r for _, r in found["sums"]]
+    read = " ".join(i["text"] for i in secs + checklists)
+    about = {"problem": q["question"], "why": _clean(res["answer"])}
+    proven = {}
+    for n, c in enumerate(res["quotes"][:6], 1):
+        hit = reader._exact_words(c["words"], secs, sources, c["section_id"], about)
+        if hit and hit[0]["kind"] == "section":
+            proven[n] = (reader._heading(hit[0]), re.sub(r"^[\s.,;:]+", "", hit[1]))
+    said = []
+    for s in (res.get("sentences") or [])[:8]:
+        if said and len(said[-1]["text"].split()) < 4:   # "Yes." / "No, she can't." goes with its reason
+            short = said.pop()
+            s = {k: (short[k] + s[k] if isinstance(s[k], list) else short[k] or s[k]) if k != "text"
+                 else f"{short['text']} {s['text']}" for k in s}
+        said.append(s)
+    kept, dropped = [], []
+    for s in said:
+        text = _clean(s["text"])
+        if not text:
+            continue
+        lines = record_used(s["record_lines"], known)
+        quotes = [proven[n] for n in dict.fromkeys(s["quotes"]) if n in proven]
+        why = "" if lines or quotes or s["message"] or (s["windows"] and given) or (s["calculation"] and found["sums"]) \
+            else "none of the sources it cites checks out"
+        back = " ".join([q["question"], q["participant"], email] + lines + [w for _, w in quotes] + worked)
+        back += " " + " ".join(f"{int(a) - int(b)} {int(a) + int(b)}"
+                               for a, b in re.findall(r"(\d+)\s*(?:days?\s*)?±\s*(\d+)", back))
+        checked = _names_read(text, read) if settings.feature("name_numbers") else text
+        if not why and not _numbers_traced(checked, back):
+            why = "it has numbers its sources do not give: " + ", ".join(sorted(_norm_nums(checked) - _norm_nums(back)))
+        if not why and not quotes and not outcheck.only_repeats(
+                text, back + "\n\nSAID BEFORE IT: " + " ".join(k["text"] for k in kept), facts=False):
+            why = "it says more than its sources say; a rule or whether something is allowed needs the protocol's words"
+        if why:
+            dropped.append((text, why))
+        else:
+            kept.append({"text": text, "lines": [ln for ln in lines if ln in record], "quotes": quotes,
+                         "windows": s["windows"]})
+    return kept, dropped
+
+
+def _by_sentence(res: dict, found: dict, args: tuple, user: str, system: str, schema: dict,
+                 use_cache: bool) -> tuple[dict, dict]:
+    """The answer made of only its checked sentences (asked again once when one fails), whatever kind of question
+    the finder took it for: an answer from the record and one from the protocol are checked the same way."""
+    q, record, email = args[0], args[6], args[5]
+    loose = lambda kept: _unsourced(" ".join(s["text"] for s in kept), record, f"{q['question']} {email}")  # noqa
+    kept, dropped = _check_sentences(res, found, args)
+    if dropped or loose(kept):
+        why = " ".join(f'Dropped "{t}": {w}.' for t, w in dropped)
+        if unsourced := loose(kept):
+            why += (" Your answer uses earlier facts without saying who reported them and when: "
+                    + "; ".join(unsourced) + ". Say it in the sentence that uses each one.")
+        fix = f"\n\nYOUR ANSWER:\n{json.dumps(res, ensure_ascii=False)}\n\n{why.strip()} Answer again in full."
+        res2 = llm.structured("answer_question", system, user + fix, schema, "answer", use_cache=use_cache)
+        found2 = _proof(res2, *args)
+        kept2, dropped2 = _check_sentences(res2, found2, args)
+        if len(kept2) > len(kept) or (kept2 and len(kept2) == len(kept) and len(loose(kept2)) < len(loose(kept))):
+            res, found, kept, dropped = res2, found2, kept2, dropped2
+    if found["conflict"]:  # the AI keeps the wrong pair: code's own answer from the quoted rows
+        return res, dict(found, text=found["code_answer"], traced=True, sums=found["sums"][-1:], kept=True,
+                         dropped=dropped)
+    shown = list(dict.fromkeys(x for s in kept for x in s["quotes"]))
+    if any(s["windows"] for s in kept):  # the schedule table's own cells for the windows used
+        shown += [x for x in found["proven"] if x not in shown]
+    return res, dict(found, text=" ".join(s["text"] for s in kept), proven=shown, traced=True, kept=bool(kept),
+                     from_record=list(dict.fromkeys(ln for s in kept for ln in s["lines"])), dropped=dropped)
 
 
 def record_used(cited: list[str], record: list[str]) -> list[str]:
@@ -797,19 +921,25 @@ def answer_message(study: Study, msg: dict, email: str, use_cache: bool = True,
     turn = capture.turn(msg)
     to_bot = turn in ("direct", "addressed") or (turn == "email" and msg.get("visibility") == "to")
     follow_up = to_bot and conversation.bot_answered_lately(earlier)
-    if not guide.checker(study).get("answer_questions", True) or not (
-            HARM_WORDS.search(email or "") or (not harm_only and (
-                asks_something(email) or follow_up or (to_bot and asks_the_documents(email, use_cache))))):
+    if not guide.checker(study).get("answer_questions", True):
         return []
-    qs = [q for q in find(email, use_cache, earlier) if q.get("harm") or not harm_only]
-    if earlier:
+    asked = HARM_WORDS.search(email or "") or (not harm_only and (
+        asks_something(email) or follow_up or (to_bot and asks_the_documents(email, use_cache))))
+    qs = [q for q in find(email, use_cache, earlier) if q.get("harm") or not harm_only] if asked else []
+    if earlier and asked:
         db.audit("conversation_used", entity_type="message", entity_id=msg["id"], study_id=study.study_id,
                  turns=len(earlier), questions=[q["question"] for q in qs])
+    if not qs and to_bot and not harm_only and settings.feature("always_reply"):
+        qs = _whole_message(study, email)
     if not qs:
         return []
     every = guide.load(study.study_id)
     items = reader.view(study, every)
     sources = [i for i in every if i["kind"] == "section"]
+    if settings.feature("sentence_sources") and any(not memory.key(q.get("participant")) for q in qs):
+        codes = _codes(study.study_id)   # the finder may leave a code it does not recognise out
+        for q in qs:
+            q["participant"] = q.get("participant") or named_participant(codes, q["question"])
     which = {id(q): which_participant(study, q, email, earlier) for q in qs
              if settings.feature("ask_which_participant") and not q.get("harm")}
     answers = [_asked_which(q, which[id(q)]) if which.get(id(q)) else

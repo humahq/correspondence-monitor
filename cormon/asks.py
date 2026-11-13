@@ -35,6 +35,10 @@ List each request the message makes of the bot, with its kind:
 topic: for opinion or task, the study topic the documents' facts would be about, in a few words. "" when the
 request has nothing to do with the study (the weather, music, sport, general news), and for every other kind.
 Return no requests when the message asks nothing of the bot."""
+SORT_REPORTS = """
+A question on what the study's own messages reported about a participant (what she takes, what happened, who
+reported it and when) is study: the bot keeps those facts to answer such questions. about_bot is only for the bot's
+workings and for messages or data that are not about the study."""
 SORT_EARLIER = """
 EARLIER IN THIS CONVERSATION is only there to understand MESSAGE: sort only what MESSAGE asks. A follow-up ("and
 week 8?", "make slides of that") or a correction ("sorry, I meant 012") has the kind and topic of what it now asks,
@@ -74,7 +78,8 @@ def private(msg: dict) -> bool:
 def sort(text: str, use_cache: bool = True, earlier: list[dict] | None = None) -> list[dict]:
     prompt = (f"EARLIER IN THIS CONVERSATION:\n{conversation.block(earlier)}\n\n" if earlier else "") + \
         f"MESSAGE:\n{text}"
-    res = llm.structured("asks_sort", SORT_SYSTEM + (SORT_EARLIER if earlier else ""), prompt, SORT_SCHEMA,
+    system = SORT_SYSTEM + (SORT_REPORTS if settings.feature("asks_about_reports") else "")
+    res = llm.structured("asks_sort", system + (SORT_EARLIER if earlier else ""), prompt, SORT_SCHEMA,
                          "requests", use_cache=use_cache)
     return [r for r in res["requests"] if r["kind"] in KINDS]
 

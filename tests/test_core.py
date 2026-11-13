@@ -509,6 +509,75 @@ def test_an_answer_only_from_the_record_stands_though_the_finder_took_it_for_a_r
     assert not answers.answer_one(study, msg, q, [], [], "G708305")["found"]
 
 
+def test_each_sentence_stands_on_its_own_source_whatever_the_finder_thought(monkeypatch):
+    from cormon import answers, hindsight, llm, memory
+    line = ("earlier fact, reported on 12 Nov 2026 by John Huma (Sponsor ClinOps lead): G-718-405 uses a "
+            "salbutamol inhaler 100 mcg as needed.")
+    monkeypatch.setattr(hindsight, "recall", lambda *a: ([line], set()))
+    monkeypatch.setattr(memory, "history", lambda *a, **kw: [])
+    sent = lambda text, lines=(), **kw: {"text": text, "record_lines": list(lines), "quotes": [],  # noqa: E731
+                                         "windows": False, "message": False, "calculation": False, **kw}
+    said = {"answerable": True, "serious_event": False, "calculations": [], "record_used": [line],
+            "quotes": [{"section_id": "5.2", "words": "Inhaled bronchodilators are permitted."}],
+            "answer": "She uses salbutamol 100 mcg as needed, reported by John Huma on 12 Nov 2026. That is allowed.",
+            "sentences": [sent("She uses a salbutamol inhaler 100 mcg as needed, John Huma reported on 12 Nov 2026.",
+                               [line]),
+                          sent("That is allowed.", quotes=[1]),           # no such words in the protocol
+                          sent("Her dose was raised to 200 mcg.", [line])]}  # a number the record does not give
+    monkeypatch.setattr(llm, "structured", lambda task, *a, **kw: {"ids": []} if task == "answer_pick" else said)
+    monkeypatch.setattr(llm, "decide", lambda *a, **kw: {"beyond": 0.0, **{k: 0.0 for k in answers.outcheck.JUDGMENT}})
+    msg = {"id": 42, "sent_at": "2026-11-13T05:02:00+00:00"}
+    q = {"question": "What about G-718-405?", "participant": "G-718-405", "harm": False, "record_only": False}
+    study = type("S", (), {"study_id": "S1", "raw": {}, "documents": []})()
+    assert not answers.answer_one(study, msg, q, [], [], "What about G-718-405?")["found"]   # switch off
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "sentence_sources")
+    a = answers.answer_one(study, msg, q, [], [], "What about G-718-405?")
+    assert a["found"] and a["text"].startswith("She uses a salbutamol") and "allowed" not in a["text"]
+    assert "200" not in a["text"] and a["from_record"] == [line] and len(a["dropped"]) == 1   # "That is allowed." +
+    #                                                                       the next sentence, checked as one
+    monkeypatch.setattr(llm, "decide", lambda *a, **kw: {"beyond": 0.9})   # it adds a rule the record lacks
+    assert not answers.answer_one(study, msg, q, [], [], "What about G-718-405?")["found"]
+
+
+def test_a_known_code_written_without_dashes_names_the_participant():
+    from cormon import answers
+    codes = {"G708305": "G-708-305", "G718405": "G-718-405"}
+    assert answers.named_participant(codes, "What is G708305 taking?") == "G-708-305"
+    assert answers.named_participant(codes, "Is G-708-305 or G-718-405 on steroids?") == ""
+    assert answers.named_participant(codes, "Is G-708-999 on steroids?") == ""
+
+
+def test_a_vague_question_to_the_bot_is_asked_whole_not_left_unanswered(monkeypatch):
+    from cormon import answers
+    monkeypatch.setattr(answers, "_codes", lambda s: {"G708370": "G-708-370"})
+    study = type("S", (), {"study_id": "S1"})()
+    q = answers._whole_message(study, "Anything in G-708-370's diet we should know about?")
+    assert q and q[0]["participant"] == "G-708-370" and q[0]["question"].endswith("about?")
+    assert answers._whole_message(study, "Tell me about G708370")[0]["participant"] == "G-708-370"
+    assert not answers._whole_message(study, "G-708-370 was admitted last night.")   # a report, not a question
+    assert not answers._whole_message(study, "Thanks Mira!")
+
+
+def test_a_question_on_what_was_reported_is_sorted_with_the_reports_rule(monkeypatch):
+    from cormon import asks, llm
+    seen = []
+    monkeypatch.setattr(llm, "structured", lambda task, system, *a, **kw: seen.append(system) or {"requests": []})
+    asks.sort("Who told us about G-708-410's turmeric, and when?")
+    assert asks.SORT_REPORTS not in seen[-1]
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "asks_about_reports")
+    asks.sort("Who told us about G-708-410's turmeric, and when?")
+    assert asks.SORT_REPORTS in seen[-1]
+
+
+def test_the_bots_own_mention_is_not_part_of_the_message():
+    from cormon.channels import gchat
+    bot = lambda u: u.get("name") == "users/bot"  # noqa: E731
+    marks = [{"type": "USER_MENTION", "startIndex": 0, "length": 9, "userMention": {"user": {"name": "users/bot"}}},
+             {"type": "USER_MENTION", "startIndex": 34, "length": 4, "userMention": {"user": {"name": "users/9"}}}]
+    text = "@Test Bot G-708-401 was admitted, @Ann knows."
+    assert gchat._without_bot(text, marks, bot) == "G-708-401 was admitted, @Ann knows."
+
+
 def test_the_messages_own_date_replaces_an_earlier_one_for_the_same_thing(monkeypatch):
     from cormon import answers, hindsight, llm, memory
     friday = {"label": "next dose", "kind": "dose", "date": "2026-11-13"}

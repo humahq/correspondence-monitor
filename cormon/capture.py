@@ -283,7 +283,7 @@ def _version(msg_id: int, inb: Inbound) -> int | None:
     current = last["body_text"] if last else db.q1("SELECT body_text FROM messages WHERE id=?", (msg_id,))["body_text"]
     if inb.deleted_at:
         change = "deleted"
-    elif (inb.body_text or "") != (current or ""):
+    elif (inb.body_text or "") != (current or "") and (inb.edited_at or not settings.feature("strip_bot_mention")):
         change = "edited"
     else:
         return None

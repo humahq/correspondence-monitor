@@ -37,6 +37,18 @@ SCOPES = [
 MEMBERS_SCOPE = "https://www.googleapis.com/auth/chat.memberships.readonly"
 
 
+def _without_bot(text: str, annotations: list[dict], bot) -> str:
+    """The message's words without its @mentions of the bot ("@Test Bot G-708-401 ..." is about G-708-401). A span
+    that is not an @name in the text is left alone."""
+    spans = sorted(((int(a.get("startIndex") or 0), int(a.get("length") or 0)) for a in annotations
+                    if a.get("type") == "USER_MENTION" and bot((a.get("userMention") or {}).get("user") or {})),
+                   reverse=True)
+    for start, n in spans:
+        if n and text[start:start + 1] == "@":
+            text = text[:start] + text[start + n:]
+    return re.sub(r"[ \t]{2,}", " ", text).strip(" \t,:")
+
+
 def credentials(interactive: bool = False):
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
@@ -197,6 +209,8 @@ class GoogleChatChannel:
         bot = lambda u: u.get("name") == self.me or (u.get("email") or "").lower() == self._users.get(self.me)
         headers = {"_cormon_mentions": [u.get("email") or u.get("name") for u in named],
                    "_cormon_to_bot": any(bot(u) for u in named)} if named else {}
+        if headers.get("_cormon_to_bot") and settings.feature("strip_bot_mention"):
+            text = _without_bot(m.get("text") or text, m.get("annotations") or [], bot)
         return Inbound(
             headers=headers,
             channel="teams", external_id=m["name"], thread_ref=thread,
