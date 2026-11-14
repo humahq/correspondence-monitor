@@ -86,8 +86,11 @@ Hindsight keeps only facts about patients (`features.scoped_memory`). Everything
   operations manual), not in memory.
 - **Simple:** plain text or markdown lists, one per site, practice and study, like Eliot's list of paywalled
   sites. Hindsight might later be replaced by this too.
-- **Scoped:** a site's facts only for that site, a practice's for its sites, a study's for all. Reviewed by a
-  person; written on purpose, not pulled from chat.
+- **Scoped:** a site's facts only for that site, a study's for all.
+- **Built first, apart from the manager** (`features.durable_facts`, `cormon/sitefacts.py`): John chose to save
+  site events from site messages by themselves (no approval step), kept in the database with an audit trail,
+  used first only when answering questions. People correct or retire them (`cormon site-facts`). Practices and a
+  deliberately written site operations document are for later.
 - **Never about staff:** no "who left the fridge open" (no tattling, EU AI Act).
 - The site facts the manager needs (Part B: lab location, courier cut-off) come from here.
 
@@ -102,7 +105,7 @@ Hindsight keeps only facts about patients (`features.scoped_memory`). Everything
 - [ ] 4. **Replies and check-ins:** the plan loop, "stuck" handed to a person, the limits.
 - [ ] 5. **Answer review and corrections.**
 - [ ] 6. **Activity table** (filled from past data too), the nightly pattern finder, the weekly report.
-- [ ] 7. **Durable facts store** (Part D): site, practice and study facts in simple files, scoped and reviewed.
+- [x] 7. **Durable facts store** (Part D, first version built): site, practice and study facts in simple files, scoped and reviewed.
       Before or with step 3 if the manager needs site facts.
 - [ ] Each step: a test set of realistic cases (lab kit, consent, drug temperature, missed visit), scored before
       and after, using the cheapest AI models first.

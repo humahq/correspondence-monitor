@@ -739,6 +739,32 @@ def cmd_note(args):
         print(f"note {args.target} retired")
 
 
+def cmd_site_facts(args):
+    from . import sitefacts
+    if args.action in ("correct", "retire") and not args.id:
+        sys.exit(f"give the fact's id: cormon site-facts {args.action} --id N")
+    if args.action in ("add", "correct") and not (args.text or "").strip():
+        sys.exit(f"give the fact's words: cormon site-facts {args.action} \"...\"")
+    if args.action == "correct":
+        print(f"site fact {args.id} corrected: now fact {sitefacts.correct(args.id, args.text, actor(args))}")
+        return
+    if args.action == "retire":
+        sitefacts.retire(args.id, actor(args))
+        print(f"site fact {args.id} retired")
+        return
+    study = config.study(args.study) if args.study else next(iter(config.studies().values()))
+    if args.action == "add":
+        fid = sitefacts.add(study, args.site, args.kind, args.text, actor(args), args.happened)
+        print(f"site fact {fid} added for {args.site or 'the whole study'}")
+        return
+    rows = db.q("SELECT id, site, kind, happened, author, created_at, text FROM site_facts WHERE study_id=? AND active=1"
+                + (" AND (site=? OR site IS NULL)" if args.site else "") + " ORDER BY created_at DESC",
+                (study.study_id, args.site) if args.site else (study.study_id,))
+    table([dict(r, site=r["site"] or "all") for r in rows],
+          [("id", "id", 4), ("site", "site", 10), ("kind", "kind", 12), ("happened", "happened", 10),
+           ("author", "added by", 14), ("created_at", "reported", 20), ("text", "fact", 70)])
+
+
 def _iso_day(text: str) -> str:
     from dateutil import parser as dtparser
     from datetime import timezone
@@ -1191,6 +1217,15 @@ def build_parser() -> argparse.ArgumentParser:
                                     "history and retire)")
     s.add_argument("--from", dest="from_", help="the date the note starts to apply (default: once approved)")
     s.add_argument("--kind", choices=["fact", "instruction"], default="fact"); s.set_defaults(fn=cmd_note)
+
+    s = sub.add_parser("site-facts", help="durable facts: what happened at a site and how it works (list, add, "
+                                          "correct, retire)")
+    s.add_argument("action", choices=["list", "add", "correct", "retire"])
+    s.add_argument("text", nargs="?", help="the fact (add, correct)")
+    s.add_argument("--study"); s.add_argument("--site", help="a site id; none for a fact about the whole study")
+    s.add_argument("--kind", choices=["event", "how_it_works"], default="event")
+    s.add_argument("--happened", help="the date it happened (add)")
+    s.add_argument("--id", type=int, help="the fact id (correct, retire)"); s.set_defaults(fn=cmd_site_facts)
 
     s = sub.add_parser("config", help="show, set or edit routing rules, thresholds, templates (changes recorded)")
     s.add_argument("action", choices=["show", "set", "edit", "history", "approve", "release"])

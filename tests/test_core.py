@@ -4157,6 +4157,55 @@ def test_scoped_memory_files_each_fact_under_the_senders_own_site_and_never_the_
     assert hindsight.save_alert(5, kind="finding", participant_id="G-708-401") is None
 
 
+def test_site_facts_are_saved_under_the_senders_site_and_never_name_staff_or_participants(monkeypatch):
+    from cormon import llm, memory, sitefacts
+    study = _two_sites()
+    msg = {"id": 90, "from_addr": "johnrohit94@gmail.com", "channel": "teams", "subject": "",
+           "sent_at": "2026-11-13T14:00:00+00:00", "thread_key": "t9", "attachments": []}
+    asked = []
+    monkeypatch.setattr(llm, "structured", lambda *a, **k: asked.append(a) or {"facts": [
+        {"text": "The lab fridge door was left open overnight.", "kind": "event", "happened": "2026-11-12"},
+        {"text": "Rohit left the fridge open.", "kind": "event", "happened": ""},
+        {"text": "G-708-401's kit arrived late.", "kind": "event", "happened": ""}]})
+    assert sitefacts.save_message(study, msg, "The lab fridge door was left open overnight.") is None   # switch off
+    assert not asked
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "durable_facts")
+    memory.save(study.study_id, "G-708-401", dict(msg, id=1), [], [{"what": "visit"}])
+    sitefacts.save_message(study, msg, "The lab fridge door was left open overnight.").result()
+    sitefacts.save_message(study, msg, "The lab fridge door was left open overnight.").result()   # read again
+    rows = db.q("SELECT * FROM site_facts WHERE active=1")
+    assert [(r["site"], r["kind"], r["text"], r["happened"]) for r in rows] == \
+        [("site-01", "event", "The lab fridge door was left open overnight.", "2026-11-12")]
+    whys = [db.unjs(r["details"])["why"] for r in db.q("SELECT details FROM audit_log WHERE action='site_fact_not_saved'")]
+    assert whys.count("it names a staff member") == 2 and whys.count("it names a participant") == 2
+    sponsor = dict(msg, id=91, from_addr="john@huma.ai")   # covers both sites, names neither
+    assert sitefacts.save_message(study, sponsor, "The site was closed today.") is None
+
+
+def test_site_facts_are_read_back_only_inside_the_askers_sites_and_people_can_fix_them(monkeypatch):
+    from cormon import answers, sitefacts
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "durable_facts")
+    study = _two_sites()
+    one = sitefacts.add(study, "site-01", "event", "The lab fridge door was left open overnight.", "john")
+    sitefacts.add(study, "site-02", "how_it_works", "Our courier picks up at 3 pm.", "john")
+    sitefacts.add(study, None, "event", "Drug shipments are delayed this week.", "john")
+    rival = {"id": 92, "from_addr": "crc2@rival.org", "channel": "teams", "visibility": "direct"}
+    got = sitefacts.lines(study, rival)
+    assert [ln.split(": ", 1)[1] for ln in got] == ["Our courier picks up at 3 pm.",
+                                                    "Drug shipments are delayed this week."]
+    assert got[0].startswith("site fact, Site 02 (Rival), reported on ") and answers.FACT_LINE.match(got[0])
+    room = dict(rival, visibility="channel")   # anyone in a shared room may be from another site
+    assert [ln.split(": ", 1)[1] for ln in sitefacts.lines(study, room)] == ["Drug shipments are delayed this week."]
+    new = sitefacts.correct(one, "The lab fridge door was left open for an hour.", "eliot")
+    assert db.q1("SELECT replaces FROM site_facts WHERE id=?", (new,))["replaces"] == one
+    sitefacts.retire(new, "eliot")
+    assert not db.q1("SELECT 1 FROM site_facts WHERE site='site-01' AND active=1")
+    assert {r["action"] for r in db.q("SELECT action FROM audit_log WHERE entity_type='site_fact'")} == \
+        {"site_fact_added", "site_fact_corrected", "site_fact_retired"}
+    monkeypatch.setenv("CORMON_TEST_FEATURES", "")
+    assert sitefacts.lines(study, rival) == []
+
+
 def test_scoped_memory_answers_only_from_the_askers_own_sites_and_never_says_who_reported(monkeypatch):
     from cormon import answers, hindsight
     fact = lambda i, site: {"id": i, "text": f"G-708-401 takes drug {i}", "mentioned_at": "2026-11-01T10:00:00",  # noqa
