@@ -4198,6 +4198,25 @@ def test_scoped_memory_gives_the_saved_visit_dates_only_from_the_askers_own_site
     assert [h["message_id"] for h in mine] == [90], "the rival site's dates stay at the rival site"
 
 
+def test_a_question_about_a_remembered_fact_raises_no_second_alert(monkeypatch):
+    from cormon import reader
+    asked = []
+    monkeypatch.setattr(reader.llm, "structured", lambda task, system, user, schema, name, use_cache=True:
+                        asked.append((system, schema)) or {"reasons": "", "protocol_words": "", "verdict": "rejected",
+                                                           "earlier_fact_only": True})
+    f = {"problem": "Taking a prohibited strong CYP3A4/5 inducer", "email_quote": "What is G708131 taking?",
+         "protocol_quote": "excluded during the study", "section_id": "s093", "why": "", "next_step": ""}
+    sec = [{"id": "s093", "kind": "section", "title": "Concomitant medicines", "text": "excluded during the study"}]
+    monkeypatch.setattr(reader, "_block", lambda i: i["text"])
+    reader.confirm(f, sec, "What is G708131 taking?", ["Visit window: day 28 +/- 3"], False)
+    assert asked[-1] == (reader.CONFIRM_SYSTEM, reader.CONFIRM_SCHEMA)   # no memory: asked exactly as before
+    fact = "earlier fact (medicine), reported on 13 Nov 2026: G708131 started St. John's wort on 30 Oct 2026"
+    c = reader.confirm(f, sec, "What is G708131 taking?", [fact, reader.MEMORY_NOTE], False)
+    assert asked[-1] == (reader.CONFIRM_SYSTEM + reader.CONFIRM_MEMORY, reader.CONFIRM_MEMORY_SCHEMA)
+    assert c["earlier_fact_only"]
+    assert "information" in reader.MEMORY_NOTE
+
+
 def test_scoped_memory_prompts_drop_who_reported_and_keep_rules_to_the_protocol(monkeypatch):
     from cormon import answers
     every = answers.FIND_SYSTEM + answers.ANSWER_SYSTEM + answers.PLAIN_SYSTEM + answers.UNSOURCED_WHY
