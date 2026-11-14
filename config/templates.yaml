@@ -420,7 +420,7 @@ templates:
 
       A possible safety message ({{ safety.severity_label }}) has not been acknowledged by anyone on the safety contact list. It was due by {{ safety.due }}. This is now recorded as a deviation. Please phone the medical monitor now.
 
-      Phone numbers on file: {{ safety.phones }}
+      {{ safety.phone_line }}
 
       Participant: {{ item.participant_id or "not named" }} · {{ item.site }}
       From: {{ finding.sender_name }}, {{ finding.message_date }}

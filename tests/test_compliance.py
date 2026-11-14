@@ -1863,6 +1863,11 @@ def test_an_unacknowledged_safety_message_goes_up_the_chain_then_to_a_phone(monk
     assert ("email-safety-escalation", "peter+NCT05842941-sponsor@huma.ai") == seq[3]   # the second ClinOps lead
     assert seq[4] == ("email-safety-phone", "john+safetyoncall@huma.ai") and seq[5][1] == "ops@huma.ai"
     assert sum(1 for t, _ in seq if t == "email-safety-phone") == 4         # the terminus and 3 reminders
+    phone = db.q1("SELECT body FROM outbox WHERE template_id='email-safety-phone' ORDER BY id")["body"]
+    assert "I don't have their phone number" in phone and "on file" not in phone
+    it, mm = items.get(iid), study.people_with_role("medical_monitor")[0]
+    monkeypatch.setattr(mm, "phone", "617-555-0100")
+    assert safety.context(study, it)["phone_line"] == f"Their phone numbers: {mm.name} (Medical monitor): 617-555-0100."
     assert items.get(iid)["next_step_at"] is None                         # then it stops
     dev = db.q("SELECT details FROM audit_log WHERE action='safety_ack_deviation'")
     assert len(dev) == 1 and items.get(iid)["ack_deviation_at"]            # recorded once, as a deviation
