@@ -41,8 +41,9 @@ MEMORY_NOTE = ("Lines starting 'earlier fact' come from patient memory: other me
                "checked when they were reported. Use them to judge what this email reports, plans or asks (a "
                "medicine against a condition or medicine reported earlier, a step after a withdrawal reported "
                "earlier, a problem the site already dealt with), but report only a problem this email itself "
-               "reports, plans or asks, never one that rests on earlier facts alone. A fact marked NO LONGER TRUE "
-               "is not true.")
+               "reports, plans or asks, never one that rests on earlier facts alone. A question that only asks "
+               "for information (what the participant takes, what happened, who reported something) raises no "
+               "finding. A fact marked NO LONGER TRUE is not true.")
 MEMORY_CHECK = ("Earlier facts about this participant are listed under FACTS FROM CODE ('earlier fact'). Check every "
                 "statement against each earlier fact that could matter to it (a medicine, condition, withdrawal, "
                 "pregnancy, earlier trial, result or problem reported before), with a check that names the earlier "
@@ -767,6 +768,23 @@ CONFIRM_SCHEMA = llm.obj({
     "protocol_words": {"type": "string"},
     "verdict": {"type": "string", "enum": ["confirmed", "rejected", "unsure"]}})
 
+# only when patient memory's facts are in the notes, so a copy without memory asks exactly what it asked before
+CONFIRM_MEMORY = """
+Lines starting 'earlier fact' or 'NO LONGER TRUE' come from patient memory: other messages about this participant,
+checked when they were reported. They are context only. earlier_fact_only: true when the problem rests on earlier
+facts alone and this email does not itself report, plan or ask anything that breaks the rule (for example it only
+asks what the participant takes, what happened or who reported something); such a finding is rejected."""
+
+CONFIRM_MEMORY_SCHEMA = llm.obj({
+    "reasons": {"type": "string"},
+    "protocol_words": {"type": "string"},
+    "earlier_fact_only": {"type": "boolean"},
+    "verdict": {"type": "string", "enum": ["confirmed", "rejected", "unsure"]}})
+
+
+def _has_memory(notes: list[str]) -> bool:
+    return any(n.startswith(("earlier fact", "NO LONGER TRUE")) for n in notes)
+
 
 def _proof(f: dict, context: list[dict], sources: list[dict]) -> list[dict]:
     """What a finding is confirmed against. With topic briefs: the source sections its brief line cites (and any
@@ -1299,6 +1317,9 @@ def _blind_look(study: Study, part: dict, res: dict, context: list[dict], source
                  or _find_quote(f["protocol_quote"], [i for i in proof if i["kind"] not in _OWN_TEXT],
                                 f["section_id"]))
         rec.update(confirm=c, quote_found=bool(found))
+        if c.get("earlier_fact_only"):
+            rec["outcome"] = "earlier_fact_only"
+            continue
         if c["verdict"] != "confirmed" or not found:
             rec["outcome"] = "rejected"
             continue
@@ -1330,6 +1351,9 @@ def confirm(f: dict, context: list[dict], email: str, notes: list[str], use_cach
             + f"\n\nEMAIL:\n{email}\n\nFINDING:\n" + json.dumps(
                 {k: f[k] for k in ("problem", "email_quote", "protocol_quote", "section_id", "why", "next_step")},
                 indent=1))
+    if _has_memory(notes):
+        return llm.structured("read_confirm", CONFIRM_SYSTEM + CONFIRM_MEMORY, user, CONFIRM_MEMORY_SCHEMA, "confirm",
+                              use_cache=use_cache)
     return llm.structured("read_confirm", CONFIRM_SYSTEM, user, CONFIRM_SCHEMA, "confirm", use_cache=use_cache)
 
 
@@ -1908,6 +1932,9 @@ def _check(study, msg, email, use_cache, log, save, pool) -> tuple[list[Finding]
             rec["quote_found"] = bool(found)
             rec["proof"] = [i["id"] for i in proof if i["kind"] == "section"]
             rec["confirm"] = c
+            if c.get("earlier_fact_only"):
+                rec["outcome"] = "earlier_fact_only"
+                continue
             if c["verdict"] == "rejected" and (f.get("code_fact") or f.get("disputed") or _order_fact(f, notes)):
                 rec["kept_by_order_fact"] = True  # the numbers behind it were worked out by code; a judge that
                 # picks one side of a disagreement between the documents does not settle it
