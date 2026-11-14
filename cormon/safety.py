@@ -67,12 +67,13 @@ def context(study: Study, item: dict) -> dict:
     """What the safety templates show: severity, the code to reply with and when it is due."""
     c = conf(study)
     sev = item.get("severity") or "standard"
+    phones = "; ".join(f"{p.name} ({study.role_label(r)}): {p.phone}" for r in ("medical_monitor", "pv_backup")
+                       for p in study.people_with_role(r, item.get("site")) if p.phone)
     return {"severity": sev, "severity_label": "Severe" if sev == "severe" else "Standard",
             "within": _hours(c["ack_minutes"][sev]), "ack_code": ack_code(item),
             "due": drafting.local_time(item.get("ack_due_at")), "step": item.get("escalation_step") or 0,
-            "phones": "; ".join(f"{p.name} ({study.role_label(r)}): {p.phone}" for r in ("medical_monitor", "pv_backup")
-                                for p in study.people_with_role(r, item.get("site")) if p.phone)
-                      or "no phone number is on file",
+            "phone_line": f"Their phone numbers: {phones}." if phones else
+                          "I don't have their phone number, so please call them using the study's contact list.",
             "record_phone": " on the alert's page (the link above)" if page_on() else
                             f" (cormon ack {item.get('id')} --by <person> --note \"phoned\")"}
 
@@ -252,7 +253,7 @@ def escalate(log=print) -> list[int]:
             alerts.notify(f"safety:{item['id']}", f"Safety message not acknowledged: {study.study_id} #{item['id']}",
                           f"Safety alert #{item['id']} ({sev}) was due to be acknowledged by "
                           f"{drafting.local_time(item['ack_due_at'])} and nobody has. Phone the medical monitor now. "
-                          f"Phone numbers: {context(study, item)['phones']}. This is recorded as a deviation.\n\n"
+                          f"{context(study, item)['phone_line']} This is recorded as a deviation.\n\n"
                           + ("When the medical monitor or the safety backup has it, record who answered on the "
                              "alert's page (sign in with Google, then \"Record who answered the phone\"): "
                              if page_on() else
