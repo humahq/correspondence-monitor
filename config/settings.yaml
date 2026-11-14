@@ -76,6 +76,7 @@ features:
   always_reply: false        # a message to the bot naming a known participant, or asking something, never gets silence
   asks_about_reports: false  # "who reported 410's turmeric?" is a study question, not one about the bot
   scoped_memory: false       # memory keeps patient facts only, tagged by site and reporter, read back only inside the site
+  durable_facts: false       # site events and how a site works, saved from site messages, used in answers inside the site
 
 # The language everyone in a study shares (language_courtesy). A person's own are `languages:` in study.yaml.
 language:

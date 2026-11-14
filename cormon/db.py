@@ -270,6 +270,21 @@ CREATE TABLE IF NOT EXISTS patient_facts (
 );
 CREATE INDEX IF NOT EXISTS patient_facts_who ON patient_facts (study_id, participant_key);
 
+CREATE TABLE IF NOT EXISTS site_facts (
+    id INTEGER PRIMARY KEY,
+    study_id TEXT NOT NULL,
+    site TEXT,
+    kind TEXT NOT NULL CHECK (kind IN ('event','how_it_works')),
+    text TEXT NOT NULL,
+    happened TEXT,
+    message_id INTEGER,
+    author TEXT NOT NULL,
+    replaces INTEGER,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS site_facts_where ON site_facts (study_id, site);
+
 CREATE TABLE IF NOT EXISTS answer_pages (
     id INTEGER PRIMARY KEY,
     study_id TEXT NOT NULL,

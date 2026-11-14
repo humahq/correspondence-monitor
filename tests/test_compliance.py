@@ -2274,7 +2274,8 @@ def test_every_code_file_is_tied_to_a_test_set_or_known_to_need_none():
         "notes", "prune", "senders", "settings", "stuck", "timing", "watchdog", "weblogin", "webview",
         "trickcheck",   # only tells the admins; measured on the trick and normal sets by demo/trick-detector
         "outbox",   # its AI set (the trick emails) is left out for now
-        "hindsight"}  # off in the AI sets until its own memory set (docs/hindsight-plan.md, step 8)
+        "hindsight",  # off in the AI sets until its own memory set (docs/hindsight-plan.md, step 8)
+        "sitefacts"}  # features.durable_facts is off in the AI sets
     from pathlib import Path
     for f in sorted((gate.REPO / "cormon").glob("*.py")):
         rel = f"cormon/{f.name}"

@@ -215,6 +215,14 @@ one bank per study, each fact tagged with the patient's code.
 - Study staff review their facts at `/memory/<study>`. The PI also sees the site's facts. Each correction needs a
   reason and goes in the audit trail.
 
+**Durable site facts** (`features.durable_facts`, Eliot and John, 13 Nov), on server 2 and the demo:
+
+- What happened at a site ("the lab fridge door was left open overnight") and how a site works ("our courier
+  picks up at 3 pm") are saved from site messages, apart from patient memory, filed under the sender's own site.
+- The bot uses them to answer questions inside that site ("any fridge problems at Site 01?"), with the date
+  reported. Never about a patient, never who did something, never a rule.
+- `cormon site-facts list | add | correct | retire` (every change is in the audit trail).
+
 ## What the bot will NOT do, by design
 
 - **Judge safety:** no judging of side effects, deaths or hospital visits.

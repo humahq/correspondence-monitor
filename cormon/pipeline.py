@@ -14,7 +14,7 @@ from . import (answers, asks, capture, careful, checks, config, conversation, db
                outbox, reader, routing, senders, settings, textutil, timing, triage)
 from .compliance import records
 from .config import Study
-from . import closing, drafting, hindsight, language, recipients, safety, trickcheck
+from . import closing, drafting, hindsight, language, recipients, safety, sitefacts, trickcheck
 from .drafting import item_link, local_time
 
 SAFETY_TITLE = "Safety information received; not reviewed by this monitor (out of scope)"
@@ -607,6 +607,7 @@ def _process(msg_id: int, *, use_cache: bool, rerun: bool, actor: str) -> dict:
 
         study = config.study(msg["study_id"])
         hindsight.save_message(study, msg, _own_text(msg.get("body_text") or ""))
+        sitefacts.save_message(study, msg, _own_text(msg.get("body_text") or ""))
         outsiders = recipients.outside(study, msg) if not rerun and settings.feature("outside_recipients") else []
         if outsiders:   # no answer, receipt, acknowledgment or nudge goes to anyone on this message
             summary["outside_recipients"] = recipients.handle(study, msg, outsiders)
